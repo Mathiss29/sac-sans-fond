@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sac sans Fond</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -40,25 +40,32 @@
   <div id="banner"></div>
 
   <section class="screen" id="atelier">
-    <header class="screenHead">
-      <div>
-        <h1 class="logo">Sac <span>sans</span> Fond</h1>
-        <p class="sub">Largue tes héros, remplis le sac du vieux mage, puis rafle tout quand il se déchire.</p>
-      </div>
-      <div class="headRight">
-        <div class="chip big"><span class="coin-ico"></span><span id="atelierWallet" class="num">0</span></div>
+    <header class="topBar">
+      <div class="chip big wallet"><span class="coin-ico"></span><span id="atelierWallet" class="num">0</span></div>
+      <nav class="tabs" aria-label="Écrans de l'Atelier">
+        <button class="tab on" type="button" aria-current="page">Compétences</button>
+        <button class="tab" type="button" disabled title="Bientôt">Livre d'aventure</button>
+      </nav>
+      <div class="topRight">
+        <span class="chip small" id="runsChip">Expéditions : 0</span>
         <button class="ghost mute" type="button">🔊</button>
-        <button class="btn lair" id="lairBtn" type="button">Antre du Brasier</button>
-        <button class="btn" id="go">Partir en expédition</button>
       </div>
     </header>
     <div id="treeWrap">
       <div id="treeScroll"><div id="treeInner"><svg id="treeLines"></svg></div></div>
       <aside id="info"></aside>
     </div>
-    <footer class="screenFoot">
-      <button class="ghost" id="reset">Recommencer à zéro</button>
-      <span class="sub" id="stats"></span>
+    <footer class="bottomBar">
+      <div class="footLeft">
+        <button class="ghost" id="reset">Recommencer à zéro</button>
+        <p class="hintTxt">Clique une compétence pour l'acheter<br>Glisse pour te déplacer, molette pour zoomer</p>
+      </div>
+      <button class="btn playBtn" id="go">Partir en expédition</button>
+      <button class="zoneCard" id="lairBtn" type="button">
+        <span class="zoneName">Clairière</span>
+        <span class="zoneBoss" id="zoneBoss">Antre du Brasier</span>
+      </button>
+      <span class="sub" id="stats" hidden></span>
     </footer>
   </section>
 

@@ -242,14 +242,14 @@ function screenCount() {
 
 // ---------- Atelier : le grand arbre ----------
 // Une croix qui part du sac. Brouillard : on voit les nœuds achetés, leurs enfants, et des « ? » un cran plus loin.
-const G = 66, PAD = 70;
+const G = 78, PAD = 90;
 const minX = Math.min(...NODES.map(n => n.x)), minY = Math.min(...NODES.map(n => n.y));
 const maxX = Math.max(...NODES.map(n => n.x)), maxY = Math.max(...NODES.map(n => n.y));
 let selected = 'root', hover = null;
 const mixDim = hex => { const v = parseInt(hex.slice(1), 16); const c = k => Math.round(((v >> k) & 255) * 0.42 + 20); return `rgb(${c(16)},${c(8)},${c(0)})`; };
 const L = id => save.level[id] || 0;
 const visible = n => !n.parent || L(n.parent) > 0 || L(n.id) > 0;
-const teaser = n => !visible(n) && n.parent && visible(NODE[n.parent]);
+const teaser = () => false; // pas de « ? » : on ne voit que les nœuds révélés
 const colorOf = n => (BRANCHES[n.branch] || BRANCHES.depart)[1];
 const branchName = n => (BRANCHES[n.branch] || BRANCHES.depart)[0];
 const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: (save.bosses || {})[ZONES[0].id] || 0 });
@@ -291,7 +291,8 @@ function renderTree() {
   $('atelierWallet').textContent = fmt(save.coins);
   const lb = $('lairBtn'), open = lairOpen();
   lb.disabled = !open;
-  lb.textContent = (open ? '' : '🔒 ') + ZONES[0].boss.lair;
+  $('zoneBoss').textContent = (open ? '♛ ' : '🔒 ') + ZONES[0].boss.lair;
+  $('runsChip').textContent = `Expéditions : ${save.expeditions}`;
   lb.title = open ? `Affronter ${ZONES[0].boss.name} directement` : `Remplis le sac jusqu'au palier « ${TIERS[ARENA.unlockTier].name} » pour ouvrir le portail`;
   const inner = $('treeInner'), svg = $('treeLines');
   const W = PAD * 2 + (maxX - minX) * G, H = PAD * 2 + (maxY - minY) * G;
@@ -365,6 +366,7 @@ function renderInfo() {
   const lv = L(n.id), isMax = lv >= n.max;
   const box = $('info'); box.innerHTML = '';
   queueMicrotask(() => placeInfo(n));
+  if (visible(n)) { const ic = nodeIcon(n); ic.className = 'infoIco'; box.append(ic); }
   box.style.setProperty('--c', colorOf(n));
   const add = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; box.append(e); return e; };
   if (!visible(n)) {
