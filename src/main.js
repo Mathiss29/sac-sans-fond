@@ -2,7 +2,7 @@
 import { ZONES, TIERS, NODES, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
 import { createWorld, startExpedition, update, dropHero, canDrop } from './game.js';
-import { render, drawArcher, drawBag } from './render.js';
+import { render, drawHero, drawBag } from './render.js';
 
 const $ = id => document.getElementById(id);
 const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
@@ -58,7 +58,7 @@ function buildDropBar() {
   const b = document.createElement('div');
   b.className = 'card' + (n <= 0 ? ' empty' : '');
   const c = document.createElement('canvas'); c.width = c.height = 68;
-  const cg = c.getContext('2d'); cg.scale(2, 2); drawArcher(cg, 17, 19, 1, 0);
+  const cg = c.getContext('2d'); cg.imageSmoothingEnabled = false; drawHero(cg, 'archer', 34, 62, 1, 0, 1, 3);
   const name = document.createElement('span'); name.textContent = 'Archers';
   const cnt = document.createElement('span'); cnt.className = 'cnt num'; cnt.textContent = n;
   b.append(c, name, cnt);
@@ -144,9 +144,11 @@ const pos = n => ({ x: PAD + n.x * GX - GX + 20, y: PAD + n.y * GY - GY + 30 });
 
 function nodeIcon(n) {
   const c = document.createElement('canvas'); c.width = c.height = 92;
-  const ig = c.getContext('2d'); ig.scale(2, 2);
-  if (n.branch === 'Compagnie') drawArcher(ig, 23, 25, 1, 0);
-  else if (n.branch === 'Sac' || n.id === 'root') { ig.save(); ig.translate(23, 40); ig.scale(0.4, 0.4); drawBag(ig, 0, 0, n.id === 'tierCuir' ? 1 : 0, 0.1, 0); ig.restore(); }
+  const ig = c.getContext('2d'); ig.imageSmoothingEnabled = false;
+  if (n.branch === 'Compagnie') drawHero(ig, 'archer', 46, 84, 1, 0, 1, 4);
+  else if (n.branch === 'Sac' || n.id === 'root') drawBag(ig, 46, 86, n.id === 'tierCuir' ? 1 : 0, 0.1, 0, 0, 3);
+  ig.scale(2, 2);
+  if (n.branch === 'Compagnie' || n.branch === 'Sac' || n.id === 'root') return c;
   else if (n.branch === 'Arcanes') {
     ig.strokeStyle = '#e8d6a8'; ig.lineWidth = 2.5; ig.fillStyle = '#ffcf4a';
     ig.beginPath(); ig.moveTo(13, 8); ig.lineTo(33, 8); ig.lineTo(13, 38); ig.lineTo(33, 38); ig.closePath(); ig.stroke();
