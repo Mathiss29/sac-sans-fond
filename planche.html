@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Planche des sprites</title>
+<style>body{margin:0;background:#5f9a4e;font:14px system-ui;color:#fff}canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+import { buildSprites, bagSprite, buildMap } from './src/sprites.js';
+import { TIERS, ZONES } from './src/data.js';
+const S = buildSprites(), K = 5;
+const c = document.getElementById('c'); c.width = 1200; c.height = 760; const g = c.getContext('2d');
+g.imageSmoothingEnabled = false;
+g.drawImage(buildMap(240, 152, ZONES[0]).c, 0, 0, 1200, 760);
+let x = 20, y = 20;
+const put = (img, lbl) => { g.drawImage(img, x, y + 16, img.width * K, img.height * K); g.fillStyle = '#fff'; g.fillText(lbl, x, y + 10); x += img.width * K + 18; };
+for (const [id, fr] of Object.entries(S.heroes)) fr.forEach((f, i) => put(f, id + ' ' + i));
+x = 20; y = 170;
+for (const [id, fr] of Object.entries(S.enemies)) fr.forEach((f, i) => put(f.c, id + ' ' + i));
+put(S.coin, 'pièce'); put(S.enemies.wisp[0].white, 'flash');
+x = 20; y = 300;
+TIERS.forEach((t, i) => { const b = bagSprite(t, 10 + i * 2, i === 3 ? 2 : i === 2 ? 1 : 0, i >= 2); put(b.c, t.id); });
+x = 20; y = 540;
+[10, 12, 14, 16].forEach(sz => { const b = bagSprite(TIERS[0], sz, sz === 16 ? 1 : 0, false); put(b.c, 'toile ' + sz); });
+window.done = true;
+</script></body></html>
