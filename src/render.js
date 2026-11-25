@@ -1,13 +1,13 @@
 // Tout le dessin sur le canvas, en pixel art (sprites dans sprites.js).
 import { TIERS, bagMax, tierOf } from './data.js';
-import { bagPos, canDrop, gloveRadius, attractionActive, portalPos } from './game.js';
+import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos } from './game.js';
 
 import { buildSprites, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
 
 const SPR = buildSprites();
 
-// Taille d'un pixel d'art à l'écran : 3 sur ordinateur, 2 sur téléphone.
-export function pixelSize(w, h) { return Math.max(2, Math.min(4, Math.round(Math.min(w, h) / 240))); }
+// Taille d'un pixel d'art à l'écran : 2 en général (vue large), 3 sur très grand écran.
+export function pixelSize(w, h) { return Math.max(2, Math.min(4, Math.floor(Math.min(w, h) / 420))); }
 
 // La région est dessinée une fois en basse résolution, puis on n'en affiche que la partie visible.
 let mapInfo = null, mapKey = '', vig = null, vigKey = '';
@@ -35,6 +35,18 @@ function vignette(w, h, dpr) {
 
 function shadow(g, x, y, rx, ry) {
   g.fillStyle = 'rgba(0,0,0,.22)'; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 7); g.fill();
+}
+
+// Petite icône d'ennemi pour l'interface (compteur « À l'écran »).
+const iconCache = {};
+export function enemyIcon(type) {
+  if (iconCache[type]) return iconCache[type];
+  const f = (SPR.enemies[type] || SPR.enemies.wisp)[0].c;
+  const c = document.createElement('canvas'); c.width = 22; c.height = 22;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  const k = Math.max(1, Math.floor(22 / Math.max(f.width, f.height)));
+  g.drawImage(f, Math.round((22 - f.width * k) / 2), Math.round((22 - f.height * k) / 2), f.width * k, f.height * k);
+  return (iconCache[type] = c);
 }
 
 export function drawEnemy(g, e, t, px = 3) {
@@ -186,11 +198,21 @@ export function render(g, world, dpr) {
     const a = c.fly ? 1 : Math.min(1, c.life / 1.5);
     const blink = !c.fly && c.life < 1.5 ? (Math.sin(t * 20) > 0 ? 1 : 0.4) : 1;
     g.globalAlpha = a * blink;
-    const s = SPR.coin.width * (c.big ? px + 1 : px);
+    const im = SPR.loot[c.kind || 'coin'] || SPR.coin;
+    const k = c.kind && c.kind !== 'coin' ? px : (c.big ? px + 1 : px);
+    const s = im.width * k, sh2 = im.height * k;
     const z = c.z || 0;
-    if (z > 1) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(Math.round(c.x - s * 0.3), Math.round(c.y + s * 0.35), Math.round(s * 0.6), px); }
-    const sw = Math.max(px, Math.round(s * Math.abs(Math.cos(t * 6 + (c.spin || 0))) / px) * px);
-    g.drawImage(SPR.coin, Math.round(c.x - sw / 2), Math.round(c.y - s / 2 - z), sw, s);
+    if (z > 1) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(Math.round(c.x - s * 0.3), Math.round(c.y + sh2 * 0.35), Math.round(s * 0.6), px); }
+    if (!c.kind || c.kind === 'coin') {
+      const sw = Math.max(px, Math.round(s * Math.abs(Math.cos(t * 6 + (c.spin || 0))) / px) * px);
+      g.drawImage(im, Math.round(c.x - sw / 2), Math.round(c.y - sh2 / 2 - z), sw, sh2);
+    } else {
+      if (c.kind !== 'bar') { // halo des gemmes et couronnes
+        g.fillStyle = c.kind === 'gem' ? 'rgba(120,230,255,.25)' : 'rgba(255,220,100,.25)';
+        g.beginPath(); g.arc(c.x, c.y - z, s * 0.9, 0, 7); g.fill();
+      }
+      g.drawImage(im, Math.round(c.x - s / 2), Math.round(c.y - sh2 / 2 - z), s, sh2);
+    }
     if (!c.fly && Math.sin(t * 3 + (c.spin || 0) * 5) > 0.97) { g.fillStyle = '#fff'; g.fillRect(Math.round(c.x + s * 0.2), Math.round(c.y - s * 0.4 - z), px, px); }
   }
   g.globalAlpha = 1;
@@ -267,6 +289,13 @@ export function render(g, world, dpr) {
   const p = world.pointer;
   if (p.inside && (world.phase === 'expedition' || world.phase === 'tear')) {
     if (canDrop(world)) drawHero(g, world.run.sel, p.x, p.y + 12, 1, 0, 0.5, px);
+    if (focusActive(world)) {
+      // Focus : zone bleue sous le gant, les héros n'attaquent que là
+      g.fillStyle = 'rgba(110,220,255,.10)'; g.beginPath(); g.arc(p.x, p.y, FOCUS_R, 0, 7); g.fill();
+      g.strokeStyle = 'rgba(140,230,255,.9)'; g.lineWidth = 2.5; g.setLineDash([10, 6]); g.lineDashOffset = t * 30;
+      g.beginPath(); g.arc(p.x, p.y, FOCUS_R, 0, 7); g.stroke(); g.setLineDash([]);
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + t; g.fillStyle = '#bff2ff'; g.fillRect(Math.round(p.x + Math.cos(a) * FOCUS_R) - 3, Math.round(p.y + Math.sin(a) * FOCUS_R) - 3, 6, 6); }
+    }
     const rad = gloveRadius(world);
     const on = attractionActive(world);
     g.strokeStyle = on ? 'rgba(255,214,102,.95)' : 'rgba(255,248,225,.65)';

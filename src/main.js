@@ -3,7 +3,7 @@ import { ZONES, TIERS, NODES, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost,
 import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
-import { render, drawHero, drawBag, getMap } from './render.js';
+import { render, drawHero, drawBag, getMap, enemyIcon } from './render.js';
 
 const $ = id => document.getElementById(id);
 const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
@@ -102,7 +102,7 @@ function buildDropBar() {
     box.append(b);
   });
   const left = types.reduce((t, k) => t + r.toDrop[k], 0);
-  if (left <= 0) $('hint').textContent = 'ZQSD ou flèches pour te déplacer · Passe le gant sur les pièces';
+  if (left <= 0) $('hint').textContent = 'Passe le gant sur le butin · Maintiens le clic : Focus · ZQSD pour te déplacer';
   else $('hint').textContent = `Clique sur la carte pour larguer : ${HEROES[r.sel].name} · ZQSD ou flèches pour te déplacer`;
 }
 
@@ -137,7 +137,7 @@ function finishExpedition() {
     dl.append(dt, dd);
   }
   $('resTotal').textContent = '+' + fmt(gained);
-  $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true;
+  $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true; $('attrBox').hidden = true;
   $('result').hidden = false;
   $('back').focus();
 }
@@ -196,11 +196,42 @@ function hud() {
     : world.phase === 'tear' ? Math.max(0, r.shake > 0 ? r.tearDur || stats.tearDuration : r.tearT) : Math.max(0, r.duration - r.t);
   $('timer').textContent = left.toFixed(1);
   $('timer').style.color = world.phase === 'tear' || (ar && ar.won) ? 'var(--gold)' : (left < 5 ? 'var(--ember)' : 'var(--parch)');
-  $('zoneTxt').textContent = ar ? (ar.won ? 'Butin !' : world.zone.boss.lair) : world.phase === 'tear' ? 'Déchirure !' : world.zone.name;
+  $('zoneTxt').textContent = ar ? (ar.won ? 'Butin !' : world.zone.boss.lair) : world.phase === 'tear' ? 'Déchirure !' : `Expédition ${save.expeditions + 1} · ${world.zone.stage || world.zone.name}`;
+  // « +N dans le sac » : ce que l'expédition a déjà rapporté
+  const gain = ar ? r.lair.got : world.phase === 'tear' ? r.tearGot : r.bag;
+  const gtxt = '+' + fmt(gain) + (ar ? ' de butin' : world.phase === 'tear' ? ' raflées' : ' dans le sac');
+  if ($('runGain').textContent !== gtxt) { $('runGain').textContent = gtxt; $('runGain').classList.remove('pop'); void $('runGain').offsetWidth; $('runGain').classList.add('pop'); }
+  // jauge du clic maintenu
+  const ab = $('attrBox'), tear = world.phase === 'tear';
+  ab.hidden = false; ab.classList.toggle('lock', !!r.focusLock); ab.classList.toggle('tear', tear);
+  $('attrName').textContent = 'Maintenir le clic : ' + (tear ? 'Attraction' : 'Focus');
+  $('attrTxt').textContent = r.focusLock ? 'recharge…' : r.attraction.toFixed(1).replace('.', ',') + ' s';
+  screenCount();
   $('attrFill').style.width = (r.attraction / stats.attraction * 100) + '%';
   const boss = r.boss;
   $('bossBar').hidden = !(boss && ar && world.phase === 'expedition' && !boss.dead);
   if (boss && !boss.dead) { $('bossName').textContent = boss.def.name; $('bossFill').style.width = Math.max(0, boss.hp / boss.max * 100) + '%'; }
+}
+
+// Compteur « À l'écran » : élémentaires visibles par famille, avec leurs PV.
+let screenT = 0;
+function screenCount() {
+  const now = performance.now(); if (now - screenT < 200) return; screenT = now;
+  const c = world.cam, n = {}, hp = {};
+  for (const e of world.enemies) {
+    if (e.dead || e.boss || e.x < c.x || e.x > c.x + world.w || e.y < c.y || e.y > c.y + world.h) continue;
+    const k = e.gold ? 'gold' : e.type; n[k] = (n[k] || 0) + 1; hp[k] = e.max;
+  }
+  const box = $('screenList'); box.innerHTML = '';
+  const keys = Object.keys(n).sort((a, b) => n[b] - n[a]);
+  $('screenBox').hidden = !keys.length;
+  for (const k of keys) {
+    const row = document.createElement('div'); row.className = 'row';
+    const cv2 = document.createElement('canvas'); cv2.width = cv2.height = 22; cv2.getContext('2d').drawImage(enemyIcon(k), 0, 0);
+    const cnt = document.createElement('span'); cnt.textContent = '×' + n[k];
+    const h = document.createElement('span'); h.className = 'hp num'; h.textContent = fmt(hp[k]) + ' PV';
+    row.append(cv2, cnt, h); box.append(row);
+  }
 }
 
 // ---------- Atelier ----------

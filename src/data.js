@@ -14,7 +14,7 @@ export const FULL_BONUS = 1.25;
 
 export const ZONES = [
   {
-    id: 'clairiere', name: 'Clairière',
+    id: 'clairiere', name: 'Clairière', stage: 'Clairière du matin',
     ground: ['#6fa65a', '#4f8a45'], patch: '#86bb68', flower: ['#f6e27a', '#f29bb8', '#ffffff'],
     rock: '#8c8f86', tree: '#2f6b3c', path: '#c9a06a', water: '#3f8fc8',
     hpMult: 1, valueMult: 1,
@@ -58,13 +58,14 @@ export const ARENA = { w: 1200, h: 700, duration: 60, lootTime: 8, unlockTier: 2
 
 export const BASE = {
   duration: 30,          // s
-  spawnEvery: 0.25,      // s entre deux apparitions
-  maxEnemies: 90,
+  spawnEvery: 1.6,       // s entre deux hordes
+  maxEnemies: 220,
+  startPacks: 9,         // hordes présentes au départ
   archers: 3,
   bagCapacity: 120,      // pièces pour le premier palier
-  gloveRadius: 46,       // px
-  attraction: 1.5,       // s d'Attraction (rayon ×2)
-  attractionRegen: 0.35, // s récupérées par seconde
+  gloveRadius: 54,       // px
+  attraction: 3,         // s de Focus (ou d'Attraction pendant la Déchirure)
+  focusRecovery: 8,      // s pour recharger entièrement la jauge
   coinLife: 8,           // s avant qu'une pièce au sol disparaisse
   bagMouth: 60,          // px, rayon d'aspiration du sac
   tearDuration: 5,       // s pour ramasser pendant la Déchirure
@@ -119,9 +120,9 @@ export const NODES = [
 
   // Récolte
   { id: 'glove', parent: 'root', name: 'Gant élargi', branch: 'Récolte', x: 4, y: 4, max: 6, cost: 10, growth: 1.8,
-    desc: 'Le gant attire les pièces de plus loin.', effect: l => `Rayon ${Math.round(46 * (1 + 0.18 * l))} px` },
-  { id: 'attraction', parent: 'glove', name: 'Attraction tenace', branch: 'Récolte', x: 3, y: 4, max: 5, cost: 35, growth: 1.9,
-    desc: 'L\'Attraction (clic maintenu) dure plus longtemps.', effect: l => `${fmtNum(1.5 + 0.5 * l)} s d'Attraction` },
+    desc: 'Le gant attire les pièces de plus loin.', effect: l => `Rayon ${Math.round(54 * (1 + 0.18 * l))} px` },
+  { id: 'attraction', parent: 'glove', name: 'Focus tenace', branch: 'Récolte', x: 3, y: 4, max: 5, cost: 35, growth: 1.9,
+    desc: 'Le Focus (clic maintenu : les héros visent la zone du gant) et l\'Attraction de la Déchirure durent plus longtemps.', effect: l => `${fmtNum(3 + 0.75 * l)} s de Focus` },
   { id: 'coinLife', parent: 'glove', name: 'Pièces patientes', branch: 'Récolte', x: 4, y: 5, max: 5, cost: 30, growth: 1.8,
     desc: 'Les pièces restent plus longtemps au sol avant de disparaître.', effect: l => `${8 + 2 * l} s au sol` },
   { id: 'goldWisp', parent: 'attraction', name: 'Flair doré', branch: 'Récolte', x: 2, y: 4, max: 5, cost: 120, growth: 2,
@@ -160,7 +161,7 @@ export function computeStats(level) {
     bagCapacity: BASE.bagCapacity * Math.pow(1.6, L('capacity')),
     tiers: 1 + L('tierCuir') + (L('tierCuir') ? L('tierSoie') : 0) + (L('tierCuir') && L('tierSoie') ? L('tierCeleste') : 0),
     gloveRadius: BASE.gloveRadius * (1 + 0.18 * L('glove')),
-    attraction: BASE.attraction + 0.5 * L('attraction'),
+    attraction: BASE.attraction + 0.75 * L('attraction'),
     coinLife: BASE.coinLife + 2 * L('coinLife'),
     bagMouth: BASE.bagMouth * (1 + 0.5 * L('mouth')),
     tearDuration: BASE.tearDuration,

@@ -194,6 +194,38 @@ const ENEMY_PAL = {
 
 const COIN = ['..OOO..', '.OlyyO.', 'OlyyyYO', 'OyyyyYO', 'OyyyYYO', '.OYYYO.', '..OOO..'];
 const COIN_PAL = { O: '#6e3c14', y: '#ffcd3c', l: '#fff5b4', Y: '#d28c1e' };
+// Butin plus précieux que la pièce : lingot (×5), gemme (×25), couronne (×100).
+const BAR = [
+  '...OOOOOOO..',
+  '..OllllyyYO.',
+  '.OlyyyyyyYYO',
+  'OlyyyyyyyYYO',
+  'OyyyyyyyYYOO',
+  'OYYYYYYYYOO.',
+  '.OOOOOOOOO..',
+];
+const GEM = [
+  '..OOOOO..',
+  '.OwwlbbO.',
+  'OwllbbbBO',
+  'OOOOOOOOO',
+  '.OlbbbBO.',
+  '..ObbBO..',
+  '...OBO...',
+  '....O....',
+];
+const CROWN = [
+  '.O...O...O.',
+  'OlO.OlO.OyO',
+  'OyyOyyyOyYO',
+  'OlyyyyyyyYO',
+  'OyrRyybByYO',
+  'OyyyyyyyyYO',
+  'OYYYYYYYYYO',
+  '.OOOOOOOOO.',
+];
+const LOOT_PAL = { O: '#5a2e10', y: '#ffcd3c', l: '#fff5b4', Y: '#d28c1e', w: '#ffffff', b: '#5fd6f0', B: '#1d6f8a', r: '#ff5a5a', R: '#a8201e' };
+const GEM_PAL = { ...LOOT_PAL, O: '#123a52', l: '#b8f2ff' };
 
 // ---------- Construction des canvas ----------
 
@@ -253,6 +285,7 @@ export function buildSprites() {
     wind: mk(WIND, ENEMY_PAL.wind),
   };
   SPR.coin = toCanvas(COIN, COIN_PAL);
+  SPR.loot = { coin: SPR.coin, bar: toCanvas(BAR, LOOT_PAL), gem: toCanvas(GEM, GEM_PAL), crown: toCanvas(CROWN, LOOT_PAL) };
   SPR.ready = true;
   return SPR;
 }
@@ -496,7 +529,7 @@ export function buildMap(w, h, zone, seed = 11) {
   for (const [x, y] of dots) mark(x, y, PW + 3);
 
   // clairière du campement (là où trône le sac)
-  const camp = Math.round(Math.min(w, h) * 0.055);
+  const camp = Math.round(Math.min(w, h) * 0.04);
   for (let yy = -camp; yy <= camp; yy++) for (let xx = -camp * 1.4; xx <= camp * 1.4; xx++) {
     const d = (xx * xx) / (camp * camp * 1.96) + (yy * yy) / (camp * camp);
     if (d > 1) continue;

@@ -64,7 +64,7 @@ export function startExpedition(world, stats, zone, lair = {}) {
   });
   const b = bagPos(world);
   centerCam(world, b.x, b.y + 40);
-  for (let i = 0; i < 40; i++) spawnEnemy(world, true);
+  for (let i = 0; i < BASE.startPacks; i++) spawnPack(world, true);
   world.events.push({ kind: 'banner', title: 'Expédition !', sub: zone.name });
 }
 
@@ -218,13 +218,39 @@ function pickEnemyType(zone) {
 
 // Les élémentaires apparaissent partout dans la région, jamais collés au sac,
 // et plus souvent autour des héros pour qu'ils aient de quoi faire.
-function spawnEnemy(world, anywhere = false) {
+// Hordes : les élémentaires arrivent en paquets qui se déplacent ensemble.
+const PACK_SIZE = { wisp: [10, 18], golem: [3, 6], wind: [6, 10] };
+function spawnPack(world, anywhere = false) {
   const type = pickEnemyType(world.zone);
+  const { mapW, mapH } = world, bag = bagPos(world);
+  let x, y;
+  for (let k = 0; k < 14; k++) {
+    if (!anywhere && world.heroes.length && Math.random() < 0.8) {
+      const u = world.heroes[Math.floor(Math.random() * world.heroes.length)];
+      const a = rnd(0, Math.PI * 2), d = rnd(220, 420);
+      x = u.x + Math.cos(a) * d; y = u.y + Math.sin(a) * d;
+    } else { x = rnd(120, mapW - 120); y = rnd(120, mapH - 120); }
+    x = Math.max(100, Math.min(mapW - 100, x)); y = Math.max(100, Math.min(mapH - 100, y));
+    if ((x - bag.x) ** 2 + (y - bag.y) ** 2 > 260 * 260) break;
+  }
+  const [lo, hi] = PACK_SIZE[type] || [6, 10];
+  const n = Math.round(rnd(lo, hi) * (world.stats?.packMult || 1));
+  const pack = { x, y, a: rnd(0, Math.PI * 2), n: 0 };
+  for (let i = 0; i < n; i++) {
+    const a = rnd(0, Math.PI * 2), d = Math.sqrt(Math.random()) * (24 + n * 3.5);
+    const e = spawnEnemy(world, false, type, x + Math.cos(a) * d * 1.3, y + Math.sin(a) * d);
+    e.pack = pack;
+  }
+  world.fx.push({ kind: 'ring', x, y, r0: 10, r1: 40 + n * 5, t: 0.5, life: 0.5, color: ENEMIES[type].color });
+}
+
+function spawnEnemy(world, anywhere = false, forceType = null, px = null, py = null) {
+  const type = forceType || pickEnemyType(world.zone);
   const def = ENEMIES[type];
   const { mapW, mapH } = world;
   const bag = bagPos(world);
-  let x, y;
-  for (let k = 0; k < 12; k++) {
+  let x = px, y = py;
+  for (let k = 0; px === null && k < 12; k++) {
     if (!anywhere && world.heroes.length && Math.random() < 0.85) {
       const u = world.heroes[Math.floor(Math.random() * world.heroes.length)];
       const a = rnd(0, Math.PI * 2), d = rnd(140, 340);
@@ -243,7 +269,7 @@ function spawnEnemy(world, anywhere = false) {
   };
   if (gold) { e.hp *= GOLD_WISP.hp; e.max = e.hp; if (world.run) world.run.golds++; }
   world.enemies.push(e);
-  world.fx.push({ kind: 'ring', x, y, r0: 2, r1: def.radius * 1.8, t: 0.4, life: 0.4, color: gold ? GOLD_WISP.color : def.color });
+  if (px === null || gold) world.fx.push({ kind: 'ring', x, y, r0: 2, r1: def.radius * 1.8, t: 0.4, life: 0.4, color: gold ? GOLD_WISP.color : def.color });
   if (gold && world.phase === 'expedition') world.texts.push({ x, y: y - 26, text: 'Feu follet doré !', color: GOLD_WISP.color, size: 15, life: 1.6 });
   return e;
 }
@@ -264,10 +290,11 @@ export function dropHero(world, x, y) {
   return true;
 }
 
-function nearestEnemy(world, p) {
+function nearestEnemy(world, p, zone = null) {
   let best = null, bd = Infinity;
   for (const e of world.enemies) {
     if (e.dead) continue;
+    if (zone && (e.x - zone.x) ** 2 + (e.y - zone.y) ** 2 > FOCUS_R * FOCUS_R) continue;
     const d = d2(p, e);
     if (d < bd) { bd = d; best = e; }
   }
@@ -311,20 +338,42 @@ function killEnemy(world, e) {
     world.events.push({ kind: 'banner', title: e.def.name + ' vaincu !', sub: 'Rafle le butin avant que le portail ne se referme' });
     world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 5, t: 0.8, life: 0.8, color: '#ffd246' });
   }
-  for (let i = 0; i < n; i++) {
+  const pieces = e.boss ? splitLoot(e.value, n, 3, 30) : e.gold ? splitLoot(e.value, n, 1, 8) : splitLoot(e.value, n, 3, 12);
+  for (const pc of pieces) {
     const a = rnd(0, Math.PI * 2), s = e.boss ? rnd(50, 190) : rnd(30, 110);
-    world.coins.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-      value: e.value / n, life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0, z: 0, vz: rnd(160, 300), spin: rnd(0, 6) });
+    world.coins.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, kind: pc.kind,
+      value: pc.value, life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0, z: 0, vz: rnd(160, 300), spin: rnd(0, 6) });
   }
   world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 2.2, t: 0.35, life: 0.35, color: e.def.color });
 }
 
-export function attractionActive(world) {
+// Clic maintenu (ou Espace) : pendant l'expédition c'est le Focus (les héros ne visent que la zone
+// sous le gant) ; pendant la Déchirure c'est l'Attraction (gant deux fois plus large).
+// Les deux puisent dans la même jauge, qui se recharge en BASE.focusRecovery secondes.
+function holding(world) {
   const r = world.run;
   if (!r || (world.phase !== 'expedition' && world.phase !== 'tear')) return false;
   const p = world.pointer;
-  return r.attraction > 0 && ((p.down && !p.usedForDrop) || world.holdKey);
+  return r.attraction > 0 && !r.focusLock && ((p.down && !p.usedForDrop) || world.holdKey);
 }
+export function focusActive(world) { return world.phase === 'expedition' && holding(world); }
+// Butin : on découpe une valeur en couronnes (100), gemmes (25), lingots (5) et pièces.
+// k : on ne prend une grosse pièce que s'il reste au moins k fois sa valeur (k grand = plus de pièces).
+export const LOOT_VALUE = { crown: 100, gem: 25, bar: 5, coin: 1 };
+function splitLoot(value, n, k, maxCoins) {
+  if (value / n < 4 && k > 1) return Array.from({ length: n }, () => ({ kind: 'coin', value: value / n }));
+  const out = []; let rem = value;
+  for (const kind of ['crown', 'gem', 'bar']) {
+    const d = LOOT_VALUE[kind];
+    while (rem >= d * k && out.length < 60) { out.push({ kind, value: d }); rem -= d; }
+  }
+  const c = Math.max(rem > 0.01 ? 1 : 0, Math.min(maxCoins, Math.ceil(rem)));
+  for (let i = 0; i < c; i++) out.push({ kind: 'coin', value: rem / c });
+  return out;
+}
+
+export function attractionActive(world) { return world.phase === 'tear' && holding(world); }
+export const FOCUS_R = 150;
 
 export function gloveRadius(world) {
   return world.stats.gloveRadius * (attractionActive(world) ? 2 : 1);
@@ -360,7 +409,7 @@ export function update(world, dt) {
 
   updateEnemies(world, dt);
   if (world.phase === 'idle') {
-    while (world.enemies.length < 20) spawnEnemy(world, true);
+    if (world.enemies.length < 40) spawnPack(world, true);
     return;
   }
   if (world.phase === 'done') return;
@@ -373,7 +422,7 @@ export function update(world, dt) {
     r.spawnT -= dt;
     if (r.spawnT <= 0 && world.enemies.length < world.stats.maxEnemies) {
       r.spawnT = world.stats.spawnEvery * rnd(0.6, 1.4);
-      spawnEnemy(world);
+      spawnPack(world);
     }
     updateHeroes(world, dt);
     updateArrows(world, dt);
@@ -390,16 +439,33 @@ export function update(world, dt) {
       if ((r.tearT <= 0 && !anyFlying) || r.tearT < -1.5 || (world.coins.length === 0 && r.tearT < r.tearDur - 0.5)) endTear(world);
     }
   }
-  if (attractionActive(world)) r.attraction = Math.max(0, r.attraction - dt);
-  else r.attraction = Math.min(world.stats.attraction, r.attraction + dt * BASE.attractionRegen);
+  if (holding(world)) { r.attraction = Math.max(0, r.attraction - dt); if (r.attraction <= 0) r.focusLock = true; }
+  else {
+    r.attraction = Math.min(world.stats.attraction, r.attraction + dt * world.stats.attraction / BASE.focusRecovery);
+    if (r.attraction >= world.stats.attraction) r.focusLock = false;
+  }
   updateCoins(world, dt);
 }
 
 function updateEnemies(world, dt) {
   const w = world.mapW, h = world.mapH;
+  // centre de chaque horde, et sa direction qui tourne doucement
+  const packs = new Set();
+  for (const e of world.enemies) if (e.pack) { const p = e.pack; if (!packs.has(p)) { packs.add(p); p.sx = 0; p.sy = 0; p.n = 0; } p.sx += e.x; p.sy += e.y; p.n++; }
+  for (const p of packs) {
+    p.x = p.sx / p.n; p.y = p.sy / p.n; p.a += rnd(-1, 1) * dt * 0.8;
+    if (p.x < 160) p.a = rnd(-0.6, 0.6); else if (p.x > w - 160) p.a = Math.PI + rnd(-0.6, 0.6);
+    if (p.y < 160) p.a = Math.PI / 2 + rnd(-0.6, 0.6); else if (p.y > h - 160) p.a = -Math.PI / 2 + rnd(-0.6, 0.6);
+  }
+  separate(world);
   for (const e of world.enemies) {
     e.ph += dt * 3; e.age += dt; e.hit -= dt; e.slow = Math.max(0, e.slow - dt);
-    e.a += rnd(-1, 1) * dt * 1.2;
+    if (e.pack && e.pack.n > 1) {
+      // cohésion vers le centre + cap commun
+      const p = e.pack, dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1, pull = Math.max(0, Math.min(1, (d - 20 - p.n * 3) / (40 + p.n * 4)));
+      const tx = Math.cos(p.a) + dx / d * pull * 1.5, ty = Math.sin(p.a) + dy / d * pull * 1.5;
+      e.a = Math.atan2(ty, tx) + rnd(-0.4, 0.4);
+    } else e.a += rnd(-1, 1) * dt * 1.2;
     let sp = e.def.speed * (0.55 + 0.45 * Math.max(0, Math.sin(e.ph)));
     if (e.gold) sp *= GOLD_WISP.speed;
     if (e.slow > 0) sp *= 1 - HEROES.mage.slow;
@@ -407,7 +473,7 @@ function updateEnemies(world, dt) {
     e.x += Math.cos(e.a) * sp * dt; e.y += Math.sin(e.a) * sp * dt;
     if (e.kx || e.ky) { e.x += e.kx * dt; e.y += e.ky * dt; const f = Math.pow(0.002, dt); e.kx *= f; e.ky *= f; }
     const m = e.r + 10;
-    if (e.age > 2) {
+    if (e.age > 2 && !e.pack) {
       if (e.x < m) e.a = rnd(-0.8, 0.8); else if (e.x > w - m) e.a = Math.PI + rnd(-0.8, 0.8);
       if (e.y < m) e.a = Math.PI / 2 + rnd(-0.8, 0.8); else if (e.y > h - m) e.a = -Math.PI / 2 + rnd(-0.8, 0.8);
     }
@@ -415,9 +481,30 @@ function updateEnemies(world, dt) {
   world.enemies = world.enemies.filter(e => !e.dead);
 }
 
+// Les membres d'une horde se poussent un peu pour ne pas se superposer (grille de cases).
+function separate(world) {
+  const C = 28, grid = new Map();
+  for (const e of world.enemies) { if (e.boss) continue; const k = Math.floor(e.x / C) + ',' + Math.floor(e.y / C); let l = grid.get(k); if (!l) grid.set(k, l = []); l.push(e); }
+  for (const e of world.enemies) {
+    if (e.boss) continue;
+    const cx = Math.floor(e.x / C), cy = Math.floor(e.y / C);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const l = grid.get((cx + i) + ',' + (cy + j)); if (!l) continue;
+      for (const o of l) {
+        if (o === e) continue;
+        const dx = e.x - o.x, dy = e.y - o.y, min = (e.r + o.r) * 0.95, d2v = dx * dx + dy * dy;
+        if (d2v >= min * min || d2v === 0) continue;
+        const d = Math.sqrt(d2v), push = (min - d) * 0.5;
+        e.x += dx / d * push; e.y += dy / d * push;
+      }
+    }
+  }
+}
+
 function updateHeroes(world, dt) {
   const s = world.stats;
   const bards = world.heroes.filter(u => u.type === 'bard' && u.drop <= 0);
+  const focus = focusActive(world), fp = focus ? pointerWorld(world) : null;
   for (const u of world.heroes) {
     if (u.drop > 0) {
       u.drop -= dt * 3;
@@ -435,7 +522,16 @@ function updateHeroes(world, dt) {
     u.bob += dt * 3; u.cd -= dt * (1 + u.boost);
     u.recoil = Math.max(0, (u.recoil || 0) - dt * 6);
     if (u.boost > 0 && Math.random() < dt * 0.8) world.texts.push({ x: u.x + rnd(-8, 8), y: u.y - 34, text: '♪', color: '#ffe68a', size: 14, life: 0.7 });
-    const t = nearestEnemy(world, u);
+    let t;
+    if (focus) {
+      t = nearestEnemy(world, u, fp);
+      if (!t) {
+        // rien dans la zone : on y court
+        const dx = fp.x - u.x, dy = fp.y - u.y, dd = Math.hypot(dx, dy);
+        if (dd > 40) { u.x += dx / dd * def.walkSpeed * 1.3 * dt; u.y += dy / dd * def.walkSpeed * 1.3 * dt; u.moving = true; u.face = dx >= 0 ? 1 : -1; }
+        continue;
+      }
+    } else t = nearestEnemy(world, u);
     if (!t) continue;
     const dist = Math.sqrt(d2(u, t));
     u.face = t.x >= u.x ? 1 : -1;
@@ -507,6 +603,8 @@ function updateCoins(world, dt) {
     const fresh = c.life < c.max - 0.15;
     if (fresh && inside && (c.x - p.x) ** 2 + (c.y - p.y) ** 2 < gr * gr) {
       c.fly = true; c.sp = 120;
+      if (c.value >= 4.5) world.texts.push({ x: c.x, y: c.y - 14, text: '+' + Math.round(c.value * (world.phase === 'tear' ? 1 : 1)), color: c.kind === 'gem' ? '#8ff0ff' : '#ffd246',
+        size: c.value >= 90 ? 22 : c.value >= 20 ? 18 : 15, life: 0.9, dmg: true, vy: -60, pop: 0 });
       const cb = world.combo; cb.n = cb.t > 0 ? cb.n + 1 : 1; cb.t = 1.1;
       sfx(world, 'coin', { n: cb.n });
       burst(world, c.x, c.y, 3, ['#fff5b4', '#ffcd3c'], 60, 1, 0, 0.3);
@@ -544,13 +642,12 @@ function burstBag(world) {
   r.tearT = s.tearDuration;
   r.attraction = s.attraction;
   const total = r.tearTotal;
-  const n = Math.max(15, Math.min(BASE.tearMaxCoins, Math.ceil(total)));
-  const each = total / n;
   const b = bagPos(world);
-  for (let i = 0; i < n; i++) {
+  const pieces = total < 15 ? splitLoot(total, 15, 3, 15) : splitLoot(total, 15, 6, BASE.tearMaxCoins - 60);
+  for (const pc of pieces) {
     const a = rnd(0, Math.PI * 2), sp = rnd(120, Math.max(world.w, world.h) * 0.9);
-    world.coins.push({ x: b.x, y: b.y - 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
-      value: each, life: s.tearDuration + rnd(0, 0.5), max: s.tearDuration + 1, fly: false, sp: 0, big: r.tier >= 1, z: 0, vz: rnd(200, 520), spin: rnd(0, 6) });
+    world.coins.push({ x: b.x, y: b.y - 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, kind: pc.kind,
+      value: pc.value, life: s.tearDuration + rnd(0, 0.5), max: s.tearDuration + 1, fly: false, sp: 0, big: r.tier >= 1, z: 0, vz: rnd(200, 520), spin: rnd(0, 6) });
   }
   world.fx.push({ kind: 'ring', x: b.x, y: b.y - 20, r0: 10, r1: Math.max(world.w, world.h) * 0.6, t: 0.7, life: 0.7, color: TIERS[r.tier].glow });
   burst(world, b.x, b.y - 20, 60, [TIERS[r.tier].color, TIERS[r.tier].seam, TIERS[r.tier].glow], 420, 3, 0, 1);
