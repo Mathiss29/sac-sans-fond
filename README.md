@@ -25,6 +25,16 @@ Contrôles : clic sur la carte pour larguer le héros choisi (1 à 4 ou clic sur
 | `src/main.js` | Boucle à pas fixe, entrées, interface (HUD, Atelier, bilan) |
 | `src/save.js` | Sauvegarde locale versionnée |
 
+## Musique
+
+Les trois morceaux de `assets/music/` sont de Mathis, créés avec Suno (abonnement Pro) :
+
+- **Atelier** : *Pixel Meadow*
+- **Expédition** : *Fantasy Battle Arp*
+- **Boss** (près de sa clairière) : *Pixel Demons Rage*
+
+Le bouton 🔊 coupe musique et bruitages.
+
 ## Feuille de route
 
 1. **Boucle de base** (fait) : une contrée, trois familles d'élémentaires, archers, sac à paliers, Déchirure, Atelier, sauvegarde, pixel art maison, grande map avec caméra et mini-map.

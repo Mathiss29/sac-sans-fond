@@ -14,7 +14,7 @@ export function unlockAudio() {
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
 }
-export function setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.32; }
+export function setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.32; if (typeof refreshMusic === 'function') refreshMusic(); }
 export function isMuted() { return muted; }
 
 function env(g, t, a, peak, dur) {
@@ -56,4 +56,56 @@ export function play(name, opt = {}) {
     case 'click': tone('square', 700, 500, 0.04, 0.05); break;
     case 'buy': tone('square', 660, null, 0.06, 0.06); tone('square', 990, null, 0.09, 0.06, 0.06); break;
   }
+}
+
+// ---------- Musique (morceaux créés par Mathis avec Suno) ----------
+// Un lecteur par morceau ; on passe de l'un à l'autre en fondu.
+const TRACKS = {
+  atelier: 'assets/music/atelier-prairie-pixel.mp3',
+  expedition: 'assets/music/expedition-arpege-fantasy.mp3',
+  boss: 'assets/music/boss-rage-des-demons.mp3',
+};
+const MUSIC_VOL = 0.42;
+const players = {};
+let current = null, unlocked = false, fadeTimer = null;
+
+function player(name) {
+  if (!players[name]) {
+    const a = new Audio(TRACKS[name]);
+    a.loop = true; a.preload = 'auto'; a.volume = 0;
+    players[name] = a;
+  }
+  return players[name];
+}
+
+function fadeLoop() {
+  let busy = false;
+  for (const [name, a] of Object.entries(players)) {
+    const target = name === current && !muted ? MUSIC_VOL : 0;
+    const v = a.volume + Math.sign(target - a.volume) * 0.03;
+    a.volume = Math.max(0, Math.min(1, Math.abs(target - a.volume) < 0.03 ? target : v));
+    if (a.volume === 0 && name !== current && !a.paused) a.pause();
+    if (a.volume !== target) busy = true;
+  }
+  fadeTimer = busy ? setTimeout(fadeLoop, 40) : null;
+}
+
+export function setTrack(name) {
+  if (name === current) return;
+  current = name;
+  if (unlocked && name && !muted) { const a = player(name); if (name !== 'boss' || a.paused) a.play().catch(() => {}); }
+  if (!fadeTimer) fadeLoop();
+}
+
+// Appelé au premier clic/touche : les navigateurs interdisent la musique avant.
+export function unlockMusic() {
+  if (unlocked) return;
+  unlocked = true;
+  if (current && !muted) player(current).play().catch(() => { unlocked = false; });
+  if (!fadeTimer) fadeLoop();
+}
+
+export function refreshMusic() {
+  if (current && unlocked && !muted) player(current).play().catch(() => {});
+  if (!fadeTimer) fadeLoop();
 }
