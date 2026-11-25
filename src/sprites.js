@@ -278,6 +278,12 @@ export const SPR = {};
 export const HERO_SHEETS = {
   archer: { cell: [48, 52], anchor: 23, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
     anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  mage: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  knight: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 12, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 2 },
+  bard: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 2 },
 };
 export function loadHeroSheets(base = 'assets/sprites/heros/') {
   SPR.sheets = SPR.sheets || {};

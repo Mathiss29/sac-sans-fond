@@ -552,12 +552,15 @@ function updateHeroes(world, dt) {
         for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave + e.r) ** 2) damage(world, e, dmg, 0, u);
         world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave + 10, t: 0.22, life: 0.22, color: '#f0f4fa', face: u.face });
       } else {
-        world.arrows.push({ kind: def.shot, x: u.x + (u.type === 'archer' ? u.face * 14 : 0), y: u.y - (u.type === 'archer' ? 6 : 10), target: t, damage: dmg, dx: 0, dy: 0, speed: def.speed,
+        world.arrows.push({ kind: def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target: t, damage: dmg, dx: 0, dy: 0, speed: def.speed,
           aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' ? HEROES.mage.slowTime : 0 });
       }
     }
   }
 }
+
+// D'où part le tir sur le dessin (décalage vers l'avant, hauteur) : arc, pointe du bâton, luth.
+const SHOT_FROM = { archer: [14, 6], mage: [22, 8], bard: [10, 4] };
 
 function updateArrows(world, dt) {
   for (const a of world.arrows) {
