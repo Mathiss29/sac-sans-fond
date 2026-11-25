@@ -71,7 +71,7 @@ const HEROES = {
     ],
     cut: 0,
     items: [
-      { x: 0, y: 13, rows: ['.OOOOO.', 'OuuyuuO', 'OyyyyyO', 'OuuyuuO', '.OuyuO.', '..OOO..'] },
+      { x: 0, y: 11, rows: ['.OOOOO.', 'OuuyuuO', 'OyyyyyO', 'OuuyuuO', '.OuyuO.', '..OOO..'] },
       { x: 12, y: 6, rows: ['..O..', '.OnO.', '.OnO.', '.OnO.', '.OnO.', '.OnO.', 'OyyyO', '.OwO.', '..O..'] },
     ],
   },
