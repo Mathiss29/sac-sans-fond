@@ -53,7 +53,7 @@ export function centerCam(world, x, y) { world.cam.x = x - world.w / 2; world.ca
 export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]) {
   // l'étape modifie la zone (PV, butin) et les stats (feux follets dorés) pour cette expédition
   const m = stage.mods || {};
-  zone = { ...zone, stage: stage.name, hpMult: zone.hpMult * (m.hp || 1), valueMult: zone.valueMult * (m.value || 1) };
+  zone = { ...zone, stage: stage.name, hpMult: zone.hpMult * (m.hp || 1), valueMult: zone.valueMult * (m.value || 1) * (stats.valueMult || 1) };
   stats = { ...stats, goldChance: stats.goldChance * (m.gold || 1) };
   world.stage = stage;
   Object.assign(world, {
@@ -65,7 +65,7 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
       kills: 0, toDrop: { ...stats.heroes }, sel: 'archer', attraction: stats.attraction, boss: null, bossKilled: false, golds: 0,
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
       lair: { open: !!lair.open, first: !!lair.first, done: false, got: 0, only: false }, arena: null,
-      happenings: planEvents(stats.duration), eventsGot: 0,
+      happenings: planEvents(stats), eventsGot: 0,
     },
   });
   const b = bagPos(world);
@@ -75,12 +75,18 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
 }
 
 // ---------- Événements d'expédition ----------
-function planEvents(duration) {
-  const kinds = Object.keys(EVENTS).sort(() => Math.random() - 0.5);
-  return EVENT_WINDOWS.map(([a, b], i) => ({ kind: kinds[i], at: duration * rnd(a, b), done: false }));
+// Les types possibles se débloquent dans l'arbre (la pluie de pièces est là dès le début).
+function planEvents(stats) {
+  const pool = (stats.events || Object.keys(EVENTS)).slice().sort(() => Math.random() - 0.5);
+  const n = Math.min(stats.eventCount || EVENT_WINDOWS.length, EVENT_WINDOWS.length);
+  const windows = n === 1 ? [[0.3, 0.65]] : EVENT_WINDOWS;
+  return windows.map(([a, b], i) => ({ kind: pool[i % pool.length], at: stats.duration * rnd(a, b), done: false }));
 }
 // Valeur d'un événement : une part de la capacité du sac, pour rester intéressant à tout moment du jeu.
-function eventValue(world, kind) { return Math.max(12, bagMax(world.stats) * EVENTS[kind].share * world.zone.valueMult); }
+function eventValue(world, kind) {
+  const s = world.stats;
+  return Math.max(12, bagMax(s) * EVENTS[kind].share * world.zone.valueMult) * (s.eventMult || 1) * (kind === 'vein' ? s.veinMult || 1 : 1);
+}
 // Un endroit dégagé, visible, pas trop près du sac.
 function eventSpot(world) {
   const b = bagPos(world);
@@ -98,7 +104,8 @@ function startEvent(world, ev) {
   sfx(world, 'portal');
   const value = eventValue(world, ev.kind);
   if (ev.kind === 'rain') {
-    r.rain = { t: def.life, left: value, rate: value / def.life };
+    const life = def.life * (world.stats.rainLife || 1);
+    r.rain = { t: life, left: value, rate: value / life };
     return;
   }
   const e = spawnAt(world, ev.kind, p.x, p.y);
@@ -376,8 +383,8 @@ function damage(world, e, amount, slow, from) {
   if (e.dead) return;
   if (e.boss) amount *= world.stats.bossMult;
   if (slow) e.slow = Math.max(e.slow, slow);
-  const crit = Math.random() < 0.12;
-  if (crit) amount *= 2;
+  const crit = Math.random() < (world.stats.critChance || 0.12);
+  if (crit) amount *= world.stats.critMult || 2;
   if (e.def.dodge && Math.random() < e.def.dodge) {
     world.texts.push({ x: e.x, y: e.y - e.r - 6, text: 'esquive', color: '#d6f2ff', size: 12, life: 0.7 });
     return;
@@ -586,7 +593,7 @@ function moveEventFoe(world, e, dt) {
   if (e.type === 'goblin') {
     if (near && nd < 260 * 260) e.a = Math.atan2(e.y - near.y, e.x - near.x) + Math.sin(e.age * 3) * 0.6;
     else e.a += rnd(-1, 1) * dt * 2;
-    const sp = e.def.speed * slow;
+    const sp = e.def.speed * slow * (world.stats.goblinSpeed || 1);
     e.x += Math.cos(e.a) * sp * dt; e.y += Math.sin(e.a) * sp * dt;
   } else if (e.type === 'mimic' && near) {
     const d = Math.sqrt(nd) || 1, sp = 95 * slow;
@@ -657,7 +664,7 @@ function updateHeroes(world, dt) {
     if (!t) { u.aiming = false; continue; }
     const dist = Math.sqrt(d2(u, t));
     u.face = t.x >= u.x ? 1 : -1;
-    const reach = def.range + (def.shot === 'melee' ? t.r : 0);
+    const reach = def.range * ((s.range && s.range[u.type]) || 1) + (def.shot === 'melee' ? t.r : 0);
     if (dist > reach) {
       u.x += (t.x - u.x) / dist * def.walkSpeed * dt;
       u.y += (t.y - u.y) / dist * def.walkSpeed * dt;
@@ -671,11 +678,11 @@ function updateHeroes(world, dt) {
       if (onScreen(world, u.x, u.y)) sfx(world, def.shot === 'melee' ? 'slash' : def.shot);
       if (def.shot === 'melee') {
         // coup circulaire : touche la cible et tout ce qui est autour
-        for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave + e.r) ** 2) damage(world, e, dmg, 0, u);
-        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave + 10, t: 0.22, life: 0.22, color: '#f0f4fa', face: u.face });
+        for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave * (s.cleave || 1) + e.r) ** 2) damage(world, e, dmg, 0, u);
+        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: '#f0f4fa', face: u.face });
       } else {
         world.arrows.push({ kind: def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target: t, damage: dmg, dx: 0, dy: 0, speed: def.speed,
-          aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' ? HEROES.mage.slowTime : 0 });
+          aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' ? s.slowTime || HEROES.mage.slowTime : 0 });
       }
     }
   }
@@ -755,7 +762,7 @@ function startTear(world) {
   world.coins = [];
   r.tier = tierOf(r.bag, world.stats);
   r.mult = TIERS[r.tier].mult * (r.full ? FULL_BONUS : 1);
-  r.tearTotal = r.bag * r.mult;
+  r.tearTotal = r.bag * r.mult * (world.stats.tearMult || 1);
   r.shake = 1.1;
   world.events.push({ kind: 'tear' });
   sfx(world, 'rumble');
@@ -773,7 +780,7 @@ function burstBag(world) {
   // Le sac crache son or en plusieurs vagues : les pièces montent haut, retombent loin,
   // et ne se ramassent qu'une fois posées au sol. Impossible de tout rafler en restant sur le sac.
   pieces.sort(() => Math.random() - 0.5);
-  const W = TEAR_WAVES;
+  const W = s.tearWaves || TEAR_WAVES;
   r.waves = Array.from({ length: W }, (_, i) => ({ at: i * TEAR_WAVE_GAP, pieces: pieces.filter((_, k) => k % W === i) }));
   r.tearT += (W - 1) * TEAR_WAVE_GAP;
   r.waveT = 0;

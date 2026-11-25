@@ -1,10 +1,11 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, stageFor, TIERS, NODES, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { ZONES, stageFor, TIERS, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
 import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
-import { HERO_SHEETS, TREE_ICONS, treeIcons } from './sprites.js';
+import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
+import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
 let iconSheet = null;
 treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
 
@@ -114,6 +115,7 @@ function finishExpedition() {
   const gained = r.tearGot + r.overflow + r.lair.got;
   save.expeditions++;
   save.best = Math.max(save.best, gained);
+  if (!r.lair.only) save.maxTier = Math.max(save.maxTier || 0, r.tier);
   const unlocked = !lairOpen() && r.tier >= ARENA.unlockTier;
   if (unlocked) save.lairOpen = true;
   writeSave(save);
@@ -238,36 +240,48 @@ function screenCount() {
   }
 }
 
-// ---------- Atelier ----------
-const GX = 120, GY = 110, PAD = 70;
+// ---------- Atelier : le grand arbre ----------
+// Une croix qui part du sac. Brouillard : on voit les nœuds achetés, leurs enfants, et des « ? » un cran plus loin.
+const G = 100, PAD = 90;
+const minX = Math.min(...NODES.map(n => n.x)), minY = Math.min(...NODES.map(n => n.y));
+const maxX = Math.max(...NODES.map(n => n.x)), maxY = Math.max(...NODES.map(n => n.y));
 let selected = 'root';
 const L = id => save.level[id] || 0;
 const visible = n => !n.parent || L(n.parent) > 0 || L(n.id) > 0;
-// nœuds devinés : enfants d'un nœud visible mais pas encore acheté (silhouette verrouillée)
-const teaser = n => !visible(n) && n.parent && visible(NODES.find(m => m.id === n.parent));
-const BRANCH_COLOR = { 'Départ': '#ffe7a0', Compagnie: '#ef6f52', Sac: '#ffcf4a', Arcanes: '#b48cff', 'Récolte': '#86d873' };
+const teaser = n => !visible(n) && n.parent && visible(NODE[n.parent]);
+const colorOf = n => (BRANCHES[n.branch] || BRANCHES.depart)[1];
+const branchName = n => (BRANCHES[n.branch] || BRANCHES.depart)[0];
+const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: (save.bosses || {})[ZONES[0].id] || 0 });
 // niveau maximum achetable pour l'instant (certains nœuds se débloquent par étapes)
 const capOf = n => n.cap ? Math.min(n.max, n.cap(L)) : n.max;
-const pos = n => ({ x: PAD + n.x * GX - GX + 20, y: PAD + n.y * GY - GY + 30 });
+const lockedNow = n => n.soon || (n.need && !n.need(ctx()) && !L(n.id));
+// une seule voie par fourche de classe (pas encore en jeu, mais on garde la règle)
+const costOf = (n, lv) => nodeCost(n, lv, save.level);
+const pos = n => ({ x: PAD + (n.x - minX) * G, y: PAD + (n.y - minY) * G });
 
+const demonImgs = {};
+function iconSource(key) {
+  if (key.startsWith('d_')) {
+    const id = key.slice(2);
+    if (!demonImgs[id]) { const im = new Image(); im.onload = () => renderTree(); im.src = `assets/sprites/demons/${id}.png`; demonImgs[id] = im; }
+    return demonImgs[id].complete && demonImgs[id].naturalWidth ? demonImgs[id] : null;
+  }
+  const spr = getSprites();
+  const m = { m_gold: ['gold', 0], m_golem: ['golem', 0], m_boss: ['boss', 0], e_vein: ['vein', 0], e_goblin: ['goblin', 0], e_mimic: ['mimic', 0], e_mimicOpen: ['mimic', 3] }[key];
+  if (m && spr.enemies && spr.enemies[m[0]]) { const f = spr.enemies[m[0]]; return (f[m[1]] || f[0]).c; }
+  return null;
+}
 function nodeIcon(n) {
   const c = document.createElement('canvas'); c.width = c.height = 92;
   const ig = c.getContext('2d'); ig.imageSmoothingEnabled = false;
-  const ii = n.icon ? TREE_ICONS.indexOf(n.icon) : -1;
+  const key = n.icon || '', ii = TREE_ICONS.indexOf(key);
   if (iconSheet && ii >= 0) { ig.drawImage(iconSheet, ii * 64, 0, 64, 64, 6, 6, 80, 80); return c; }
-  if (n.hero) drawHero(ig, n.hero, 46, 84, 1, 0, 1, 4);
-  else if (n.branch === 'Sac' || n.id === 'root') drawBag(ig, 46, 86, n.tier || 0, 0.1, 0, 0, 3);
-  ig.scale(2, 2);
-  if (n.hero || n.branch === 'Sac' || n.id === 'root') return c;
-  else if (n.branch === 'Arcanes') {
-    ig.strokeStyle = '#e8d6a8'; ig.lineWidth = 2.5; ig.fillStyle = '#ffcf4a';
-    ig.beginPath(); ig.moveTo(13, 8); ig.lineTo(33, 8); ig.lineTo(13, 38); ig.lineTo(33, 38); ig.closePath(); ig.stroke();
-    ig.beginPath(); ig.moveTo(17, 12); ig.lineTo(29, 12); ig.lineTo(23, 21); ig.fill();
-    ig.beginPath(); ig.moveTo(23, 29); ig.lineTo(30, 36); ig.lineTo(16, 36); ig.fill();
-  } else {
-    ig.strokeStyle = 'rgba(255,248,225,.8)'; ig.setLineDash([3, 3]); ig.lineWidth = 1.5;
-    ig.beginPath(); ig.arc(23, 23, 16, 0, 7); ig.stroke(); ig.setLineDash([]);
-    ig.fillStyle = '#ffd34d'; ig.beginPath(); ig.ellipse(23, 23, 6, 5.5, 0, 0, 7); ig.fill();
+  if (HEROES[key]) { drawHero(ig, key, 46, 84, 1, 0, 1, 4); return c; }
+  if (/^bag\d$/.test(key)) { drawBag(ig, 46, 86, +key[3], 0.1, 0, 0, 3); return c; }
+  const src = iconSource(key);
+  if (src) {
+    const k = Math.min(80 / src.width, 80 / src.height);
+    ig.drawImage(src, Math.round(46 - src.width * k / 2), Math.round(46 - src.height * k / 2), Math.round(src.width * k), Math.round(src.height * k));
   }
   return c;
 }
@@ -279,47 +293,52 @@ function renderTree() {
   lb.textContent = (open ? '' : '🔒 ') + ZONES[0].boss.lair;
   lb.title = open ? `Affronter ${ZONES[0].boss.name} directement` : `Remplis le sac jusqu'au palier « ${TIERS[ARENA.unlockTier].name} » pour ouvrir le portail`;
   const inner = $('treeInner'), svg = $('treeLines');
-  const maxX = Math.max(...NODES.map(n => n.x)), maxY = Math.max(...NODES.map(n => n.y));
-  const W = PAD * 2 + maxX * GX - GX + 40 + 120, H = PAD * 2 + maxY * GY - GY + 60;
+  const W = PAD * 2 + (maxX - minX) * G, H = PAD * 2 + (maxY - minY) * G;
   inner.style.width = W + 'px'; inner.style.height = H + 'px';
   svg.setAttribute('width', W); svg.setAttribute('height', H);
   inner.querySelectorAll('.node,.branchLbl').forEach(e => e.remove());
   svg.innerHTML = '';
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); parent.append(e); return e; };
-  // lueur des chemins achetés
   const defs = el('defs', {});
   const f = el('filter', { id: 'glow', x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
   el('feGaussianBlur', { stdDeviation: 3, result: 'b' }, f);
   const m = el('feMerge', {}, f); el('feMergeNode', { in: 'b' }, m); el('feMergeNode', { in: 'SourceGraphic' }, m);
-  // cercle de runes autour du sac du mage
-  const R = pos(NODES[0]);
+  const R = pos(NODE.root);
   el('circle', { cx: R.x, cy: R.y, r: 74, fill: 'none', stroke: 'rgba(255,231,160,.18)', 'stroke-width': 2 });
   el('circle', { cx: R.x, cy: R.y, r: 88, fill: 'none', stroke: 'rgba(255,231,160,.12)', 'stroke-width': 10, 'stroke-dasharray': '2 9' });
+  // chemins droits, en coude quand il le faut (grille)
   for (const n of NODES) {
     if (!n.parent || !(visible(n) || teaser(n))) continue;
-    const a = pos(NODES.find(q => q.id === n.parent)), b = pos(n), col = BRANCH_COLOR[n.branch] || '#ffcf4a', own = L(n.id) > 0;
-    // chemin légèrement courbé, de couleur de la branche
-    const mx = (a.x + b.x) / 2 + (b.y - a.y) * 0.08, my = (a.y + b.y) / 2 - (b.x - a.x) * 0.08;
-    el('path', { d: `M${a.x},${a.y} Q${mx},${my} ${b.x},${b.y}`, fill: 'none', stroke: own ? col : 'rgba(201,180,142,.35)', 'stroke-width': own ? 5 : 3,
-      'stroke-linecap': 'round', 'stroke-dasharray': own ? '' : '2 8', filter: own ? 'url(#glow)' : '' });
+    const a = pos(NODE[n.parent]), b = pos(n), own = L(n.id) > 0;
+    const d = a.x === b.x || a.y === b.y ? `M${a.x},${a.y} L${b.x},${b.y}` : `M${a.x},${a.y} L${b.x},${a.y} L${b.x},${b.y}`;
+    el('path', { d, fill: 'none', stroke: own ? colorOf(n) : visible(n) ? 'rgba(201,180,142,.45)' : 'rgba(201,180,142,.22)', 'stroke-width': own ? 5 : 3,
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-dasharray': own ? '' : '2 8', filter: own ? 'url(#glow)' : '' });
   }
-  for (const [name, x, y] of [['Compagnie', 5, 0.35], ['Sac', 8.6, 3.55], ['Arcanes', 5.6, 6.55], ['Récolte', 2, 3.55]]) {
-    const lb = document.createElement('div'); lb.className = 'branchLbl'; lb.textContent = name; lb.style.setProperty('--c', BRANCH_COLOR[name]);
-    const q = pos({ x, y }); lb.style.left = q.x + 'px'; lb.style.top = q.y + 'px'; inner.append(lb);
+  // étiquettes des branches, seulement quand un de leurs nœuds est visible
+  for (const [br, x, y, txt] of TREE_LABELS) {
+    if (!NODES.some(n => n.branch === br && visible(n) && n.id !== 'root' && Math.abs(n.x - x) <= 1.5 && Math.abs(n.y - y) <= 2)) continue;
+    const lb2 = document.createElement('div'); lb2.className = 'branchLbl'; lb2.textContent = txt || BRANCHES[br][0];
+    lb2.style.setProperty('--c', BRANCHES[br][1]);
+    const q = pos({ x, y }); lb2.style.left = q.x + 'px'; lb2.style.top = q.y + 'px'; inner.append(lb2);
   }
   for (const n of NODES) {
     const shown = visible(n), tz = !shown && teaser(n);
     if (!shown && !tz) continue;
-    const p = pos(n), lv = L(n.id), isMax = lv >= n.max, capped = !isMax && lv >= capOf(n);
+    const p = pos(n), lv = L(n.id), isMax = lv >= n.max, capped = !isMax && lv >= capOf(n), locked = shown && lockedNow(n);
     const b = document.createElement('button');
-    b.className = 'node' + (tz ? ' teaser' : '') + (lv ? ' owned' : '') + (isMax ? ' max' : !tz && !capped && save.coins >= nodeCost(n, lv) ? ' afford' : '') + (selected === n.id ? ' sel' : '') + (n.id === 'root' ? ' root' : '');
-    b.style.setProperty('--c', BRANCH_COLOR[n.branch] || '#ffcf4a');
+    b.className = 'node t-' + n.type + (tz ? ' teaser' : '') + (lv ? ' owned' : '') + (n.soon && shown ? ' soon' : '') + (locked && !n.soon ? ' locked' : '')
+      + (isMax ? ' max' : !tz && !locked && !capped && save.coins >= costOf(n, lv) ? ' afford' : '') + (selected === n.id ? ' sel' : '') + (n.id === 'root' ? ' root' : '');
+    b.style.setProperty('--c', colorOf(n));
     b.style.left = p.x + 'px'; b.style.top = p.y + 'px';
-    b.setAttribute('aria-label', tz ? 'Compétence verrouillée' : n.name);
+    b.setAttribute('aria-label', tz ? 'Compétence cachée' : n.name);
     if (tz) { const q = document.createElement('span'); q.className = 'q'; q.textContent = '?'; b.append(q); }
-    else b.append(nodeIcon(n));
-    if (!tz && n.id !== 'root') {
+    else {
+      b.append(nodeIcon(n));
+      if (n.badge) { const bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = n.badge; b.append(bd); }
+      if (locked) { const pd = document.createElement('span'); pd.className = 'pad'; pd.textContent = n.soon ? '…' : '🔒'; b.append(pd); }
+    }
+    if (!tz && n.id !== 'root' && !n.soon) {
       const l = document.createElement('span'); l.className = 'lv num';
       l.textContent = isMax ? (n.max > 1 ? 'MAX' : '✓') : `${lv}/${n.max}`;
       b.append(l);
@@ -329,36 +348,38 @@ function renderTree() {
     inner.append(b);
   }
   renderInfo();
-  $('stats').textContent = save.expeditions ? `${save.expeditions} expédition${save.expeditions > 1 ? 's' : ''} · record ${fmt(save.best)} pièces` : '';
+  const live = NODES.filter(n => !n.soon), owned = live.filter(n => L(n.id) > 0).length;
+  $('stats').textContent = (save.expeditions ? `${save.expeditions} expédition${save.expeditions > 1 ? 's' : ''} · record ${fmt(save.best)} pièces · ` : '') + `${owned}/${live.length} compétences`;
 }
 
 function renderInfo() {
-  const n = NODES.find(m => m.id === selected) || NODES[0];
+  const n = NODE[selected] || NODE.root;
   const lv = L(n.id), isMax = lv >= n.max;
   const box = $('info'); box.innerHTML = '';
-  box.style.setProperty('--c', BRANCH_COLOR[n.branch] || '#ffcf4a');
+  box.style.setProperty('--c', colorOf(n));
+  const add = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; box.append(e); return e; };
   if (!visible(n)) {
-    const par = NODES.find(m => m.id === n.parent);
-    const br = document.createElement('div'); br.className = 'branch'; br.textContent = n.branch;
-    const h = document.createElement('h3'); h.textContent = '???';
-    const k = document.createElement('p'); k.className = 'locked'; k.textContent = `🔒 Achète d'abord « ${par.name} » pour révéler cette compétence.`;
-    box.append(br, h, k); return;
+    add('div', 'branch', branchName(n)); add('h3', '', '???');
+    add('p', 'locked', `Achète d'abord « ${NODE[n.parent].name} » pour révéler cette compétence.`);
+    return;
   }
-  const br = document.createElement('div'); br.className = 'branch';
-  br.textContent = n.branch + (n.max > 1 ? ` · niveau ${lv}/${n.max}` : '');
-  const h = document.createElement('h3'); h.textContent = n.name;
-  const p = document.createElement('p'); p.textContent = n.desc;
-  const e = document.createElement('div'); e.className = 'eff';
-  e.textContent = isMax ? n.effect(lv) : lv ? `${n.effect(lv)}  →  ${n.effect(lv + 1)}` : n.effect(1);
-  box.append(br, h, p, e);
-  if (!isMax && lv >= capOf(n)) {
-    const k = document.createElement('p'); k.className = 'locked'; k.textContent = '🔒 ' + (n.capMsg || 'Pas encore disponible.');
-    box.append(k);
-  } else if (!isMax) {
+  add('div', 'branch', branchName(n) + (n.max > 1 && !n.soon ? ` · niveau ${lv}/${n.max}` : '') + (n.badge ? ` · ${n.badge}` : ''));
+  add('h3', '', n.name);
+  if (n.soon) {
+    add('p', '', n.desc);
+    if (n.cond) add('p', 'cond', n.cond);
+    add('p', 'locked', 'Bientôt dans le jeu.');
+    return;
+  }
+  add('p', '', n.desc);
+  add('div', 'eff', isMax ? n.effect(lv) : lv ? `${n.effect(lv)}  →  ${n.effect(lv + 1)}` : n.effect(1));
+  if (lockedNow(n)) { add('p', 'locked', '🔒 ' + n.cond); return; }
+  if (!isMax && lv >= capOf(n)) add('p', 'locked', '🔒 ' + (n.capMsg || 'Pas encore disponible.'));
+  else if (!isMax) {
     const b = document.createElement('button'); b.className = 'btn';
-    b.append(`Acheter · ${fmt(nodeCost(n, lv))} `);
+    b.append(`Acheter · ${fmt(costOf(n, lv))} `);
     const i = document.createElement('span'); i.className = 'coin-ico'; b.append(i);
-    b.disabled = save.coins < nodeCost(n, lv);
+    b.disabled = save.coins < costOf(n, lv);
     b.onclick = () => buy(n);
     box.append(b);
   }
@@ -366,8 +387,8 @@ function renderInfo() {
 
 function buy(n) {
   const lv = L(n.id);
-  if (lv >= capOf(n)) return;
-  const c = nodeCost(n, lv);
+  if (n.soon || lockedNow(n) || !visible(n) || lv >= capOf(n)) return;
+  const c = costOf(n, lv);
   if (save.coins < c) return;
   save.coins -= c; save.level[n.id] = lv + 1;
   unlockAudio(); play('buy');
@@ -502,13 +523,42 @@ function frame(now) {
 }
 
 // Sur petit écran, l'arbre déborde : on le centre sur le nœud sélectionné.
+// Glisser pour se déplacer dans l'arbre, molette pour zoomer.
+let treeZoom = 1;
+(function treePan() {
+  const sc = $('treeScroll'), inner = $('treeInner');
+  let drag = null;
+  sc.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    drag = { x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop, moved: false };
+  });
+  addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && dx * dx + dy * dy < 36) return;
+    drag.moved = true; sc.classList.add('drag');
+    sc.scrollLeft = drag.l - dx; sc.scrollTop = drag.t - dy;
+  });
+  addEventListener('pointerup', () => { if (drag && drag.moved) { sc.classList.remove('drag'); suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); } drag = null; });
+  sc.addEventListener('click', e => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); } }, true);
+  sc.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = sc.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const wx = (sc.scrollLeft + mx) / treeZoom, wy = (sc.scrollTop + my) / treeZoom;
+    treeZoom = Math.max(0.45, Math.min(1.4, treeZoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
+    inner.style.zoom = treeZoom;
+    sc.scrollLeft = wx * treeZoom - mx; sc.scrollTop = wy * treeZoom - my;
+  }, { passive: false });
+})();
+let suppressClick = false;
+
 function centerTree() {
-  const sc = $('treeScroll'), n = NODES.find(m => m.id === selected) || NODES[0], q = pos(n);
-  sc.scrollLeft = q.x - sc.clientWidth / 2; sc.scrollTop = q.y - sc.clientHeight / 2;
+  const sc = $('treeScroll'), q = pos(NODE.root);
+  sc.scrollLeft = q.x * treeZoom - sc.clientWidth / 2; sc.scrollTop = q.y * treeZoom - sc.clientHeight / 2;
 }
 
 // premier nœud utile sélectionné par défaut
-selected = (NODES.find(n => visible(n) && L(n.id) < n.max && n.id !== 'root') || NODES[0]).id;
+selected = (NODES.find(n => visible(n) && !n.soon && !lockedNow(n) && L(n.id) < n.max && n.id !== 'root') || NODE.root).id;
 renderTree();
 centerTree();
 requestAnimationFrame(frame);
