@@ -56,7 +56,7 @@ export function drawEnemy(g, e, t, px = 3) {
   const drawn = SPR.enemyScale && SPR.enemyScale[key];
   // boss dessiné : 4 images de repos, puis 4 de coup de poing quand il frappe
   if (drawn && e.boss && frames.length === 8) frames = e.atk > 0 ? frames.slice(4) : frames.slice(0, 4);
-  const f = drawn && e.boss && e.atk > 0 ? frames[Math.min(3, Math.floor((1 - e.atk / 0.7) * 4))] : e.type === 'mimic' ? frames[e.awake && Math.floor(e.ph * 2) % 2 ? 1 : e.awake ? 1 : 0] : frames[Math.floor(e.ph * (e.type === 'goblin' ? 3 : 0.9)) % frames.length];
+  const f = drawn && e.boss && e.atk > 0 ? frames[Math.min(3, Math.floor((1 - e.atk / 0.7) * 4))] : e.type === 'mimic' ? (frames.length >= 6 ? (e.awake ? frames[2 + Math.floor(e.ph * 4) % 4] : frames[Math.floor(e.ph * 0.9) % 2]) : frames[e.awake ? 1 : 0]) : frames[Math.floor(e.ph * (e.type === 'goblin' ? 4 : e.type === 'vein' ? 2 : 0.9)) % frames.length];
   // le boss est frappé sans arrêt : un bref éclair seulement, sinon il resterait blanc
   const flash = e.boss ? e.hit > 0.09 && Math.floor(t * 20) % 3 === 0 : e.hit > 0.06 || (e.hit > 0 && Math.floor(t * 30) % 2);
   const img = flash ? f.white : f.c;

@@ -381,7 +381,9 @@ export function loadHeroSheets(base = 'assets/sprites/heros/') {
 
 // Monstres dessinés (planche IA convertie) : une bande par monstre, cellules de taille fixe.
 // Ils remplacent les anciens sprites dès qu'ils sont chargés. scale : taille par rapport aux sprites maison.
-export const MONSTER_SHEETS = { wisp: [36, 32, 4], gold: [36, 32, 4], golem: [52, 40, 6], wind: [36, 32, 4], boss: [72, 50, 8] };
+export const MONSTER_SHEETS = { wisp: [36, 32, 4], gold: [36, 32, 4], golem: [52, 40, 6], wind: [36, 32, 4], boss: [72, 50, 8],
+  // créatures d'événement (planches ChatGPT) : mimique = 2 images fermée puis 4 ouverte
+  vein: [38, 30, 4], goblin: [46, 40, 6], mimic: [46, 44, 6] };
 export function loadMonsterSheets(base = 'assets/sprites/monstres/') {
   SPR.enemyScale = SPR.enemyScale || {};
   return Promise.all(Object.entries(MONSTER_SHEETS).map(([id, [cw, ch, n]]) => new Promise(ok => {
@@ -828,3 +830,11 @@ export function portalSprite() {
   portalCache = { c, w: W, h: H, inner: { x: cx, y: 17, rx: 8, ry: 13 } };
   return portalCache;
 }
+
+// Icônes de l'arbre (planche ChatGPT, 16 icônes de 64 px côte à côte).
+export const TREE_ICONS = ['arrow', 'quiver', 'helmet', 'crystal', 'sword', 'lute', 'glove', 'eye', 'coinclock', 'firewisp', 'hourglass', 'horn', 'skull', 'needlebag', 'openbag', 'runebag'];
+export const treeIcons = new Promise(ok => {
+  const im = new Image();
+  im.onload = () => ok(im); im.onerror = () => ok(null);
+  im.src = 'assets/sprites/icones/arbre.png';
+});

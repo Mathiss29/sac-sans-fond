@@ -4,7 +4,9 @@ import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
 import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
-import { HERO_SHEETS } from './sprites.js';
+import { HERO_SHEETS, TREE_ICONS, treeIcons } from './sprites.js';
+let iconSheet = null;
+treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
 
 const $ = id => document.getElementById(id);
 const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
@@ -251,6 +253,8 @@ const pos = n => ({ x: PAD + n.x * GX - GX + 20, y: PAD + n.y * GY - GY + 30 });
 function nodeIcon(n) {
   const c = document.createElement('canvas'); c.width = c.height = 92;
   const ig = c.getContext('2d'); ig.imageSmoothingEnabled = false;
+  const ii = n.icon ? TREE_ICONS.indexOf(n.icon) : -1;
+  if (iconSheet && ii >= 0) { ig.drawImage(iconSheet, ii * 64, 0, 64, 64, 6, 6, 80, 80); return c; }
   if (n.hero) drawHero(ig, n.hero, 46, 84, 1, 0, 1, 4);
   else if (n.branch === 'Sac' || n.id === 'root') drawBag(ig, 46, 86, n.tier || 0, 0.1, 0, 0, 3);
   ig.scale(2, 2);
