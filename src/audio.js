@@ -53,6 +53,9 @@ export function play(name, opt = {}) {
     case 'rumble': noise(1.1, 0.18, 'lowpass', 180, 90); tone('sawtooth', 55, 45, 1.1, 0.06); break;
     case 'burst': noise(0.7, 0.3, 'lowpass', 2500, 120); tone('sine', 110, 40, 0.6, 0.35); [0.05, 0.12, 0.2].forEach((d, i) => tone('square', 1320 * (1 + i * 0.25), null, 0.12, 0.05, d)); break;
     case 'boss': noise(0.9, 0.28, 'lowpass', 1800, 90); tone('sine', 90, 35, 0.9, 0.35); [0, 0.15, 0.3].forEach((d, i) => tone('triangle', 392 * [1, 1.26, 1.5][i], null, 0.5, 0.09, d + 0.2)); break;
+    case 'warn': tone('sawtooth', 180 * j, 260, 0.35, 0.05); noise(0.35, 0.05, 'bandpass', 700, 1600); break;
+    case 'fire': noise(0.45, 0.22, 'lowpass', 1600, 120); tone('sine', 120 * j, 45, 0.35, 0.22); break;
+    case 'portal': [0, 0.08, 0.16, 0.24, 0.32].forEach((d, i) => tone('triangle', 330 * Math.pow(1.19, i), null, 0.18, 0.07, d)); noise(0.6, 0.08, 'bandpass', 600, 2400); break;
     case 'click': tone('square', 700, 500, 0.04, 0.05); break;
     case 'buy': tone('square', 660, null, 0.06, 0.06); tone('square', 990, null, 0.09, 0.06, 0.06); break;
   }

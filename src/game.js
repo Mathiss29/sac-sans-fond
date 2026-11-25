@@ -1,5 +1,5 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
-import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, BASE, MAP, bagMax, tierOf } from './data.js';
+import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, BASE, MAP, ARENA, bagMax, tierOf } from './data.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -24,7 +24,8 @@ export function createWorld(w, h) {
   return {
     w, h, mapW: MAP.w, mapH: MAP.h, cam: { x: (MAP.w - w) / 2, y: (MAP.h - h) / 2 },
     phase: 'idle',      // idle | expedition | tear | done
-    enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [],
+    mode: 'map',        // map (la région) | arena (l'antre du boss)
+    enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], hazards: [],
     shake: 0, sfx: [], combo: { n: 0, t: 0 },
     pointer: { x: -999, y: -999, inside: false, down: false, usedForDrop: false },
     holdKey: false,
@@ -48,21 +49,163 @@ export function clampCam(world) {
 export function moveCam(world, dx, dy) { world.cam.x += dx; world.cam.y += dy; clampCam(world); }
 export function centerCam(world, x, y) { world.cam.x = x - world.w / 2; world.cam.y = y - world.h / 2; clampCam(world); }
 
-export function startExpedition(world, stats, zone) {
+// lair : { open: portail ouvert ?, first: jamais vaincu ? }
+export function startExpedition(world, stats, zone, lair = {}) {
   Object.assign(world, {
-    phase: 'expedition', enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], shake: 0,
+    phase: 'expedition', mode: 'map', mapW: MAP.w, mapH: MAP.h,
+    enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], hazards: [], shake: 0,
     stats, zone,
     run: {
       t: 0, duration: stats.duration, spawnT: 0, bag: 0, full: false, overflow: 0,
       kills: 0, toDrop: { ...stats.heroes }, sel: 'archer', attraction: stats.attraction, boss: null, bossKilled: false, golds: 0,
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
+      lair: { open: !!lair.open, first: !!lair.first, done: false, got: 0, only: false }, arena: null,
     },
   });
   const b = bagPos(world);
   centerCam(world, b.x, b.y + 40);
   for (let i = 0; i < 22; i++) spawnEnemy(world, true);
-  if (zone.boss) spawnBoss(world);
   world.events.push({ kind: 'banner', title: 'Expédition !', sub: zone.name });
+}
+
+// Combat direct depuis l'Atelier : on arrive dans l'antre avec tous ses héros à larguer.
+export function startLair(world, stats, zone, lair = {}) {
+  startExpedition(world, stats, zone, { ...lair, open: true });
+  world.events.length = 0;
+  world.run.lair.only = true;
+  enterArena(world);
+}
+
+// ---------- Antre du boss ----------
+export function portalPos(world) {
+  const b = world.zone.boss;
+  return { x: b.at[0] * MAP.w, y: b.at[1] * MAP.h, r: 56 };
+}
+export function canEnterPortal(world, x, y) {
+  const r = world.run;
+  if (world.phase !== 'expedition' || world.mode !== 'map' || !r || !r.lair.open || r.lair.done) return false;
+  const p = portalPos(world);
+  return (x - p.x) ** 2 + (y - p.y) ** 2 < p.r * p.r;
+}
+
+export function enterArena(world) {
+  const r = world.run;
+  if (!r.lair.only) {
+    // la carte est mise de côté telle quelle : on la retrouve en sortant
+    r.stash = { enemies: world.enemies, coins: world.coins, cam: { ...world.cam } };
+  }
+  const heroes = world.heroes;
+  // la salle s'adapte à l'écran (sans dépasser la taille prévue) pour qu'on voie tout le combat
+  const aw = Math.min(ARENA.w, Math.max(world.w, 640)), ah = Math.min(ARENA.h, Math.max(world.h, 560));
+  Object.assign(world, { mode: 'arena', mapW: aw, mapH: ah, enemies: [], coins: [], arrows: [], hazards: [] });
+  // les héros déjà largués entrent par le bas de la salle
+  heroes.forEach((u, i) => {
+    const a = Math.PI * (0.15 + 0.7 * (i + 0.5) / heroes.length);
+    u.x = aw / 2 + Math.cos(a) * aw * 0.22 * (i % 2 ? 1 : 0.8); u.y = ah * 0.5 + Math.sin(a) * ah * 0.32;
+    u.drop = 0.6 + (i % 4) * 0.1; u.stun = 0; u.cd = rnd(0.2, 0.8);
+  });
+  const b = world.zone.boss;
+  r.arena = { t: 0, duration: ARENA.duration, fireT: 2.2, summoned: 0, loot: 0, won: false, leaving: 0 };
+  const home = { x: aw / 2, y: ah * 0.4, r: Math.min(aw, ah) * 0.26 };
+  const e = {
+    type: 'boss', boss: true, def: { ...b, color: '#ff7a3c', core: '#fff1c2' }, x: home.x, y: home.y, r: b.radius,
+    hp: b.hp * world.zone.hpMult, max: b.hp * world.zone.hpMult, value: b.value * world.zone.valueMult * (r.lair.first ? ARENA.firstBonus : 1),
+    a: rnd(0, 6), ph: rnd(0, 6), age: 0, hit: 0, dead: false, slow: 0, home,
+  };
+  world.enemies.push(e);
+  r.boss = e;
+  centerCam(world, aw / 2, ah / 2);
+  world.fx.push({ kind: 'ring', x: home.x, y: home.y, r0: 10, r1: 300, t: 0.7, life: 0.7, color: '#ff9a3c' });
+  shake(world, 8); sfx(world, 'portal');
+  world.events.push({ kind: 'arena', on: true });
+  world.events.push({ kind: 'banner', title: b.lair, sub: r.lair.first ? `${b.name} : butin ×${ARENA.firstBonus} la première fois !` : `${b.name} t'attend` });
+}
+
+function exitArena(world) {
+  const r = world.run, a = r.arena;
+  // pièces restées au sol : perdues. Pièces en vol : comptées.
+  for (const c of world.coins) if (c.fly) credit(world, c.value);
+  r.lair.done = true;
+  if (r.lair.only) { world.coins = []; world.phase = 'done'; world.events.push({ kind: 'done' }); return; }
+  const st = r.stash, p = portalPos(world);
+  Object.assign(world, { mode: 'map', mapW: MAP.w, mapH: MAP.h, enemies: st.enemies, coins: st.coins, arrows: [], hazards: [] });
+  r.stash = null;
+  world.heroes.forEach((u, i) => {
+    const an = i / Math.max(1, world.heroes.length) * Math.PI * 2;
+    u.x = p.x + Math.cos(an) * 90; u.y = p.y + 40 + Math.sin(an) * 60; u.drop = 0.5; u.stun = 0;
+  });
+  centerCam(world, p.x, p.y + 60);
+  sfx(world, 'portal');
+  world.events.push({ kind: 'arena', on: false });
+  world.events.push({ kind: 'banner', title: 'Retour à la ' + world.zone.name.toLowerCase(), sub: a.won ? 'Le portail se referme derrière toi' : 'Le Brasier t\'a repoussé…' });
+}
+
+function updateArena(world, dt) {
+  const r = world.run, a = r.arena, bo = r.boss, b = world.zone.boss;
+  updateHeroes(world, dt);
+  updateArrows(world, dt);
+  updateHazards(world, dt);
+  if (a.won) {
+    a.loot -= dt;
+    if (a.loot <= 0 || (world.coins.length === 0 && a.loot < ARENA.lootTime - 1.5)) exitArena(world);
+    return;
+  }
+  a.t += dt;
+  if (a.t >= a.duration) {
+    world.events.push({ kind: 'banner', title: 'Temps écoulé', sub: `${b.name} se rallume…` });
+    exitArena(world);
+    return;
+  }
+  // invocations : à 66 % et 33 % de vie, une couronne de feux follets
+  const ratio = bo.hp / bo.max;
+  if (a.summoned < b.summonAt.length && ratio <= b.summonAt[a.summoned]) {
+    a.summoned++;
+    for (let i = 0; i < b.summonN; i++) {
+      const an = i / b.summonN * Math.PI * 2;
+      spawnAt(world, 'wisp', bo.x + Math.cos(an) * 110, bo.y + Math.sin(an) * 80);
+    }
+    shake(world, 6); sfx(world, 'warn');
+    world.events.push({ kind: 'banner', title: 'Le Brasier s\'embrase !', sub: 'Il appelle ses feux follets' });
+  }
+  // cercles de feu sur les héros : ils sont étourdis s'ils restent dedans
+  a.fireT -= dt * (1 + a.summoned * 0.35);
+  if (a.fireT <= 0) {
+    a.fireT = b.fireEvery;
+    const targets = world.heroes.filter(u => u.drop <= 0).sort(() => Math.random() - 0.5).slice(0, 1 + a.summoned);
+    if (!targets.length) targets.push({ x: rnd(150, world.mapW - 150), y: rnd(150, world.mapH - 120) });
+    for (const u of targets) world.hazards.push({ x: u.x + rnd(-14, 14), y: u.y + 8 + rnd(-10, 10), r: b.fireRadius, t: b.fireWarn, warn: b.fireWarn });
+    sfx(world, 'warn');
+  }
+}
+
+function updateHazards(world, dt) {
+  const b = world.zone.boss;
+  for (const z of world.hazards) {
+    z.t -= dt;
+    if (z.t > 0) continue;
+    z.done = true;
+    for (const u of world.heroes) {
+      if (u.drop > 0 || (u.x - z.x) ** 2 + (u.y + 8 - z.y) ** 2 > z.r * z.r) continue;
+      u.stun = b.stun;
+      const dx = u.x - z.x, dy = u.y - z.y, d = Math.hypot(dx, dy) || 1;
+      u.x += dx / d * 26; u.y += dy / d * 18;
+      world.texts.push({ x: u.x, y: u.y - 40, text: 'étourdi', color: '#ffb347', size: 13, life: 0.9 });
+    }
+    burst(world, z.x, z.y, 26, ['#ff5a2a', '#ffb040', '#fff0b0', '#24161e'], 200, 2, 0, 0.6);
+    world.fx.push({ kind: 'ring', x: z.x, y: z.y, r0: z.r * 0.3, r1: z.r * 1.3, t: 0.35, life: 0.35, color: '#ff9a3c' });
+    shake(world, 5); sfx(world, 'fire');
+  }
+  world.hazards = world.hazards.filter(z => !z.done);
+}
+
+function spawnAt(world, type, x, y) {
+  const def = ENEMIES[type];
+  x = Math.max(40, Math.min(world.mapW - 40, x)); y = Math.max(40, Math.min(world.mapH - 40, y));
+  const e = { type, def, x, y, r: def.radius, gold: false, slow: 0, hp: def.hp * world.zone.hpMult, max: def.hp * world.zone.hpMult,
+    value: def.value * world.zone.valueMult, a: rnd(0, Math.PI * 2), ph: rnd(0, 6), age: 0, hit: 0, dead: false };
+  world.enemies.push(e);
+  world.fx.push({ kind: 'ring', x, y, r0: 2, r1: def.radius * 1.8, t: 0.4, life: 0.4, color: def.color });
+  return e;
 }
 
 function pickEnemyType(zone) {
@@ -103,23 +246,6 @@ function spawnEnemy(world, anywhere = false) {
   world.fx.push({ kind: 'ring', x, y, r0: 2, r1: def.radius * 1.8, t: 0.4, life: 0.4, color: gold ? GOLD_WISP.color : def.color });
   if (gold && world.phase === 'expedition') world.texts.push({ x, y: y - 26, text: 'Feu follet doré !', color: GOLD_WISP.color, size: 15, life: 1.6 });
   return e;
-}
-
-export function bossHome(world) {
-  const b = world.zone.boss;
-  return { x: b.at[0] * world.mapW, y: b.at[1] * world.mapH, r: b.area * Math.min(world.mapW, world.mapH) * 0.75 };
-}
-
-// L'élémentaire primordial reste dans sa clairière et rôde lentement.
-function spawnBoss(world) {
-  const b = world.zone.boss, home = bossHome(world);
-  const e = {
-    type: 'boss', boss: true, def: { ...b, color: '#ff7a3c', core: '#fff1c2' }, x: home.x, y: home.y, r: b.radius,
-    hp: b.hp * world.zone.hpMult, max: b.hp * world.zone.hpMult, value: b.value * world.zone.valueMult,
-    a: rnd(0, 6), ph: rnd(0, 6), age: 0, hit: 0, dead: false, slow: 0, home,
-  };
-  world.enemies.push(e);
-  world.run.boss = e;
 }
 
 export function canDrop(world) {
@@ -176,11 +302,13 @@ function killEnemy(world, e) {
   const pal = { wisp: ['#ff9a3c', '#ffe682', '#e65032'], golem: ['#be7850', '#8c5238', '#6a3a24'], wind: ['#e6f7fb', '#8ed2e6', '#ffffff'] }[e.type] || ['#ff5a2a', '#ffb040', '#fff0b0'];
   burst(world, e.x, e.y, e.boss ? 70 : e.gold ? 30 : 14, e.gold ? ['#ffd246', '#fff096', '#ffffff'] : pal, e.boss ? 320 : 150, 2, 0, e.boss ? 1.1 : 0.55);
   if (onScreen(world, e.x, e.y)) { sfx(world, e.boss ? 'boss' : e.gold ? 'gold' : 'pop'); shake(world, e.boss ? 14 : e.type === 'golem' ? 3 : 1.5); }
-  const n = e.boss ? 40 : Math.min(e.gold ? 12 : 6, 1 + Math.ceil(Math.log2(1 + e.value / 3)));
+  const n = e.boss ? 60 : Math.min(e.gold ? 12 : 6, 1 + Math.ceil(Math.log2(1 + e.value / 3)));
   if (e.boss) {
-    world.run.bossKilled = true;
+    const r = world.run;
+    r.bossKilled = true;
+    if (r.arena) { r.arena.won = true; r.arena.loot = ARENA.lootTime; world.hazards = []; for (const m of world.enemies) if (!m.boss && !m.dead) { m.dead = true; burst(world, m.x, m.y, 8, pal, 120, 2, 0, 0.4); } }
     world.events.push({ kind: 'boss', name: e.def.name });
-    world.events.push({ kind: 'banner', title: e.def.name + ' vaincu !', sub: 'Une pluie de pièces dans la clairière' });
+    world.events.push({ kind: 'banner', title: e.def.name + ' vaincu !', sub: 'Rafle le butin avant que le portail ne se referme' });
     world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 5, t: 0.8, life: 0.8, color: '#ffd246' });
   }
   for (let i = 0; i < n; i++) {
@@ -238,7 +366,9 @@ export function update(world, dt) {
   if (world.phase === 'done') return;
   const r = world.run;
 
-  if (world.phase === 'expedition') {
+  if (world.phase === 'expedition' && world.mode === 'arena') {
+    updateArena(world, dt);
+  } else if (world.phase === 'expedition') {
     r.t += dt;
     r.spawnT -= dt;
     if (r.spawnT <= 0 && world.enemies.length < world.stats.maxEnemies) {
@@ -298,6 +428,7 @@ function updateHeroes(world, dt) {
       }
       continue;
     }
+    if (u.stun > 0) { u.stun -= dt; u.moving = false; u.recoil = 0; continue; }
     const def = HEROES[u.type];
     // chanson du barde : les autres héros à portée agissent plus vite
     u.boost = bards.some(b => b !== u && d2(b, u) < s.bardAura * s.bardAura) ? s.bardBoost : 0;
@@ -355,9 +486,10 @@ function updateCoins(world, dt) {
   const gr = gloveRadius(world);
   const bag = bagPos(world);
   const wp = world.walletPos || { x: 20, y: 20 };
-  const target = world.phase === 'tear' ? { x: wp.x + world.cam.x, y: wp.y + world.cam.y } : bag;
+  const toWallet = world.phase === 'tear' || world.mode === 'arena';
+  const target = toWallet ? { x: wp.x + world.cam.x, y: wp.y + world.cam.y } : bag;
   const p = pointerWorld(world), inside = world.pointer.inside;
-  const mouth = world.phase === 'expedition' ? world.stats.bagMouth : 0;
+  const mouth = world.phase === 'expedition' && world.mode === 'map' ? world.stats.bagMouth : 0;
   for (const c of world.coins) {
     if (c.fly) {
       const dx = target.x - c.x, dy = target.y - c.y, d = Math.hypot(dx, dy) || 1;
@@ -385,7 +517,8 @@ function updateCoins(world, dt) {
 }
 
 function credit(world, value) {
-  if (world.phase === 'tear') { world.run.tearGot += value; world.events.push({ kind: 'coins', value }); }
+  if (world.mode === 'arena') { world.run.lair.got += value; world.events.push({ kind: 'coins', value }); }
+  else if (world.phase === 'tear') { world.run.tearGot += value; world.events.push({ kind: 'coins', value }); }
   else addToBag(world, value);
 }
 

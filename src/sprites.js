@@ -557,3 +557,109 @@ export function buildMap(w, h, zone, seed = 11) {
 
   return { c, camp: { x: cx, y: cy, r: camp }, boss, pond };
 }
+
+// Antre du boss : salle ronde de dalles, fissures de lave, cercle runique, braseros sur le pourtour.
+// Renvoie aussi la position des braseros (en pixels d'art) pour animer leurs flammes.
+export function buildArena(w, h, seed = 23) {
+  let s = seed;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const cx = w / 2, cy = h * 0.52, rx = w * 0.45, ry = h * 0.42;
+  const inFloor = (x, y, k = 1) => ((x - cx) / (rx * k)) ** 2 + ((y - cy) / (ry * k)) ** 2 <= 1;
+  // roche sombre tout autour
+  g.fillStyle = '#2a1a1e'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < (w * h) / 30; i++) { g.fillStyle = rnd() < 0.5 ? '#33202a' : '#211418'; g.fillRect(Math.floor(rnd() * w), Math.floor(rnd() * h), 1 + (rnd() < 0.3), 1); }
+  for (let i = 0; i < (w * h) / 1400; i++) {
+    const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h);
+    if (!inFloor(x, y, 1.12)) blob(g, x, y, 2 + Math.floor(rnd() * 4), '#4a3438', rnd);
+  }
+  // mares de lave dans les coins
+  const lava = (x0, y0, r) => {
+    for (let yy = -r; yy <= r; yy++) for (let xx = -r * 1.5; xx <= r * 1.5; xx++) {
+      const d = (xx * xx) / (r * r * 2.25) + (yy * yy) / (r * r);
+      const wob = 1 + Math.sin(Math.atan2(yy, xx) * 5 + x0) * 0.1;
+      if (d > wob) continue;
+      g.fillStyle = d > wob - 0.15 ? '#24161e' : d > wob - 0.35 ? '#e0461e' : rnd() < 0.08 ? '#fff0b0' : d < 0.3 ? '#ffd25a' : '#ff7a2c';
+      g.fillRect(Math.round(x0 + xx), Math.round(y0 + yy), 1, 1);
+    }
+  };
+  lava(w * 0.08, h * 0.12, Math.round(h * 0.07)); lava(w * 0.93, h * 0.14, Math.round(h * 0.06));
+  lava(w * 0.06, h * 0.9, Math.round(h * 0.06)); lava(w * 0.95, h * 0.88, Math.round(h * 0.07));
+  // bord de la salle : muret sombre puis dalles
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!inFloor(x, y, 1.04)) continue;
+    if (!inFloor(x, y)) { g.fillStyle = y < cy ? '#5c4448' : '#24161e'; g.fillRect(x, y, 1, 1); continue; }
+    const TW = 9, TH = 6, row = Math.floor(y / TH), off = row % 2 ? 4 : 0, col = Math.floor((x + off) / TW);
+    const mortar = y % TH === 0 || (x + off) % TW === 0;
+    const v = ((row * 73 + col * 151) % 7) / 7;
+    g.fillStyle = mortar ? '#33242a' : v < 0.3 ? '#5a4446' : v < 0.7 ? '#4e3a3c' : '#634b4a';
+    g.fillRect(x, y, 1, 1);
+    if (!mortar && y % TH === 1 && rnd() < 0.25) { g.fillStyle = '#6e5654'; g.fillRect(x, y, 1, 1); }
+  }
+  // cercle runique au centre
+  const rr = Math.min(rx, ry) * 0.42;
+  for (let a = 0; a < Math.PI * 2; a += 0.01) {
+    g.fillStyle = '#7a3a2a'; g.fillRect(Math.round(cx + Math.cos(a) * rr * 1.4), Math.round(cy + Math.sin(a) * rr), 1, 1);
+    g.fillRect(Math.round(cx + Math.cos(a) * (rr * 1.4 - 5)), Math.round(cy + Math.sin(a) * (rr - 4)), 1, 1);
+  }
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2, x = Math.round(cx + Math.cos(a) * (rr * 1.4 - 2.5)), y = Math.round(cy + Math.sin(a) * (rr - 2));
+    g.fillStyle = '#c0582c'; g.fillRect(x - 1, y, 3, 1); g.fillRect(x, y - 1, 1, 3);
+  }
+  // fissures de lave
+  for (let k = 0; k < 9; k++) {
+    let x = cx + (rnd() - 0.5) * rx * 1.6, y = cy + (rnd() - 0.5) * ry * 1.6, a = rnd() * 7;
+    const n = 14 + Math.floor(rnd() * 22);
+    for (let i = 0; i < n; i++) {
+      if (!inFloor(x, y, 0.95)) break;
+      g.fillStyle = '#24161e'; g.fillRect(Math.round(x), Math.round(y) + 1, 1, 1);
+      g.fillStyle = i % 5 === 2 ? '#ffd25a' : '#ff7a2c'; g.fillRect(Math.round(x), Math.round(y), 1, 1);
+      a += (rnd() - 0.5) * 1.2; x += Math.cos(a); y += Math.sin(a) * 0.7;
+    }
+  }
+  // braseros sur le pourtour (le haut de la salle seulement, pour ne pas gêner)
+  const braziers = [];
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI + (i + 0.5) / 6 * Math.PI;
+    const x = Math.round(cx + Math.cos(a) * rx * 0.97), y = Math.round(cy + Math.sin(a) * ry * 0.97);
+    g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(x - 4, y + 3, 9, 2);
+    g.fillStyle = '#24161e'; g.fillRect(x - 4, y - 4, 9, 8);
+    g.fillStyle = '#6e5654'; g.fillRect(x - 3, y - 3, 7, 6);
+    g.fillStyle = '#8a7068'; g.fillRect(x - 3, y - 3, 7, 1);
+    g.fillStyle = '#4a3438'; g.fillRect(x - 3, y + 1, 7, 2);
+    g.fillStyle = '#24161e'; g.fillRect(x - 5, y - 6, 11, 2);
+    g.fillStyle = '#8a5a3a'; g.fillRect(x - 4, y - 6, 9, 1);
+    braziers.push({ x, y: y - 6 });
+  }
+  return { c, braziers, center: { x: cx, y: cy } };
+}
+
+// Portail de pierre : arche et piliers. L'intérieur (tourbillon) est dessiné à part, animé.
+let portalCache = null;
+export function portalSprite() {
+  if (portalCache) return portalCache;
+  const W = 26, H = 30;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const stone = '#8a7a72', light = '#b0a296', dark = '#5a4c48', ink = '#24161e';
+  const cx = 13, top = 12, R = 11;
+  // arche : couronne entre R-3 et R
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let inStone = false, d;
+    if (y <= top) { d = Math.hypot(x + 0.5 - cx, y + 0.5 - top); inStone = d <= R + 1 && d >= R - 3; }
+    else inStone = (x >= cx - R - 1 && x <= cx - R + 3) || (x >= cx + R - 4 && x <= cx + R);
+    if (!inStone) continue;
+    let edge = false;
+    if (y <= top) edge = d > R || d < R - 2;
+    else edge = x === cx - R - 1 || x === cx - R + 3 || x === cx + R - 4 || x === cx + R || y === H - 1;
+    g.fillStyle = edge ? ink : (x + y) % 7 === 0 ? dark : x < cx && (y < top || x === cx - R) ? light : stone;
+    g.fillRect(x, y, 1, 1);
+  }
+  // clé de voûte et socles
+  g.fillStyle = ink; g.fillRect(cx - 2, 0, 5, 4); g.fillStyle = '#ff9a3c'; g.fillRect(cx - 1, 1, 3, 2);
+  g.fillStyle = ink; g.fillRect(cx - R - 2, H - 4, 7, 4); g.fillRect(cx + R - 5, H - 4, 7, 4);
+  g.fillStyle = dark; g.fillRect(cx - R - 1, H - 3, 5, 2); g.fillRect(cx + R - 4, H - 3, 5, 2);
+  portalCache = { c, w: W, h: H, inner: { x: cx, y: 17, rx: 8, ry: 13 } };
+  return portalCache;
+}

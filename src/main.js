@@ -1,8 +1,8 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, TIERS, NODES, HEROES, HERO_ORDER, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { ZONES, TIERS, NODES, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
-import { createWorld, startExpedition, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
+import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
 import { render, drawHero, drawBag, getMap } from './render.js';
 
 const $ = id => document.getElementById(id);
@@ -46,12 +46,33 @@ function tickBanner(dt) {
 }
 
 // ---------- Expédition ----------
+// Portail de l'antre : ouvert une fois le palier Soie atteint (ou le boss déjà battu).
+const lairOpen = () => !!save.lairOpen || ((save.bosses || {})[ZONES[0].id] || 0) > 0;
+const lairInfo = () => ({ open: lairOpen(), first: !((save.bosses || {})[ZONES[0].id] > 0) });
+function showRunUi() {
+  $('atelier').hidden = true; $('result').hidden = true;
+  $('hud').hidden = false; $('dropBar').hidden = false; $('hint').hidden = false; $('mapUi').hidden = false;
+  arenaUi();
+  buildDropBar();
+}
 function go() {
   stats = computeStats(save.level);
-  startExpedition(world, stats, ZONES[0]);
-  $('atelier').hidden = true; $('result').hidden = true;
-  $('hud').hidden = false; $('dropBar').hidden = false; $('hint').hidden = false; $('mapUi').hidden = false; document.querySelectorAll('.edge').forEach(b => { b.hidden = false; });
-  buildDropBar();
+  startExpedition(world, stats, ZONES[0], lairInfo());
+  showRunUi();
+}
+function goLair() {
+  if (!lairOpen()) return;
+  stats = computeStats(save.level);
+  startLair(world, stats, ZONES[0], lairInfo());
+  showRunUi();
+}
+// Dans l'antre : pas de sac ni de mini-carte ; flèches seulement si la salle dépasse de l'écran.
+function arenaUi() {
+  const arena = world.mode === 'arena';
+  $('bagBox').hidden = arena;
+  $('minimap').hidden = arena;
+  const fits = world.mapW <= world.w && world.mapH <= world.h;
+  document.querySelectorAll('.edge').forEach(b => { b.hidden = arena && fits; });
 }
 
 // Cartes des héros à larguer : un clic (ou 1, 2, 3, 4) choisit lequel tombera au prochain clic sur la carte.
@@ -87,21 +108,28 @@ function buildDropBar() {
 
 function finishExpedition() {
   const r = world.run;
-  const net = 0;
-  const gained = r.tearGot + r.overflow + net;
+  const gained = r.tearGot + r.overflow + r.lair.got;
   save.expeditions++;
   save.best = Math.max(save.best, gained);
+  const unlocked = !lairOpen() && r.tier >= ARENA.unlockTier;
+  if (unlocked) save.lairOpen = true;
   writeSave(save);
-  const rows = [
-    ['Élémentaires vaincus', fmt(r.kills)],
-    ['Pièces dans le sac', fmt(r.bag)],
-    ['Palier atteint', TIERS[r.tier].name + (r.full ? ' (plein)' : '')],
-    ['Multiplicateur', '×' + r.mult.toFixed(2).replace('.', ',')],
-    ['Pièces raflées', `${fmt(r.tearGot)} / ${fmt(r.tearTotal)}`],
-  ];
-  if (r.overflow > 0) rows.push(['Surplus du sac plein', '+' + fmt(r.overflow)]);
-  if (r.golds) rows.push(['Feux follets dorés aperçus', fmt(r.golds)]);
-  rows.push([world.zone.boss.name, r.bossKilled ? 'vaincu !' : r.boss ? `${Math.round((1 - Math.max(0, r.boss.hp) / r.boss.max) * 100)} % de dégâts` : '—']);
+  const rows = [['Élémentaires vaincus', fmt(r.kills)]];
+  if (!r.lair.only) {
+    rows.push(
+      ['Pièces dans le sac', fmt(r.bag)],
+      ['Palier atteint', TIERS[r.tier].name + (r.full ? ' (plein)' : '')],
+      ['Multiplicateur', '×' + r.mult.toFixed(2).replace('.', ',')],
+      ['Pièces raflées', `${fmt(r.tearGot)} / ${fmt(r.tearTotal)}`],
+    );
+    if (r.overflow > 0) rows.push(['Surplus du sac plein', '+' + fmt(r.overflow)]);
+    if (r.golds) rows.push(['Feux follets dorés aperçus', fmt(r.golds)]);
+  }
+  if (r.boss) {
+    rows.push([world.zone.boss.name, r.bossKilled ? 'vaincu !' : `${Math.round((1 - Math.max(0, r.boss.hp) / r.boss.max) * 100)} % de dégâts`]);
+    rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got)]);
+  }
+  if (unlocked) rows.push([world.zone.boss.lair, 'portail ouvert !']);
   const dl = $('resList'); dl.innerHTML = '';
   for (const [a, b] of rows) {
     const dt = document.createElement('dt'); dt.textContent = a;
@@ -119,6 +147,7 @@ function toAtelier() {
   stats = computeStats(save.level); world.stats = stats;
   $('result').hidden = true; $('atelier').hidden = false;
   renderTree();
+  centerTree();
 }
 
 // Son : coupé ou non, mémorisé dans la sauvegarde.
@@ -139,6 +168,7 @@ function drainEvents() {
     else if (ev.kind === 'coins') save.coins += ev.value;
     else if (ev.kind === 'done') finishExpedition();
     else if (ev.kind === 'boss') { save.bosses = save.bosses || {}; save.bosses[world.zone.id] = (save.bosses[world.zone.id] || 0) + 1; writeSave(save); }
+    else if (ev.kind === 'arena') { arenaUi(); buildDropBar(); }
     else if (ev.kind === 'tear') { $('dropBar').hidden = true; $('hint').hidden = true; document.querySelectorAll('.edge').forEach(b => { b.hidden = true; }); }
   }
   world.events.length = 0;
@@ -149,6 +179,7 @@ function hud() {
   const r = world.run;
   if (!r || (world.phase !== 'expedition' && world.phase !== 'tear')) return;
   $('wallet').textContent = fmt(save.coins);
+  const ar = world.mode === 'arena' && r.arena;
   const tier = world.phase === 'tear' ? r.tier : tierOf(r.bag, stats);
   const [lo, hi] = tierRange(tier, stats);
   const max = bagMax(stats);
@@ -161,13 +192,14 @@ function hud() {
   $('bagTxt').textContent = world.phase === 'tear'
     ? `Raflé : ${fmt(r.tearGot)} / ${fmt(r.tearTotal)}`
     : `${fmt(r.bag)} / ${fmt(Math.min(hi, max))}${r.full ? ' · plein' : ''}`;
-  const left = world.phase === 'tear' ? Math.max(0, r.shake > 0 ? r.tearDur || stats.tearDuration : r.tearT) : Math.max(0, r.duration - r.t);
+  const left = ar ? Math.max(0, ar.won ? ar.loot : ar.duration - ar.t)
+    : world.phase === 'tear' ? Math.max(0, r.shake > 0 ? r.tearDur || stats.tearDuration : r.tearT) : Math.max(0, r.duration - r.t);
   $('timer').textContent = left.toFixed(1);
-  $('timer').style.color = world.phase === 'tear' ? 'var(--gold)' : (left < 5 ? 'var(--ember)' : 'var(--parch)');
-  $('zoneTxt').textContent = world.phase === 'tear' ? 'Déchirure !' : world.zone.name;
+  $('timer').style.color = world.phase === 'tear' || (ar && ar.won) ? 'var(--gold)' : (left < 5 ? 'var(--ember)' : 'var(--parch)');
+  $('zoneTxt').textContent = ar ? (ar.won ? 'Butin !' : world.zone.boss.lair) : world.phase === 'tear' ? 'Déchirure !' : world.zone.name;
   $('attrFill').style.width = (r.attraction / stats.attraction * 100) + '%';
   const boss = r.boss;
-  $('bossBar').hidden = !(boss && world.phase === 'expedition' && !boss.dead);
+  $('bossBar').hidden = !(boss && ar && world.phase === 'expedition' && !boss.dead);
   if (boss && !boss.dead) { $('bossName').textContent = boss.def.name; $('bossFill').style.width = Math.max(0, boss.hp / boss.max * 100) + '%'; }
 }
 
@@ -200,6 +232,10 @@ function nodeIcon(n) {
 
 function renderTree() {
   $('atelierWallet').textContent = fmt(save.coins);
+  const lb = $('lairBtn'), open = lairOpen();
+  lb.disabled = !open;
+  lb.textContent = (open ? '' : '🔒 ') + ZONES[0].boss.lair;
+  lb.title = open ? `Affronter ${ZONES[0].boss.name} directement` : `Remplis le sac jusqu'au palier « ${TIERS[ARENA.unlockTier].name} » pour ouvrir le portail`;
   const inner = $('treeInner'), svg = $('treeLines');
   const maxX = Math.max(...NODES.map(n => n.x)), maxY = Math.max(...NODES.map(n => n.y));
   const W = PAD * 2 + maxX * GX - GX + 40 + 120, H = PAD * 2 + maxY * GY - GY + 60;
@@ -276,7 +312,9 @@ cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') p.insi
 cv.addEventListener('pointerdown', e => {
   setPointer(e); p.down = true; p.usedForDrop = false;
   try { cv.setPointerCapture(e.pointerId); } catch (_) { /* rien */ }
-  if (canDrop(world) && p.y > 60) { const q = pointerWorld(world); dropHero(world, q.x, q.y); p.usedForDrop = true; buildDropBar(); }
+  const q = pointerWorld(world);
+  if (p.y > 60 && canEnterPortal(world, q.x, q.y)) { enterArena(world); p.usedForDrop = true; return; }
+  if (canDrop(world) && p.y > 60) { dropHero(world, q.x, q.y); p.usedForDrop = true; buildDropBar(); }
 });
 cv.addEventListener('pointerup', e => { p.down = false; if (e.pointerType !== 'mouse') p.inside = false; });
 cv.addEventListener('pointercancel', () => { p.down = false; p.inside = false; });
@@ -314,7 +352,7 @@ function scrollCam(dt) {
 // ---------- Mini-map ----------
 const mm = $('minimap'), mg = mm.getContext('2d');
 function drawMinimap() {
-  if (!playing()) return;
+  if (!playing() || world.mode !== 'map') return;
   const map = getMap(world);
   const W = mm.clientWidth, H = Math.round(W * world.mapH / world.mapW);
   if (mm.width !== W * dpr || mm.height !== H * dpr) { mm.width = W * dpr; mm.height = H * dpr; mm.style.height = H + 'px'; }
@@ -327,13 +365,13 @@ function drawMinimap() {
   for (const e of world.enemies) if (!e.boss) dot(e.x, e.y, e.gold ? 4 : 3, e.gold ? '#ffe14a' : '#ff6b4a');
   const b = bagPos(world); dot(b.x, b.y, 6, '#fff2c8');
   for (const u of world.heroes) dot(u.x, u.y, 4, '#7ee06b');
-  const bo = world.run && world.run.boss;
-  if (bo && !bo.dead) { dot(bo.x, bo.y, 8, '#24161e'); dot(bo.x, bo.y, 6, '#ff5a2a'); }
+  const lr = world.run && world.run.lair, pp = portalPos(world);
+  if (lr && lr.open && !lr.done) { dot(pp.x, pp.y, 8, '#24161e'); dot(pp.x, pp.y, 6, '#ff9a3c'); }
   mg.strokeStyle = '#fff'; mg.lineWidth = 1.5;
   mg.strokeRect(world.cam.x * k, world.cam.y * k, world.w * k, world.h * k);
 }
 function minimapJump(e) {
-  if (world.phase !== 'expedition') return;
+  if (world.phase !== 'expedition' || world.mode !== 'map') return;
   const r = mm.getBoundingClientRect();
   centerCam(world, (e.clientX - r.left) / r.width * world.mapW, (e.clientY - r.top) / r.height * world.mapH);
 }
@@ -346,6 +384,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { if (e.code === 'Space') world.holdKey = false; });
 
 $('go').onclick = go;
+$('lairBtn').onclick = goLair;
 $('back').onclick = toAtelier;
 let resetArmed = 0;
 $('reset').onclick = () => {
@@ -358,16 +397,10 @@ $('reset').onclick = () => {
   }
 };
 
-// Musique du moment : Atelier, expédition, ou boss quand on est près de sa clairière.
+// Musique du moment : Atelier, expédition, ou boss dans son antre.
 function musicFor() {
-  if (world.phase === 'expedition') {
-    const bo = world.run && world.run.boss;
-    if (bo && !bo.dead) {
-      const cx = world.cam.x + world.w / 2, cy = world.cam.y + world.h / 2;
-      if ((bo.x - cx) ** 2 + (bo.y - cy) ** 2 < 750 * 750) return 'boss';
-    }
-    return 'expedition';
-  }
+  if (world.phase === 'expedition') return world.mode === 'arena' ? 'boss' : 'expedition';
+  if (world.phase === 'done' && world.mode === 'arena') return 'boss';
   if (world.phase === 'tear') return 'expedition';
   return 'atelier';
 }
@@ -393,10 +426,17 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// Sur petit écran, l'arbre déborde : on le centre sur le nœud sélectionné.
+function centerTree() {
+  const sc = $('treeScroll'), n = NODES.find(m => m.id === selected) || NODES[0], q = pos(n);
+  sc.scrollLeft = q.x - sc.clientWidth / 2; sc.scrollTop = q.y - sc.clientHeight / 2;
+}
+
 // premier nœud utile sélectionné par défaut
 selected = (NODES.find(n => visible(n) && L(n.id) < n.max && n.id !== 'root') || NODES[0]).id;
 renderTree();
+centerTree();
 requestAnimationFrame(frame);
 
 // Accès pour les tests automatisés
-window.__game = { world, get save() { return save; }, go, toAtelier };
+window.__game = { world, get save() { return save; }, go, goLair, toAtelier };

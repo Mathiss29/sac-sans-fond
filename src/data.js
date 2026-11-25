@@ -20,7 +20,9 @@ export const ZONES = [
     hpMult: 1, valueMult: 1,
     spawn: { wisp: 5, golem: 2, wind: 3 },
     // Élémentaire primordial : vit dans la clairière sombre (position en fraction de la région).
-    boss: { name: 'Brasier primordial', hp: 450, value: 260, radius: 40, speed: 16, at: [0.84, 0.2], area: 0.13 },
+    // Élémentaire primordial : on l'affronte dans son antre (voir ARENA). Sur la carte, sa clairière garde le portail.
+    boss: { name: 'Brasier primordial', lair: 'Antre du Brasier', hp: 2400, value: 400, radius: 40, speed: 22, at: [0.84, 0.2], area: 0.13,
+      fireEvery: 3.2, fireRadius: 48, fireWarn: 1.1, stun: 1.8, summonAt: [0.66, 0.33], summonN: 8 },
   },
 ];
 
@@ -49,6 +51,10 @@ export const HERO_ORDER = ['archer', 'mage', 'knight', 'bard'];
 
 // Taille d'une région, en pixels d'écran (environ 3 × 3 écrans d'ordinateur).
 export const MAP = { w: 2700, h: 1800 };
+
+// Antre du boss : une salle fermée où l'on affronte l'élémentaire primordial seul.
+// unlockTier : palier du sac à atteindre une fois en expédition pour ouvrir le portail.
+export const ARENA = { w: 1200, h: 700, duration: 60, lootTime: 6, unlockTier: 2, firstBonus: 3 };
 
 export const BASE = {
   duration: 30,          // s

@@ -1,8 +1,8 @@
 // Tout le dessin sur le canvas, en pixel art (sprites dans sprites.js).
 import { TIERS, bagMax, tierOf } from './data.js';
-import { bagPos, canDrop, gloveRadius, attractionActive } from './game.js';
+import { bagPos, canDrop, gloveRadius, attractionActive, portalPos } from './game.js';
 
-import { buildSprites, bagSprite, buildMap } from './sprites.js';
+import { buildSprites, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
 
 const SPR = buildSprites();
 
@@ -13,9 +13,11 @@ export function pixelSize(w, h) { return Math.max(2, Math.min(4, Math.round(Math
 let mapInfo = null, mapKey = '', vig = null, vigKey = '';
 export function getMap(world) {
   const px = pixelSize(world.w, world.h);
-  const key = `${world.zone.id}@${px}:${world.mapW}x${world.mapH}`;
+  const arena = world.mode === 'arena';
+  const key = `${arena ? 'antre' : world.zone.id}@${px}:${world.mapW}x${world.mapH}`;
   if (key !== mapKey) {
-    mapInfo = buildMap(Math.ceil(world.mapW / px), Math.ceil(world.mapH / px), world.zone);
+    mapInfo = arena ? buildArena(Math.ceil(world.mapW / px), Math.ceil(world.mapH / px))
+      : buildMap(Math.ceil(world.mapW / px), Math.ceil(world.mapH / px), world.zone);
     mapInfo.px = px; mapKey = key;
   }
   return mapInfo;
@@ -38,7 +40,9 @@ function shadow(g, x, y, rx, ry) {
 export function drawEnemy(g, e, t, px = 3) {
   const frames = SPR.enemies[e.gold ? 'gold' : e.type] || SPR.enemies.wisp;
   const f = frames[Math.floor(e.ph * 0.9) % frames.length];
-  const img = e.hit > 0.06 || (e.hit > 0 && Math.floor(t * 30) % 2) ? f.white : f.c;
+  // le boss est frappé sans arrêt : un bref éclair seulement, sinon il resterait blanc
+  const flash = e.boss ? e.hit > 0.09 && Math.floor(t * 20) % 3 === 0 : e.hit > 0.06 || (e.hit > 0 && Math.floor(t * 30) % 2);
+  const img = flash ? f.white : f.c;
   const k = e.boss ? px * 2 : px;
   const w = img.width * k, h = img.height * k;
   const fly = e.type !== 'golem';
@@ -124,12 +128,13 @@ export function render(g, world, dpr) {
   const sx = Math.round((world.cam.x + shx) / px), sy = Math.round((world.cam.y + shy) / px);
   const camX = sx * px, camY = sy * px;
   g.imageSmoothingEnabled = false;
-  g.fillStyle = '#1c2a1c'; g.fillRect(0, 0, w, h);
+  const arena = world.mode === 'arena';
+  g.fillStyle = arena ? '#1a0f12' : '#1c2a1c'; g.fillRect(0, 0, w, h);
   g.drawImage(map.c, sx, sy, Math.ceil(w / px), Math.ceil(h / px), 0, 0, Math.ceil(w / px) * px, Math.ceil(h / px) * px);
   const t = world.t;
 
-  // lucioles d'ambiance
-  g.fillStyle = 'rgba(255,245,190,.5)';
+  // lucioles d'ambiance (braises dans l'antre)
+  g.fillStyle = arena ? 'rgba(255,150,70,.7)' : 'rgba(255,245,190,.5)';
   for (let i = 0; i < 18; i++) {
     const x = (i * 97.3 + Math.sin(t * 0.3 + i) * 40) % w;
     const y = (i * 53.7 + Math.cos(t * 0.25 + i * 1.3) * 30 + h) % h;
@@ -139,9 +144,11 @@ export function render(g, world, dpr) {
   g.globalAlpha = 1;
 
   g.save(); g.translate(-camX, -camY);
-  drawClouds(g, world, t, camX, camY);
+  if (!arena) drawClouds(g, world, t, camX, camY);
   const r = world.run;
-  if (r && (world.phase === 'expedition' || world.phase === 'tear')) {
+  if (arena) drawBraziers(g, map, t, px);
+  else if (r && (world.phase === 'expedition' || world.phase === 'tear')) drawPortal(g, world, t, px);
+  if (r && !arena && (world.phase === 'expedition' || world.phase === 'tear')) {
     const b = bagPos(world);
     const max = bagMax(world.stats);
     if (world.phase === 'expedition') {
@@ -188,6 +195,7 @@ export function render(g, world, dpr) {
   }
   g.globalAlpha = 1;
 
+  for (const z of world.hazards) drawHazard(g, z, t, px);
   for (const e of world.enemies) drawEnemy(g, e, t, px);
   for (const q of world.particles) {
     g.globalAlpha = Math.min(1, q.life / q.max * 1.6); g.fillStyle = q.color;
@@ -207,6 +215,14 @@ export function render(g, world, dpr) {
     const rc = (u.recoil || 0) * px * 1.5;
     if (u.drop > 0) { g.fillStyle = `rgba(0,0,0,${0.25 * (1 - u.drop)})`; g.beginPath(); g.ellipse(u.x, u.y + 10, 18 * (1 - u.drop * 0.6), 6 * (1 - u.drop * 0.6), 0, 0, 7); g.fill(); }
     drawHero(g, u.type, u.x - u.face * rc, u.y + 12 - u.drop * h * 0.5, u.face, u.moving ? u.bob * 2 : u.bob * 0.5, 1, px);
+    if (u.stun > 0) {
+      // étourdi : petites étoiles qui tournent au-dessus de la tête
+      for (let i = 0; i < 3; i++) {
+        const an = t * 5 + i * 2.1, sx2 = Math.round(u.x + Math.cos(an) * px * 5), sy2 = Math.round(u.y - px * 17 + Math.sin(an) * px * 1.5);
+        g.fillStyle = '#24161e'; g.fillRect(sx2 - px * 1.5, sy2 - px * 0.5, px * 3, px); g.fillRect(sx2 - px * 0.5, sy2 - px * 1.5, px, px * 3);
+        g.fillStyle = '#ffe14a'; g.fillRect(sx2 - px, sy2 - px * 0.5 + 1, px * 2, px - 2); g.fillRect(sx2 - px * 0.5 + 1, sy2 - px, px - 2, px * 2);
+      }
+    }
   }
 
   for (const a of world.arrows) {
@@ -232,9 +248,9 @@ export function render(g, world, dpr) {
     g.fillStyle = tx.color; g.fillText(tx.text, tx.x, tx.y);
   }
   g.globalAlpha = 1;
-  drawButterflies(g, world, t, px);
+  if (!arena) drawButterflies(g, world, t, px);
   g.restore();
-  drawLeaves(g, world, t, px);
+  if (arena) drawEmbers(g, world, t, px); else drawLeaves(g, world, t, px);
   g.drawImage(vignette(w, h, dpr), 0, 0, w, h);
   const cb = world.combo;
   if (cb.t > 0 && cb.n >= 3 && world.pointer.inside) {
@@ -259,6 +275,82 @@ export function render(g, world, dpr) {
     if (on) { g.fillStyle = 'rgba(255,214,102,.08)'; g.beginPath(); g.arc(p.x, p.y, rad, 0, 7); g.fill(); }
     g.fillStyle = '#fff8e1'; g.beginPath(); g.arc(p.x, p.y, 3, 0, 7); g.fill();
   }
+}
+
+// ---------- Antre du boss ----------
+// Portail de la clairière : tourbillon de feu quand il est ouvert, scellé sinon.
+function drawPortal(g, world, t, px) {
+  const p = portalPos(world), spr = portalSprite(), r = world.run;
+  const open = r && r.lair.open && !r.lair.done;
+  const k = px * 2, W = spr.w * k, H = spr.h * k;
+  const x0 = Math.round(p.x - W / 2), y0 = Math.round(p.y + 30 - H);
+  const ix = x0 + spr.inner.x * k, iy = y0 + spr.inner.y * k, rx = spr.inner.rx * k, ry = spr.inner.ry * k;
+  if (open) {
+    const halo = g.createRadialGradient(ix, iy, 4, ix, iy, rx * 4);
+    halo.addColorStop(0, 'rgba(255,150,60,.45)'); halo.addColorStop(1, 'rgba(255,150,60,0)');
+    g.fillStyle = halo; g.beginPath(); g.arc(ix, iy, rx * 4, 0, 7); g.fill();
+  }
+  g.save(); g.beginPath(); g.ellipse(ix, iy, rx, ry, 0, 0, 7); g.clip();
+  g.fillStyle = open ? '#e0461e' : '#2a1a2e'; g.fillRect(ix - rx, iy - ry, rx * 2, ry * 2);
+  const cols = open ? ['#ff7a2c', '#ffb040', '#ffd25a', '#fff0b0'] : ['#3a2a40', '#4a3858'];
+  for (let i = 0; i < cols.length; i++) {
+    const f = 1 - i / cols.length;
+    g.fillStyle = cols[i];
+    for (let a = 0; a < 6; a++) {
+      const an = (open ? t * (1.5 + i * 0.6) : t * 0.2) + a * Math.PI / 3 + i;
+      g.fillRect(Math.round((ix + Math.cos(an) * rx * f * 0.8) / px) * px - px, Math.round((iy + Math.sin(an) * ry * f * 0.8) / px) * px - px, px * 2, px * 2);
+    }
+  }
+  if (!open) { // chaînes en croix
+    g.fillStyle = '#8a7a72';
+    for (let i = -6; i <= 6; i++) { g.fillRect(Math.round(ix + i * px * 1.3) - px, Math.round(iy + i * px * 2) - px, px * 2, px * 2); g.fillRect(Math.round(ix - i * px * 1.3) - px, Math.round(iy + i * px * 2) - px, px * 2, px * 2); }
+  }
+  g.restore();
+  g.drawImage(spr.c, x0, y0, W, H);
+  g.font = `800 15px 'Alegreya SC', Georgia, serif`; g.textAlign = 'center'; g.lineJoin = 'round';
+  const label = r && r.lair.done ? 'Portail refermé' : open ? world.zone.boss.lair : 'Portail scellé';
+  g.strokeStyle = '#24161e'; g.lineWidth = 4; g.strokeText(label, p.x, y0 - 8);
+  g.fillStyle = open ? '#ffb347' : '#c8b8b0'; g.fillText(label, p.x, y0 - 8);
+  if (open) { const sub = 'clique pour entrer'; g.font = `700 12px 'Alegreya Sans', system-ui, sans-serif`; g.strokeText(sub, p.x, y0 + H + 16); g.fillStyle = '#fff2c8'; g.fillText(sub, p.x, y0 + H + 16); }
+}
+
+function drawBraziers(g, map, t, px) {
+  for (let i = 0; i < map.braziers.length; i++) {
+    const b = map.braziers[i], x = b.x * px, y = b.y * px;
+    const halo = g.createRadialGradient(x, y, 2, x, y, px * 26);
+    halo.addColorStop(0, `rgba(255,150,60,${0.28 + 0.08 * Math.sin(t * 7 + i)})`); halo.addColorStop(1, 'rgba(255,150,60,0)');
+    g.fillStyle = halo; g.beginPath(); g.arc(x, y, px * 26, 0, 7); g.fill();
+    for (let k = 0; k < 5; k++) {
+      const ph = (t * 2.2 + k * 0.37 + i * 0.13) % 1, fx = x + Math.round(Math.sin(t * 9 + k * 2 + i) * 2) * px - px;
+      const fy = y - Math.round(ph * 7) * px - px * 2;
+      g.fillStyle = ph < 0.3 ? '#fff0b0' : ph < 0.6 ? '#ffb040' : '#e0461e';
+      g.fillRect(fx, fy, px * (ph < 0.5 ? 2 : 1), px * 2);
+    }
+  }
+}
+
+// Zone de feu annoncée : cercle rouge qui se remplit avant d'exploser.
+function drawHazard(g, z, t, px) {
+  const k = 1 - z.t / z.warn;
+  g.fillStyle = `rgba(255,70,30,${0.12 + k * 0.25})`;
+  g.beginPath(); g.ellipse(z.x, z.y, z.r, z.r * 0.6, 0, 0, 7); g.fill();
+  g.fillStyle = `rgba(255,170,60,${0.25 + 0.2 * Math.sin(t * 30)})`;
+  g.beginPath(); g.ellipse(z.x, z.y, z.r * k, z.r * 0.6 * k, 0, 0, 7); g.fill();
+  g.strokeStyle = '#ff5a2a'; g.lineWidth = px; g.setLineDash([px * 2, px * 2]); g.lineDashOffset = -t * 30;
+  g.beginPath(); g.ellipse(z.x, z.y, z.r, z.r * 0.6, 0, 0, 7); g.stroke(); g.setLineDash([]);
+}
+
+// Braises qui montent (coordonnées de l'écran).
+function drawEmbers(g, world, t, px) {
+  for (let i = 0; i < 22; i++) {
+    const sp = 24 + (i % 5) * 8;
+    const y = world.h + 20 - ((i * 97 + t * sp) % (world.h + 40));
+    const x = ((i * 233 + Math.sin(t * 1.1 + i) * 24) % (world.w + 20)) - 10;
+    g.globalAlpha = 0.5 + 0.4 * Math.sin(t * 5 + i);
+    g.fillStyle = i % 3 ? '#ff9a3c' : '#ffd25a';
+    g.fillRect(Math.round(x), Math.round(y), px, px);
+  }
+  g.globalAlpha = 1;
 }
 
 // ---------- Ambiance ----------

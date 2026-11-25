@@ -85,6 +85,8 @@ button.card.sel { border-color: var(--gold); box-shadow: 0 0 14px rgba(255, 207,
 .btn { font-family: var(--display); font-size: 20px; border: 0; border-radius: 14px; padding: 10px 22px; cursor: pointer; color: #3a1d00; background: linear-gradient(#ffe08a, #f0a93a); box-shadow: 0 4px 0 #9a5a16; }
 .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #9a5a16; }
 .btn[disabled] { filter: grayscale(1) brightness(.6); cursor: not-allowed; }
+.btn.lair { color: #fff2c8; background: linear-gradient(#ff8a4a, #c8401e); box-shadow: 0 4px 0 #6a1e0e; text-shadow: 0 1px 0 #6a1e0e; }
+.btn.lair:active { box-shadow: 0 2px 0 #6a1e0e; }
 .btn:focus-visible, .ghost:focus-visible, .node:focus-visible { outline: 3px solid var(--leaf); outline-offset: 2px; }
 .ghost { font-family: var(--body); font-weight: 800; font-size: 13px; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 6px 10px; cursor: pointer; }
 
