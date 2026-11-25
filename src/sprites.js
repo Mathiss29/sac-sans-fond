@@ -40,7 +40,7 @@ const HEROES = {
   archer: {
     pal: { h: '#62a852', H: '#3e783c', g: '#96cd6e', c: '#a8704a', C: '#7a4e32', b: '#5a3a28', p: '#6e5a46', B: '#503428' },
     head: null,
-    items: [{ x: 13, y: 7, rows: [
+    items: [{ x: 13, y: 6, rows: [
       '..O..', '.OwO.', '.OtwO', '.Ot.wO', '.Ot.wO', '.Ot.wO', '.Ot.wO', '.Ot.wO', '.OtwO', '.OwO.', '..O..',
     ] }],
   },
@@ -57,8 +57,8 @@ const HEROES = {
       '.OAAAAAAAAAAAAAO',
     ],
     cut: 5,
-    items: [{ x: 13, y: 9, rows: [
-      '.OOO.', 'OIiiO', 'OiIiO', '.OiO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '..O..',
+    items: [{ x: 13, y: 8, rows: [
+      '.OOO.', 'OIiiO', 'OiIiO', '.OiO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '..O..',
     ] }],
   },
   knight: {
@@ -87,7 +87,7 @@ const HEROES = {
       '.OMMMMMMMMMMMMO.',
     ],
     cut: 4,
-    items: [{ x: 0, y: 12, rows: [
+    items: [{ x: 0, y: 8, rows: [
       '.......OO', '......OwO', '.....OwO.', '.OOOOwO..', 'OkkkkOO..', 'OkzzkKO..', 'OkkkkKO..', '.OKKKO...', '..OOO....',
     ] }],
   },
@@ -217,7 +217,8 @@ function whiteOf(c) {
 function stamp(rows, item) {
   const out = rows.map(r => r.split(''));
   item.rows.forEach((line, dy) => {
-    const y = item.y + dy; if (y < 0 || y >= out.length) return;
+    const y = item.y + dy;
+    if (y < 0 || y >= out.length) { if (line.replace(/\./g, '')) console.warn('sprite coupé : objet hors cadre', item); return; }
     for (let dx = 0; dx < line.length; dx++) {
       const ch = line[dx]; if (ch === '.') continue;
       const x = item.x + dx;
