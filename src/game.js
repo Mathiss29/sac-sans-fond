@@ -64,7 +64,7 @@ export function startExpedition(world, stats, zone, lair = {}) {
   });
   const b = bagPos(world);
   centerCam(world, b.x, b.y + 40);
-  for (let i = 0; i < 22; i++) spawnEnemy(world, true);
+  for (let i = 0; i < 40; i++) spawnEnemy(world, true);
   world.events.push({ kind: 'banner', title: 'Expédition !', sub: zone.name });
 }
 
@@ -225,13 +225,13 @@ function spawnEnemy(world, anywhere = false) {
   const bag = bagPos(world);
   let x, y;
   for (let k = 0; k < 12; k++) {
-    if (!anywhere && world.heroes.length && Math.random() < 0.7) {
+    if (!anywhere && world.heroes.length && Math.random() < 0.85) {
       const u = world.heroes[Math.floor(Math.random() * world.heroes.length)];
-      const a = rnd(0, Math.PI * 2), d = rnd(170, 420);
+      const a = rnd(0, Math.PI * 2), d = rnd(140, 340);
       x = u.x + Math.cos(a) * d; y = u.y + Math.sin(a) * d;
     } else { x = rnd(60, mapW - 60); y = rnd(60, mapH - 60); }
     x = Math.max(40, Math.min(mapW - 40, x)); y = Math.max(40, Math.min(mapH - 40, y));
-    if ((x - bag.x) ** 2 + (y - bag.y) ** 2 > 230 * 230) break;
+    if ((x - bag.x) ** 2 + (y - bag.y) ** 2 > 190 * 190) break;
   }
   const gold = type === 'wisp' && Math.random() < (world.stats?.goldChance || 0);
   const e = {
@@ -306,13 +306,13 @@ function killEnemy(world, e) {
   if (e.boss) {
     const r = world.run;
     r.bossKilled = true;
-    if (r.arena) { r.arena.won = true; r.arena.loot = ARENA.lootTime; world.hazards = []; for (const m of world.enemies) if (!m.boss && !m.dead) { m.dead = true; burst(world, m.x, m.y, 8, pal, 120, 2, 0, 0.4); } }
+    if (r.arena) { r.arena.won = true; r.arena.loot = ARENA.lootTime; r.attraction = world.stats.attraction; world.hazards = []; for (const m of world.enemies) if (!m.boss && !m.dead) { m.dead = true; burst(world, m.x, m.y, 8, pal, 120, 2, 0, 0.4); } }
     world.events.push({ kind: 'boss', name: e.def.name });
     world.events.push({ kind: 'banner', title: e.def.name + ' vaincu !', sub: 'Rafle le butin avant que le portail ne se referme' });
     world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 5, t: 0.8, life: 0.8, color: '#ffd246' });
   }
   for (let i = 0; i < n; i++) {
-    const a = rnd(0, Math.PI * 2), s = e.boss ? rnd(60, 260) : rnd(30, 110);
+    const a = rnd(0, Math.PI * 2), s = e.boss ? rnd(50, 190) : rnd(30, 110);
     world.coins.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
       value: e.value / n, life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0, z: 0, vz: rnd(160, 300), spin: rnd(0, 6) });
   }

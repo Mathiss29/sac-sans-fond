@@ -21,7 +21,7 @@ export const ZONES = [
     spawn: { wisp: 5, golem: 2, wind: 3 },
     // Élémentaire primordial : vit dans la clairière sombre (position en fraction de la région).
     // Élémentaire primordial : on l'affronte dans son antre (voir ARENA). Sur la carte, sa clairière garde le portail.
-    boss: { name: 'Brasier primordial', lair: 'Antre du Brasier', hp: 2400, value: 400, radius: 40, speed: 22, at: [0.84, 0.2], area: 0.13,
+    boss: { name: 'Brasier primordial', lair: 'Antre du Brasier', hp: 3400, value: 400, radius: 40, speed: 22, at: [0.84, 0.2], area: 0.13,
       fireEvery: 3.2, fireRadius: 48, fireWarn: 1.1, stun: 1.8, summonAt: [0.66, 0.33], summonN: 8 },
   },
 ];
@@ -38,13 +38,13 @@ export const GOLD_WISP = { chance: 0.025, value: 15, hp: 1.5, speed: 1.7, color:
 // Héros. shot : projectile (arrow, frost, note) ou 'melee'. Les dégâts et cadences de base
 // sont multipliés par les améliorations de l'Atelier (voir computeStats).
 export const HEROES = {
-  archer: { name: 'Archer', plural: 'Archers', range: 200, damage: 3, cooldown: 0.9, shot: 'arrow', speed: 560, walkSpeed: 60,
+  archer: { name: 'Archer', plural: 'Archers', range: 200, damage: 3, cooldown: 0.65, shot: 'arrow', speed: 620, walkSpeed: 100,
     blurb: 'Tire de loin sur la cible la plus proche.' },
-  mage: { name: 'Mage de givre', plural: 'Mages', range: 170, damage: 2.5, cooldown: 1.7, shot: 'frost', speed: 380, walkSpeed: 52,
+  mage: { name: 'Mage de givre', plural: 'Mages', range: 170, damage: 2.5, cooldown: 1.25, shot: 'frost', speed: 440, walkSpeed: 85,
     aoe: 55, slow: 0.5, slowTime: 1.6, blurb: 'Éclats de givre : dégâts de zone et ralentissement.' },
-  knight: { name: 'Chevalier', plural: 'Chevaliers', range: 30, damage: 8, cooldown: 0.8, shot: 'melee', walkSpeed: 120,
+  knight: { name: 'Chevalier', plural: 'Chevaliers', range: 30, damage: 8, cooldown: 0.6, shot: 'melee', walkSpeed: 170,
     cleave: 34, blurb: 'Fonce au contact et frappe tout ce qui l\'entoure.' },
-  bard: { name: 'Barde', plural: 'Bardes', range: 160, damage: 1, cooldown: 1.2, shot: 'note', speed: 300, walkSpeed: 62,
+  bard: { name: 'Barde', plural: 'Bardes', range: 160, damage: 1, cooldown: 0.9, shot: 'note', speed: 360, walkSpeed: 100,
     aura: 150, auraBoost: 0.3, blurb: 'Ses chansons font tirer plus vite les héros proches.' },
 };
 export const HERO_ORDER = ['archer', 'mage', 'knight', 'bard'];
@@ -54,12 +54,12 @@ export const MAP = { w: 2700, h: 1800 };
 
 // Antre du boss : une salle fermée où l'on affronte l'élémentaire primordial seul.
 // unlockTier : palier du sac à atteindre une fois en expédition pour ouvrir le portail.
-export const ARENA = { w: 1200, h: 700, duration: 60, lootTime: 6, unlockTier: 2, firstBonus: 3 };
+export const ARENA = { w: 1200, h: 700, duration: 60, lootTime: 8, unlockTier: 2, firstBonus: 3 };
 
 export const BASE = {
   duration: 30,          // s
-  spawnEvery: 0.45,      // s entre deux apparitions
-  maxEnemies: 55,
+  spawnEvery: 0.25,      // s entre deux apparitions
+  maxEnemies: 90,
   archers: 3,
   bagCapacity: 120,      // pièces pour le premier palier
   gloveRadius: 46,       // px

@@ -21,7 +21,7 @@ Le Brasier primordial ne rôde plus sur la carte : on l'affronte dans son antre,
 - **Par le portail**, pendant une expédition : un clic dessus fait entrer tes héros dans l'antre. La carte, le sac et leur chrono sont mis en pause, puis tu reviens là où tu étais. Une seule visite par expédition.
 - **Par le bouton de l'Atelier** : combat direct, avec tous tes héros à larguer.
 
-Dans l'antre (60 s) : le boss annonce des cercles de feu qui étourdissent les héros pris dedans, et invoque des feux follets à 66 % et 33 % de sa vie, puis attaque plus vite. Vaincu, il lâche une pluie de pièces qui va droit dans la bourse (×3 la première fois) : 6 s pour la rafler.
+Dans l'antre (60 s) : le boss annonce des cercles de feu qui étourdissent les héros pris dedans, et invoque des feux follets à 66 % et 33 % de sa vie, puis attaque plus vite. Vaincu, il lâche une pluie de pièces qui va droit dans la bourse (×3 la première fois) : 8 s pour la rafler.
 
 ## Organisation du code
 
