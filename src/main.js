@@ -3,7 +3,8 @@ import { ZONES, TIERS, NODES, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost,
 import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
-import { render, drawHero, drawBag, getMap, enemyIcon } from './render.js';
+import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
+import { HERO_SHEETS } from './sprites.js';
 
 const $ = id => document.getElementById(id);
 const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
@@ -80,7 +81,7 @@ const heroIcons = {};
 function heroIcon(type) {
   if (heroIcons[type]) return heroIcons[type];
   const c = document.createElement('canvas'); c.width = c.height = 68;
-  const cg = c.getContext('2d'); cg.imageSmoothingEnabled = false; drawHero(cg, type, 34, 64, 1, 0, 1, 3);
+  const cg = c.getContext('2d'); cg.imageSmoothingEnabled = false; drawHero(cg, type, 34, 64, 1, 0, 1, HERO_SHEETS[type] ? 2 : 3);
   return (heroIcons[type] = c);
 }
 function buildDropBar() {
@@ -468,6 +469,8 @@ selected = (NODES.find(n => visible(n) && L(n.id) < n.max && n.id !== 'root') ||
 renderTree();
 centerTree();
 requestAnimationFrame(frame);
+// les planches dessinées arrivent après le premier affichage : on redessine les icônes
+heroSheetsReady.then(() => { for (const k in heroIcons) delete heroIcons[k]; renderTree(); });
 
 // Accès pour les tests automatisés
 window.__game = { world, get save() { return save; }, go, goLair, toAtelier };

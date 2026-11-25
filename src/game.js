@@ -532,16 +532,16 @@ function updateHeroes(world, dt) {
         continue;
       }
     } else t = nearestEnemy(world, u);
-    if (!t) continue;
+    if (!t) { u.aiming = false; continue; }
     const dist = Math.sqrt(d2(u, t));
     u.face = t.x >= u.x ? 1 : -1;
     const reach = def.range + (def.shot === 'melee' ? t.r : 0);
     if (dist > reach) {
       u.x += (t.x - u.x) / dist * def.walkSpeed * dt;
       u.y += (t.y - u.y) / dist * def.walkSpeed * dt;
-      u.moving = true;
+      u.moving = true; u.aiming = false;
     } else {
-      u.moving = false;
+      u.moving = false; u.aiming = true;
       if (u.cd > 0) continue;
       u.cd = s.cooldown[u.type];
       u.recoil = 1;
@@ -552,7 +552,7 @@ function updateHeroes(world, dt) {
         for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave + e.r) ** 2) damage(world, e, dmg, 0, u);
         world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave + 10, t: 0.22, life: 0.22, color: '#f0f4fa', face: u.face });
       } else {
-        world.arrows.push({ kind: def.shot, x: u.x, y: u.y - 10, target: t, damage: dmg, dx: 0, dy: 0, speed: def.speed,
+        world.arrows.push({ kind: def.shot, x: u.x + (u.type === 'archer' ? u.face * 14 : 0), y: u.y - (u.type === 'archer' ? 6 : 10), target: t, damage: dmg, dx: 0, dy: 0, speed: def.speed,
           aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' ? HEROES.mage.slowTime : 0 });
       }
     }

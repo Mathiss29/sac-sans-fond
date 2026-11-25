@@ -272,6 +272,29 @@ function heroFrames(def) {
 }
 
 export const SPR = {};
+
+// Planches dessinées (générées avec l'IA puis converties) : une bande par animation,
+// cellules de taille fixe, pieds sur la dernière ligne. Le personnage regarde vers la gauche.
+export const HERO_SHEETS = {
+  archer: { cell: [48, 52], anchor: 23, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+};
+export function loadHeroSheets(base = 'assets/sprites/heros/') {
+  SPR.sheets = SPR.sheets || {};
+  const jobs = [];
+  for (const [id, def] of Object.entries(HERO_SHEETS)) {
+    const sheet = { ...def, img: {} };
+    for (const anim of Object.keys(def.anims)) {
+      const im = new Image();
+      jobs.push(new Promise(ok => { im.onload = () => ok(true); im.onerror = () => ok(false); }));
+      im.src = `${base}${id}/${anim}.png`;
+      sheet.img[anim] = im;
+    }
+    SPR.sheets[id] = sheet;
+  }
+  return Promise.all(jobs).then(r => r.every(Boolean));
+}
+
 export function buildSprites() {
   if (SPR.ready) return SPR;
   SPR.heroes = {};

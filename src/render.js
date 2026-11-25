@@ -2,9 +2,10 @@
 import { TIERS, bagMax, tierOf } from './data.js';
 import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos } from './game.js';
 
-import { buildSprites, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
+import { buildSprites, loadHeroSheets, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
 
 const SPR = buildSprites();
+export const heroSheetsReady = loadHeroSheets();
 
 // Taille d'un pixel d'art à l'écran : 2 en général (vue large), 3 sur très grand écran.
 export function pixelSize(w, h) { return Math.max(2, Math.min(4, Math.floor(Math.min(w, h) / 420))); }
@@ -83,7 +84,21 @@ export function drawEnemy(g, e, t, px = 3) {
 }
 
 // Héros : pieds posés en (x, y), regard vers la droite si face = 1.
-export function drawHero(g, type, x, y, face, bob, alpha = 1, px = 3) {
+// pose = { anim, k } pour les héros qui ont une planche dessinée (sinon ancien sprite à 2 images).
+export function drawHero(g, type, x, y, face, bob, alpha = 1, px = 3, pose = null) {
+  const sheet = SPR.sheets && SPR.sheets[type];
+  const anim = pose ? pose.anim : 'idle';
+  if (sheet && sheet.img[anim] && sheet.img[anim].complete && sheet.img[anim].naturalWidth) {
+    const [cw, ch] = sheet.cell, n = sheet.anims[anim];
+    const k = ((pose ? Math.floor(pose.k) : 0) % n + n) % n;
+    const sc = px / 2, w = cw * sc, h = ch * sc;
+    g.save(); g.globalAlpha = alpha;
+    shadow(g, x, y - px, 6 * px, 1.8 * px);
+    g.translate(Math.round(x), Math.round(y)); g.scale(-face, 1); // la planche regarde vers la gauche
+    g.drawImage(sheet.img[anim], k * cw, 0, cw, ch, -sheet.anchor * sc, -h + sc, w, h);
+    g.restore();
+    return;
+  }
   const frames = SPR.heroes[type] || SPR.heroes.archer;
   const img = frames[Math.floor(bob / Math.PI) % 2];
   const w = img.width * px, h = img.height * px;
@@ -93,6 +108,23 @@ export function drawHero(g, type, x, y, face, bob, alpha = 1, px = 3) {
   g.drawImage(img, -8 * px, -h, w, h); // la colonne 8 est le milieu du corps
   g.restore();
 }
+
+// Choisit l'animation d'un héros sur la carte selon ce qu'il fait.
+// Le tir est découpé en deux : on bande l'arc pendant la fin du temps de recharge,
+// puis la flèche part (images 3 à 5) au moment exact où le jeu la crée.
+function heroPose(world, u, t) {
+  const sheet = SPR.sheets && SPR.sheets[u.type];
+  if (!sheet) return null;
+  if (u.stun > 0) return { anim: 'hurt', k: t * sheet.fps.hurt };
+  if (u.drop > 0) return { anim: 'idle', k: 0 };
+  if (u.moving) return { anim: 'walk', k: u.bob * sheet.fps.walk / 3 };
+  const rel = sheet.release;
+  if (u.recoil > 0) return { anim: 'attack', k: rel + (1 - u.recoil) * (sheet.anims.attack - rel) };
+  const cd = world.stats.cooldown[u.type] || 1, wind = Math.min(0.3, cd * 0.5);
+  if (u.aiming && u.cd < wind) return { anim: 'attack', k: Math.min(rel - 0.01, (1 - u.cd / wind) * rel) };
+  return { anim: 'idle', k: u.bob * sheet.fps.idle / 3 };
+}
+
 export function drawArcher(g, x, y, face, bob, alpha = 1, px = 3) { drawHero(g, 'archer', x, y + 12, face, bob, alpha, px); }
 
 // Le sac : grossit avec le remplissage, change de matière selon le palier, craque près du maximum.
@@ -234,9 +266,10 @@ export function render(g, world, dpr) {
   }
   const heroes = [...world.heroes].sort((a, b) => a.y - b.y);
   for (const u of heroes) {
-    const rc = (u.recoil || 0) * px * 1.5;
+    const pose = heroPose(world, u, t);
+    const rc = pose ? 0 : (u.recoil || 0) * px * 1.5;
     if (u.drop > 0) { g.fillStyle = `rgba(0,0,0,${0.25 * (1 - u.drop)})`; g.beginPath(); g.ellipse(u.x, u.y + 10, 18 * (1 - u.drop * 0.6), 6 * (1 - u.drop * 0.6), 0, 0, 7); g.fill(); }
-    drawHero(g, u.type, u.x - u.face * rc, u.y + 12 - u.drop * h * 0.5, u.face, u.moving ? u.bob * 2 : u.bob * 0.5, 1, px);
+    drawHero(g, u.type, u.x - u.face * rc, u.y + 12 - u.drop * h * 0.5, u.face, u.moving ? u.bob * 2 : u.bob * 0.5, 1, px, pose);
     if (u.stun > 0) {
       // étourdi : petites étoiles qui tournent au-dessus de la tête
       for (let i = 0; i < 3; i++) {
