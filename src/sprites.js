@@ -271,6 +271,84 @@ function heroFrames(def) {
   });
 }
 
+
+// ---------- Événements d'expédition ----------
+// Filon d'or : rocher veiné d'or qui crache des pièces à chaque coup.
+const VEIN = [[
+  '.......OOOOOO.......',
+  '.....OOkkkkkkOO.....',
+  '....OkkkyykkkkKO....',
+  '...OkkkyYYykkkkKO...',
+  '..OkkkkkyykkkkkKKO..',
+  '..OkkLkkkkkkyykKKO..',
+  '.OkkkkkkkkkyYYykKKO.',
+  '.OkyykkkkkkkyykkKKO.',
+  '.OyYYykkKkkkkkkKKKO.',
+  'OkkyykkkKKkkLkkKKKKO',
+  'OkkkkkkkkkkkkkkKKKKO',
+  'OKkkkkyykkkkkkKKKKKO',
+  'OKKkkyYYykkkkKKKKKKO',
+  '.OKKKkyykkKKKKKKKKO.',
+  '..OOKKKKKKKKKKKKOO..',
+  '....OOOOOOOOOOOO....',
+]];
+const VEIN_PAL = { k: '#8c8f86', K: '#5e6158', L: '#b4b7ac', y: '#ffd246', Y: '#fff3a8' };
+// Gobelin voleur : petit, vert, file avec un gros sac d'or sur le dos.
+const GOBLIN = (() => {
+  const top = [
+    '......oooo.........',
+    '.....obbbbo........',
+    '....obbbbbbo.......',
+    '...OOOOOOOOOO......',
+    '..OgggggggggO..OO..',
+    'OOgGgeggeggGgOOggO.',
+    'OggGgeggeggGgOggO..',
+    '.OOgggggggggOOOO...',
+    '...OgggGGGGgO.OOO..',
+    '..OsssOggOsssOxxxO.',
+    '..OssOdddddOsOxXxxO',
+    '...OOOdddddOOOxxxxO',
+    '.....OdddddO.OxxxO.',
+  ];
+  return [
+    [...top, '.....OgO.OgO..OOO..', '....OOgO.OOgO......', '....OOOO..OOO......'],
+    [...top, '......OgOgO...OOO..', '.....OOgOOgO.......', '.....OOOOOOO.......'],
+  ];
+})();
+const GOBLIN_PAL = { g: '#6fae4c', G: '#4a7d34', e: '#24161e', o: '#3a2a20', b: '#7a4a8a', s: '#c9a06a', d: '#6a4a3a', x: '#c9a06a', X: '#ffd246' };
+// Coffre mystérieux… qui est en fait une mimique.
+const MIMIC = [
+  [
+    '..OOOOOOOOOOOOOO..',
+    '.OwwwwwwwwwwwwwwO.',
+    'OwWwwwwwyywwwwwWwO',
+    'OwWwwwwyYYywwwwWwO',
+    'OyyyyyyyOOyyyyyyyO',
+    'OwWwwwwwOOwwwwwWwO',
+    'OwWwwwwwwwwwwwwWwO',
+    'OwWwwwwwwwwwwwwWwO',
+    'OwWwwwwwwwwwwwwWwO',
+    'OyyyyyyyyyyyyyyyyO',
+    'OWWWWWWWWWWWWWWWWO',
+    '.OOOOOOOOOOOOOOOO.',
+  ],
+  [
+    '..OOOOOOOOOOOOOO..',
+    '.OwwwwwwwwwwwwwwO.',
+    'OwWwwwreewwerwwWwO',
+    'OyyyyyyyyyyyyyyyyO',
+    'OtOtOtOtOtOtOtOtOO',
+    'OmmmmmmmmmmmmmmmmO',
+    'OmMMMMMMMMMMMMMMmO',
+    'OmmmmmmmmmmmmmmmmO',
+    'OOtOtOtOtOtOtOtOtO',
+    'OyyyyyyyyyyyyyyyyO',
+    'OWWWWWWWWWWWWWWWWO',
+    '.OOOOOOOOOOOOOOOO.',
+  ],
+];
+const MIMIC_PAL = { w: '#9a6238', W: '#5a3418', y: '#d2a040', Y: '#fff0a0', t: '#f4ecd8', m: '#8a1e2a', M: '#4a0a14', r: '#ff3a3a', e: '#ffe14a' };
+
 export const SPR = {};
 
 // Planches dessinées (générées avec l'IA puis converties) : une bande par animation,
@@ -301,6 +379,28 @@ export function loadHeroSheets(base = 'assets/sprites/heros/') {
   return Promise.all(jobs).then(r => r.every(Boolean));
 }
 
+// Monstres dessinés (planche IA convertie) : une bande par monstre, cellules de taille fixe.
+// Ils remplacent les anciens sprites dès qu'ils sont chargés. scale : taille par rapport aux sprites maison.
+export const MONSTER_SHEETS = { wisp: [36, 32, 4], gold: [36, 32, 4], golem: [52, 40, 6], wind: [36, 32, 4], boss: [72, 50, 8] };
+export function loadMonsterSheets(base = 'assets/sprites/monstres/') {
+  SPR.enemyScale = SPR.enemyScale || {};
+  return Promise.all(Object.entries(MONSTER_SHEETS).map(([id, [cw, ch, n]]) => new Promise(ok => {
+    const im = new Image();
+    im.onload = () => {
+      const frames = [];
+      for (let k = 0; k < n; k++) {
+        const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+        c.getContext('2d').drawImage(im, k * cw, 0, cw, ch, 0, 0, cw, ch);
+        frames.push({ c, white: whiteOf(c) });
+      }
+      SPR.enemies[id] = frames; SPR.enemyScale[id] = 0.5;
+      ok(true);
+    };
+    im.onerror = () => ok(false);
+    im.src = `${base}${id}.png`;
+  })));
+}
+
 export function buildSprites() {
   if (SPR.ready) return SPR;
   SPR.heroes = {};
@@ -312,6 +412,9 @@ export function buildSprites() {
     boss: mk(WISP, ENEMY_PAL.boss),
     golem: mk(GOLEM, ENEMY_PAL.golem),
     wind: mk(WIND, ENEMY_PAL.wind),
+    vein: mk(VEIN, VEIN_PAL),
+    goblin: mk(GOBLIN, GOBLIN_PAL),
+    mimic: mk(MIMIC, MIMIC_PAL),
   };
   SPR.coin = toCanvas(COIN, COIN_PAL);
   SPR.loot = { coin: SPR.coin, bar: toCanvas(BAR, LOOT_PAL), gem: toCanvas(GEM, GEM_PAL), crown: toCanvas(CROWN, LOOT_PAL) };

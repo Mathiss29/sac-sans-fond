@@ -121,6 +121,7 @@ button.card.sel { border-color: var(--gold); box-shadow: 0 0 14px rgba(255, 207,
 #info .branch { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); font-weight: 800; }
 #info p { margin: 0; font-size: 15px; line-height: 1.4; }
 #info .eff { font-size: 14px; color: var(--leaf); font-weight: 800; }
+#info .locked { font-size: 14px; color: #e8c88a; font-weight: 700; margin-top: 10px; }
 
 #result .box { margin: auto; width: min(420px, calc(100% - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
 #result h2 { margin: 0; font-family: var(--display); font-size: 30px; color: var(--gold); text-align: center; }

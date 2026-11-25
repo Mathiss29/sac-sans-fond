@@ -1,5 +1,5 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, TIERS, NODES, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { ZONES, stageFor, TIERS, NODES, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
@@ -58,7 +58,7 @@ function showRunUi() {
 }
 function go() {
   stats = computeStats(save.level);
-  startExpedition(world, stats, ZONES[0], lairInfo());
+  startExpedition(world, stats, ZONES[0], lairInfo(), stageFor(save.expeditions));
   showRunUi();
 }
 function goLair() {
@@ -125,6 +125,7 @@ function finishExpedition() {
     );
     if (r.overflow > 0) rows.push(['Surplus du sac plein', '+' + fmt(r.overflow)]);
     if (r.golds) rows.push(['Feux follets dorés aperçus', fmt(r.golds)]);
+    if (r.eventsGot) rows.push(['Événements réussis', fmt(r.eventsGot)]);
   }
   if (r.boss) {
     rows.push([world.zone.boss.name, r.bossKilled ? 'vaincu !' : `${Math.round((1 - Math.max(0, r.boss.hp) / r.boss.max) * 100)} % de dégâts`]);
@@ -240,6 +241,8 @@ const GX = 120, GY = 110, PAD = 70;
 let selected = 'root';
 const L = id => save.level[id] || 0;
 const visible = n => !n.parent || L(n.parent) > 0 || L(n.id) > 0;
+// niveau maximum achetable pour l'instant (certains nœuds se débloquent par étapes)
+const capOf = n => n.cap ? Math.min(n.max, n.cap(L)) : n.max;
 const pos = n => ({ x: PAD + n.x * GX - GX + 20, y: PAD + n.y * GY - GY + 30 });
 
 function nodeIcon(n) {
@@ -285,9 +288,9 @@ function renderTree() {
   }
   for (const n of NODES) {
     if (!visible(n)) continue;
-    const p = pos(n), lv = L(n.id), isMax = lv >= n.max;
+    const p = pos(n), lv = L(n.id), isMax = lv >= n.max, capped = !isMax && lv >= capOf(n);
     const b = document.createElement('button');
-    b.className = 'node' + (lv ? ' owned' : '') + (isMax ? ' max' : save.coins >= nodeCost(n, lv) ? ' afford' : '') + (selected === n.id ? ' sel' : '');
+    b.className = 'node' + (lv ? ' owned' : '') + (isMax ? ' max' : !capped && save.coins >= nodeCost(n, lv) ? ' afford' : '') + (selected === n.id ? ' sel' : '');
     b.style.left = p.x + 'px'; b.style.top = p.y + 'px';
     b.setAttribute('aria-label', n.name);
     b.append(nodeIcon(n));
@@ -313,7 +316,10 @@ function renderInfo() {
   const e = document.createElement('div'); e.className = 'eff';
   e.textContent = isMax ? n.effect(lv) : lv ? `${n.effect(lv)}  →  ${n.effect(lv + 1)}` : n.effect(1);
   box.append(br, h, p, e);
-  if (!isMax) {
+  if (!isMax && lv >= capOf(n)) {
+    const k = document.createElement('p'); k.className = 'locked'; k.textContent = '🔒 ' + (n.capMsg || 'Pas encore disponible.');
+    box.append(k);
+  } else if (!isMax) {
     const b = document.createElement('button'); b.className = 'btn';
     b.append(`Acheter · ${fmt(nodeCost(n, lv))} `);
     const i = document.createElement('span'); i.className = 'coin-ico'; b.append(i);
@@ -325,7 +331,7 @@ function renderInfo() {
 
 function buy(n) {
   const lv = L(n.id);
-  if (lv >= n.max) return;
+  if (lv >= capOf(n)) return;
   const c = nodeCost(n, lv);
   if (save.coins < c) return;
   save.coins -= c; save.level[n.id] = lv + 1;

@@ -32,6 +32,34 @@ export const ENEMIES = {
   golem: { name: 'Golem d\'argile', hp: 16, value: 6, radius: 18, speed: 20, color: '#b7774a', core: '#7a4a2a' },
   wind: { name: 'Esprit du vent', hp: 6, value: 3, radius: 13, speed: 44, color: '#d6f2ff', core: '#8fc7e6', dodge: 0.3 },
 };
+// Créatures d'événement (n'apparaissent pas dans les hordes). Leurs PV suivent les dégâts de l'archer.
+export const EVENT_FOES = {
+  vein: { name: 'Filon d\'or', hp: 30, value: 0, radius: 22, speed: 0, color: '#ffd246', core: '#8c8f86', still: true },
+  goblin: { name: 'Gobelin voleur', hp: 10, value: 0, radius: 12, speed: 150, color: '#6fae4c', core: '#4a7d34' },
+  mimic: { name: 'Mimique', hp: 22, value: 0, radius: 18, speed: 0, color: '#c9a06a', core: '#5a3418', still: true },
+};
+Object.assign(ENEMIES, EVENT_FOES);
+
+// Étapes : chaque expédition se déroule dans une ambiance, qui tourne d'une expédition à l'autre.
+// mods : changements de jeu propres à l'étape.
+export const STAGES = [
+  { id: 'matin', name: 'Clairière du matin', blurb: 'Le calme avant la récolte', mods: {} },
+  { id: 'crepuscule', name: 'Crépuscule doré', blurb: 'Feux follets dorés ×2', mods: { gold: 2 } },
+  { id: 'minuit', name: 'Clairière de minuit', blurb: 'Butin +30 %, mais il fait noir', mods: { value: 1.3 } },
+  { id: 'neige', name: 'Clairière enneigée', blurb: 'Ennemis lents et robustes · butin +15 %', mods: { hp: 1.25, speed: 0.75, value: 1.15 } },
+];
+export function stageFor(expeditions) { return STAGES[expeditions % STAGES.length]; }
+
+// Événements : deux par expédition, à des moments tirés au hasard.
+// share : part de la capacité du sac que l'événement peut rapporter.
+export const EVENTS = {
+  vein: { title: 'Filon d\'or !', sub: 'Frappe-le : chaque coup fait jaillir de l\'or', share: 0.16, life: 14 },
+  rain: { title: 'Pluie de pièces !', sub: 'Passe le gant dessus, vite', share: 0.12, life: 5 },
+  goblin: { title: 'Gobelin voleur !', sub: 'Il file avec un sac d\'or : attrape-le', share: 0.2, life: 11 },
+  mimic: { title: 'Un coffre ?', sub: 'Ouvre-le à coups d\'épée…', share: 0.24, life: 18 },
+};
+export const EVENT_WINDOWS = [[0.18, 0.42], [0.55, 0.78]];
+
 // Feu follet doré : version rare d'un feu follet, qui file vite et rapporte gros.
 export const GOLD_WISP = { chance: 0.025, value: 15, hp: 1.5, speed: 1.7, color: '#ffd246' };
 
@@ -99,15 +127,19 @@ export const NODES = [
     desc: 'La chanson du barde porte plus loin et donne plus d\'entrain.', effect: l => `Cadence +${30 + 8 * l} %, portée +${15 * l} %` },
 
   // Sac
-  { id: 'capacity', parent: 'root', name: 'Coutures solides', branch: 'Sac', x: 6, y: 4, max: 12, cost: 10, growth: 1.7,
+  // Les paliers d'abord (toile → cuir → soie → céleste) ; les coutures agrandissent ensuite chaque palier,
+  // 4 niveaux par palier débloqué.
+  { id: 'capacity', parent: 'tierCuir', name: 'Coutures solides', branch: 'Sac', x: 6, y: 5, max: 12, cost: 10, growth: 1.7,
+    cap: L => 4 * ((L('tierCuir') ? 1 : 0) + (L('tierSoie') ? 1 : 0) + (L('tierCeleste') ? 1 : 0)),
+    capMsg: 'Débloque le palier suivant du sac pour coudre plus loin.',
     desc: 'Le sac contient plus de pièces par palier.', effect: l => `${fmtNum(Math.round(120 * Math.pow(1.6, l)))} pièces au premier palier` },
-  { id: 'tierCuir', parent: 'capacity', name: 'Cuir tanné', branch: 'Sac', tier: 1, x: 7, y: 4, max: 1, cost: 60, growth: 1,
+  { id: 'tierCuir', parent: 'root', name: 'Cuir tanné', branch: 'Sac', tier: 1, x: 6, y: 4, max: 1, cost: 60, growth: 1,
     desc: 'Une fois la toile pleine, le sac passe en cuir : la Déchirure rapporte davantage.', effect: () => 'Palier cuir ×1,6' },
-  { id: 'tierSoie', parent: 'tierCuir', name: 'Soie enchantée', branch: 'Sac', tier: 2, x: 8, y: 4, max: 1, cost: 700, growth: 1,
+  { id: 'tierSoie', parent: 'tierCuir', name: 'Soie enchantée', branch: 'Sac', tier: 2, x: 7, y: 4, max: 1, cost: 700, growth: 1,
     desc: 'Un troisième palier, cousu de soie et de runes.', effect: () => 'Palier soie ×2,5' },
-  { id: 'tierCeleste', parent: 'tierSoie', name: 'Étoffe céleste', branch: 'Sac', tier: 3, x: 9, y: 4, max: 1, cost: 6000, growth: 1,
+  { id: 'tierCeleste', parent: 'tierSoie', name: 'Étoffe céleste', branch: 'Sac', tier: 3, x: 8, y: 4, max: 1, cost: 6000, growth: 1,
     desc: 'Le dernier palier : une étoffe tissée de ciel étoilé.', effect: () => 'Palier céleste ×4' },
-  { id: 'mouth', parent: 'capacity', name: 'Gueule vorace', branch: 'Sac', x: 6, y: 5, max: 6, cost: 40, growth: 1.9,
+  { id: 'mouth', parent: 'capacity', name: 'Gueule vorace', branch: 'Sac', x: 6, y: 6, max: 6, cost: 40, growth: 1.9,
     desc: 'Le sac aspire tout seul les pièces de plus loin.', effect: l => `Aspiration ${Math.round(60 * (1 + 0.5 * l))} px` },
 
   // Arcanes

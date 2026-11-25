@@ -1,5 +1,5 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
-import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, BASE, MAP, ARENA, bagMax, tierOf } from './data.js';
+import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, bagMax, tierOf } from './data.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -50,7 +50,12 @@ export function moveCam(world, dx, dy) { world.cam.x += dx; world.cam.y += dy; c
 export function centerCam(world, x, y) { world.cam.x = x - world.w / 2; world.cam.y = y - world.h / 2; clampCam(world); }
 
 // lair : { open: portail ouvert ?, first: jamais vaincu ? }
-export function startExpedition(world, stats, zone, lair = {}) {
+export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]) {
+  // l'étape modifie la zone (PV, butin) et les stats (feux follets dorés) pour cette expédition
+  const m = stage.mods || {};
+  zone = { ...zone, stage: stage.name, hpMult: zone.hpMult * (m.hp || 1), valueMult: zone.valueMult * (m.value || 1) };
+  stats = { ...stats, goldChance: stats.goldChance * (m.gold || 1) };
+  world.stage = stage;
   Object.assign(world, {
     phase: 'expedition', mode: 'map', mapW: MAP.w, mapH: MAP.h,
     enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], hazards: [], shake: 0,
@@ -60,12 +65,77 @@ export function startExpedition(world, stats, zone, lair = {}) {
       kills: 0, toDrop: { ...stats.heroes }, sel: 'archer', attraction: stats.attraction, boss: null, bossKilled: false, golds: 0,
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
       lair: { open: !!lair.open, first: !!lair.first, done: false, got: 0, only: false }, arena: null,
+      happenings: planEvents(stats.duration), eventsGot: 0,
     },
   });
   const b = bagPos(world);
   centerCam(world, b.x, b.y + 40);
   for (let i = 0; i < BASE.startPacks; i++) spawnPack(world, true);
-  world.events.push({ kind: 'banner', title: 'Expédition !', sub: zone.name });
+  world.events.push({ kind: 'banner', title: stage.name, sub: stage.blurb });
+}
+
+// ---------- Événements d'expédition ----------
+function planEvents(duration) {
+  const kinds = Object.keys(EVENTS).sort(() => Math.random() - 0.5);
+  return EVENT_WINDOWS.map(([a, b], i) => ({ kind: kinds[i], at: duration * rnd(a, b), done: false }));
+}
+// Valeur d'un événement : une part de la capacité du sac, pour rester intéressant à tout moment du jeu.
+function eventValue(world, kind) { return Math.max(12, bagMax(world.stats) * EVENTS[kind].share * world.zone.valueMult); }
+// Un endroit dégagé, visible, pas trop près du sac.
+function eventSpot(world) {
+  const b = bagPos(world);
+  for (let k = 0; k < 20; k++) {
+    const x = world.cam.x + rnd(0.2, 0.8) * world.w, y = world.cam.y + rnd(0.25, 0.75) * world.h;
+    if ((x - b.x) ** 2 + (y - b.y) ** 2 > 200 * 200) return { x: Math.max(60, Math.min(world.mapW - 60, x)), y: Math.max(60, Math.min(world.mapH - 60, y)) };
+  }
+  return { x: b.x + 260, y: b.y };
+}
+function foeHp(world, type) { return ENEMIES[type].hp * Math.max(1, world.stats.damage.archer / HEROES.archer.damage) * world.zone.hpMult; }
+function startEvent(world, ev) {
+  const def = EVENTS[ev.kind], p = eventSpot(world), r = world.run;
+  ev.done = true;
+  world.events.push({ kind: 'banner', title: def.title, sub: def.sub });
+  sfx(world, 'portal');
+  const value = eventValue(world, ev.kind);
+  if (ev.kind === 'rain') {
+    r.rain = { t: def.life, left: value, rate: value / def.life };
+    return;
+  }
+  const e = spawnAt(world, ev.kind, p.x, p.y);
+  e.hp = e.max = foeHp(world, ev.kind);
+  e.value = value; e.total = value; e.life = def.life; e.event = true;
+  if (ev.kind === 'goblin') { e.a = rnd(0, Math.PI * 2); e.value *= 1; }
+  world.fx.push({ kind: 'ring', x: p.x, y: p.y, r0: 10, r1: 90, t: 0.7, life: 0.7, color: '#ffd246' });
+}
+// Pièces qui tombent du ciel autour de l'écran.
+function dropCoin(world, x, y, kind, value, z = 0) {
+  world.coins.push({ x, y, vx: rnd(-20, 20), vy: rnd(-20, 20), kind, value, life: world.stats.coinLife, max: world.stats.coinLife,
+    fly: false, sp: 0, z, vz: z ? -rnd(100, 260) : rnd(160, 300), spin: rnd(0, 6), air: !!z });
+}
+function updateEvents(world, dt) {
+  const r = world.run;
+  for (const ev of r.happenings) if (!ev.done && r.t >= ev.at) startEvent(world, ev);
+  if (r.rain) {
+    const rain = r.rain;
+    rain.t -= dt;
+    let budget = rain.rate * dt;
+    while (budget > 0 && rain.left > 0) {
+      const big = rain.left > 30 && Math.random() < 0.08, v = Math.min(rain.left, big ? 25 : rain.rate / 12 + 1);
+      dropCoin(world, world.cam.x + rnd(0.05, 0.95) * world.w, world.cam.y + rnd(0.1, 0.9) * world.h, v >= 25 ? 'gem' : v >= 5 ? 'bar' : 'coin', v, rnd(250, 420));
+      rain.left -= v; budget -= v;
+    }
+    if (rain.t <= 0 || rain.left <= 0) r.rain = null;
+  }
+  for (const e of world.enemies) {
+    if (!e.event || e.dead) continue;
+    e.life -= dt;
+    if (e.life <= 0) {
+      e.dead = true;
+      burst(world, e.x, e.y, 18, ['#e8e0d0', '#b8b0a0', '#ffffff'], 140, 2, 0, 0.6);
+      const msg = e.type === 'goblin' ? 'Le gobelin s\'est enfui…' : e.type === 'vein' ? 'Le filon s\'est tari' : 'La mimique s\'est enfuie…';
+      world.texts.push({ x: e.x, y: e.y - 30, text: msg, color: '#e8e0d0', size: 15, life: 1.6 });
+    }
+  }
 }
 
 // Combat direct depuis l'Atelier : on arrive dans l'antre avec tous ses héros à larguer.
@@ -171,6 +241,7 @@ function updateArena(world, dt) {
   a.fireT -= dt * (1 + a.summoned * 0.35);
   if (a.fireT <= 0) {
     a.fireT = b.fireEvery;
+    if (bo && !bo.dead) bo.atk = 0.7;
     const targets = world.heroes.filter(u => u.drop <= 0).sort(() => Math.random() - 0.5).slice(0, 1 + a.summoned);
     if (!targets.length) targets.push({ x: rnd(150, world.mapW - 150), y: rnd(150, world.mapH - 120) });
     for (const u of targets) world.hazards.push({ x: u.x + rnd(-14, 14), y: u.y + 8 + rnd(-10, 10), r: b.fireRadius, t: b.fireWarn, warn: b.fireWarn });
@@ -312,10 +383,26 @@ function damage(world, e, amount, slow, from) {
     return;
   }
   e.hp -= amount; e.hit = 0.12;
+  if (e.type === 'vein') {
+    // chaque coup fait jaillir une part de l'or, proportionnelle aux dégâts
+    const v = Math.min(e.value, e.total * Math.min(amount, e.hp + amount) / e.max);
+    e.value -= v;
+    for (const pc of splitLoot(v, Math.max(1, Math.ceil(v / 4)), 2, 4)) {
+      const a = rnd(0, Math.PI * 2), sp = rnd(40, 110);
+      world.coins.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, kind: pc.kind, value: pc.value,
+        life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0, z: 0, vz: rnd(200, 320), spin: rnd(0, 6) });
+    }
+    burst(world, e.x, e.y - 6, 4, ['#ffd246', '#fff3a8', '#8c8f86'], 90, 2, 0, 0.4);
+  }
+  if (e.type === 'mimic' && !e.awake) {
+    e.awake = true; e.life += 6;
+    world.events.push({ kind: 'banner', title: 'C\'est une mimique !', sub: 'Elle mord : abats-la pour son trésor' });
+    shake(world, 6); sfx(world, 'warn');
+  }
   const shown = Math.round(amount * 10) / 10;
   world.texts.push({ x: e.x + rnd(-8, 8), y: e.y - e.r - 4, text: (shown >= 10 ? Math.round(shown) : String(shown).replace('.', ',')) + (crit ? ' !' : ''),
     color: crit ? '#ffd246' : '#ffffff', size: crit ? 20 : 14, life: crit ? 0.9 : 0.6, dmg: true, vy: -70, pop: 0 });
-  if (from && !e.boss) {
+  if (from && !e.boss && !e.def.still) {
     const dx = e.x - from.x, dy = e.y - from.y, d = Math.hypot(dx, dy) || 1, k = (e.type === 'golem' ? 60 : 140) * (crit ? 1.6 : 1);
     e.kx = (e.kx || 0) + dx / d * k; e.ky = (e.ky || 0) + dy / d * k;
   }
@@ -326,7 +413,8 @@ function damage(world, e, amount, slow, from) {
 function killEnemy(world, e) {
   e.dead = true;
   world.run.kills++;
-  const pal = { wisp: ['#ff9a3c', '#ffe682', '#e65032'], golem: ['#be7850', '#8c5238', '#6a3a24'], wind: ['#e6f7fb', '#8ed2e6', '#ffffff'] }[e.type] || ['#ff5a2a', '#ffb040', '#fff0b0'];
+  if (e.event) world.run.eventsGot++;
+  const pal = { vein: ['#ffd246', '#8c8f86', '#fff3a8'], goblin: ['#6fae4c', '#ffd246', '#4a7d34'], mimic: ['#9a6238', '#ffd246', '#8a1e2a'], wisp: ['#ff9a3c', '#ffe682', '#e65032'], golem: ['#be7850', '#8c5238', '#6a3a24'], wind: ['#e6f7fb', '#8ed2e6', '#ffffff'] }[e.type] || ['#ff5a2a', '#ffb040', '#fff0b0'];
   burst(world, e.x, e.y, e.boss ? 70 : e.gold ? 30 : 14, e.gold ? ['#ffd246', '#fff096', '#ffffff'] : pal, e.boss ? 320 : 150, 2, 0, e.boss ? 1.1 : 0.55);
   if (onScreen(world, e.x, e.y)) { sfx(world, e.boss ? 'boss' : e.gold ? 'gold' : 'pop'); shake(world, e.boss ? 14 : e.type === 'golem' ? 3 : 1.5); }
   const n = e.boss ? 60 : Math.min(e.gold ? 12 : 6, 1 + Math.ceil(Math.log2(1 + e.value / 3)));
@@ -338,7 +426,11 @@ function killEnemy(world, e) {
     world.events.push({ kind: 'banner', title: e.def.name + ' vaincu !', sub: 'Rafle le butin avant que le portail ne se referme' });
     world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 5, t: 0.8, life: 0.8, color: '#ffd246' });
   }
-  const pieces = e.boss ? splitLoot(e.value, n, 3, 30) : e.gold ? splitLoot(e.value, n, 1, 8) : splitLoot(e.value, n, 3, 12);
+  if (e.event && e.value > 0) {
+    world.texts.push({ x: e.x, y: e.y - 34, text: { vein: 'Filon épuisé !', goblin: 'Gobelin attrapé !', mimic: 'Trésor !' }[e.type], color: '#ffd246', size: 18, life: 1.4 });
+    shake(world, 5);
+  }
+  const pieces = e.boss ? splitLoot(e.value, n, 3, 30) : e.event ? (e.value > 0.5 ? splitLoot(e.value, 14, 2, 14) : []) : e.gold ? splitLoot(e.value, n, 1, 8) : splitLoot(e.value, n, 3, 12);
   for (const pc of pieces) {
     const a = rnd(0, Math.PI * 2), s = e.boss ? rnd(50, 190) : rnd(30, 110);
     world.coins.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, kind: pc.kind,
@@ -424,6 +516,7 @@ export function update(world, dt) {
       r.spawnT = world.stats.spawnEvery * rnd(0.6, 1.4);
       spawnPack(world);
     }
+    updateEvents(world, dt);
     updateHeroes(world, dt);
     updateArrows(world, dt);
     if (r.t >= r.duration) { r.t = r.duration; startTear(world); }
@@ -435,8 +528,9 @@ export function update(world, dt) {
       if (r.shake <= 0) burstBag(world);
     } else {
       r.tearT -= dt;
-      const anyFlying = world.coins.some(c => c.fly);
-      if ((r.tearT <= 0 && !anyFlying) || r.tearT < -1.5 || (world.coins.length === 0 && r.tearT < r.tearDur - 0.5)) endTear(world);
+      if (r.waves && r.waves.length) { r.waveT += dt; tearWave(world); }
+      const anyFlying = world.coins.some(c => c.fly) || (r.waves && r.waves.length > 0);
+      if ((r.tearT <= 0 && !anyFlying) || r.tearT < -1.5 || (world.coins.length === 0 && !anyFlying && r.tearT < r.tearDur - 0.5)) endTear(world);
     }
   }
   if (holding(world)) { r.attraction = Math.max(0, r.attraction - dt); if (r.attraction <= 0) r.focusLock = true; }
@@ -460,13 +554,15 @@ function updateEnemies(world, dt) {
   separate(world);
   for (const e of world.enemies) {
     e.ph += dt * 3; e.age += dt; e.hit -= dt; e.slow = Math.max(0, e.slow - dt);
+    if (e.atk > 0) e.atk -= dt;
     if (e.pack && e.pack.n > 1) {
       // cohésion vers le centre + cap commun
       const p = e.pack, dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1, pull = Math.max(0, Math.min(1, (d - 20 - p.n * 3) / (40 + p.n * 4)));
       const tx = Math.cos(p.a) + dx / d * pull * 1.5, ty = Math.sin(p.a) + dy / d * pull * 1.5;
       e.a = Math.atan2(ty, tx) + rnd(-0.4, 0.4);
     } else e.a += rnd(-1, 1) * dt * 1.2;
-    let sp = e.def.speed * (0.55 + 0.45 * Math.max(0, Math.sin(e.ph)));
+    if (e.event && moveEventFoe(world, e, dt)) continue;
+    let sp = e.def.speed * (0.55 + 0.45 * Math.max(0, Math.sin(e.ph))) * ((world.stage && world.stage.mods.speed) || 1);
     if (e.gold) sp *= GOLD_WISP.speed;
     if (e.slow > 0) sp *= 1 - HEROES.mage.slow;
     if (e.home && (e.x - e.home.x) ** 2 + (e.y - e.home.y) ** 2 > e.home.r * e.home.r) e.a = Math.atan2(e.home.y - e.y, e.home.x - e.x) + rnd(-0.5, 0.5);
@@ -479,6 +575,32 @@ function updateEnemies(world, dt) {
     }
   }
   world.enemies = world.enemies.filter(e => !e.dead);
+}
+
+// Créatures d'événement : le filon ne bouge pas, le gobelin fuit les héros, la mimique réveillée les poursuit et mord.
+function moveEventFoe(world, e, dt) {
+  if (e.type === 'vein' || (e.type === 'mimic' && !e.awake)) { e.kx = e.ky = 0; return true; }
+  let near = null, nd = Infinity;
+  for (const u of world.heroes) { if (u.drop > 0) continue; const d = d2(u, e); if (d < nd) { nd = d; near = u; } }
+  const slow = e.slow > 0 ? 1 - HEROES.mage.slow : 1;
+  if (e.type === 'goblin') {
+    if (near && nd < 260 * 260) e.a = Math.atan2(e.y - near.y, e.x - near.x) + Math.sin(e.age * 3) * 0.6;
+    else e.a += rnd(-1, 1) * dt * 2;
+    const sp = e.def.speed * slow;
+    e.x += Math.cos(e.a) * sp * dt; e.y += Math.sin(e.a) * sp * dt;
+  } else if (e.type === 'mimic' && near) {
+    const d = Math.sqrt(nd) || 1, sp = 95 * slow;
+    if (d > 22) { e.x += (near.x - e.x) / d * sp * dt; e.y += (near.y - e.y) / d * sp * dt; }
+    e.bite = (e.bite || 0) - dt;
+    if (d < 30 && e.bite <= 0) {
+      e.bite = 1.4; near.stun = Math.max(near.stun || 0, 1.1);
+      world.texts.push({ x: near.x, y: near.y - 34, text: 'Croc !', color: '#ff6a5a', size: 16, life: 0.8 });
+      sfx(world, 'hit', { crit: true }); shake(world, 3);
+    }
+  }
+  if (e.kx || e.ky) { e.x += e.kx * dt; e.y += e.ky * dt; const f = Math.pow(0.002, dt); e.kx *= f; e.ky *= f; }
+  e.x = Math.max(30, Math.min(world.mapW - 30, e.x)); e.y = Math.max(30, Math.min(world.mapH - 30, e.y));
+  return true;
 }
 
 // Les membres d'une horde se poussent un peu pour ne pas se superposer (grille de cases).
@@ -600,10 +722,11 @@ function updateCoins(world, dt) {
     c.x += c.vx * dt; c.y += c.vy * dt;
     const fr = Math.pow(0.04, dt); c.vx *= fr; c.vy *= fr;
     if (c.vz !== undefined) { c.vz -= 900 * dt; c.z += c.vz * dt; if (c.z <= 0) { c.z = 0; c.vz = Math.abs(c.vz) > 60 ? -c.vz * 0.45 : 0; } }
+    if (c.air && c.z <= 0 && c.vz === 0) { c.air = false; if (c.value >= 5) burst(world, c.x, c.y, 3, ['#fff5b4', '#ffffff'], 50, 1, 0, 0.3); }
     if (world.phase === 'tear') c.vy += 16 * dt;
     c.life -= dt;
     if (c.life <= 0) { c.dead = true; continue; }
-    const fresh = c.life < c.max - 0.15;
+    const fresh = c.life < c.max - 0.15 && !c.air;
     if (fresh && inside && (c.x - p.x) ** 2 + (c.y - p.y) ** 2 < gr * gr) {
       c.fly = true; c.sp = 120;
       if (c.value >= 4.5) world.texts.push({ x: c.x, y: c.y - 14, text: '+' + Math.round(c.value * (world.phase === 'tear' ? 1 : 1)), color: c.kind === 'gem' ? '#8ff0ff' : '#ffd246',
@@ -647,15 +770,35 @@ function burstBag(world) {
   const total = r.tearTotal;
   const b = bagPos(world);
   const pieces = total < 15 ? splitLoot(total, 15, 3, 15) : splitLoot(total, 15, 6, BASE.tearMaxCoins - 60);
-  for (const pc of pieces) {
-    const a = rnd(0, Math.PI * 2), sp = rnd(120, Math.max(world.w, world.h) * 0.9);
-    world.coins.push({ x: b.x, y: b.y - 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, kind: pc.kind,
-      value: pc.value, life: s.tearDuration + rnd(0, 0.5), max: s.tearDuration + 1, fly: false, sp: 0, big: r.tier >= 1, z: 0, vz: rnd(200, 520), spin: rnd(0, 6) });
-  }
+  // Le sac crache son or en plusieurs vagues : les pièces montent haut, retombent loin,
+  // et ne se ramassent qu'une fois posées au sol. Impossible de tout rafler en restant sur le sac.
+  pieces.sort(() => Math.random() - 0.5);
+  const W = TEAR_WAVES;
+  r.waves = Array.from({ length: W }, (_, i) => ({ at: i * TEAR_WAVE_GAP, pieces: pieces.filter((_, k) => k % W === i) }));
+  r.tearT += (W - 1) * TEAR_WAVE_GAP;
+  r.waveT = 0;
+  tearWave(world);
   world.fx.push({ kind: 'ring', x: b.x, y: b.y - 20, r0: 10, r1: Math.max(world.w, world.h) * 0.6, t: 0.7, life: 0.7, color: TIERS[r.tier].glow });
   burst(world, b.x, b.y - 20, 60, [TIERS[r.tier].color, TIERS[r.tier].seam, TIERS[r.tier].glow], 420, 3, 0, 1);
   shake(world, 14); sfx(world, 'burst');
   world.events.push({ kind: 'banner', title: 'Déchirure !', sub: total > 0 ? 'Rafle les pièces avant qu\'elles ne disparaissent' : 'Le sac était vide…' });
+}
+
+const TEAR_WAVES = 4, TEAR_WAVE_GAP = 0.55;
+function tearWave(world) {
+  const r = world.run, s = world.stats, b = bagPos(world);
+  while (r.waves.length && r.waves[0].at <= r.waveT) {
+    const wave = r.waves.shift(), far = Math.max(world.w, world.h);
+    for (const pc of wave.pieces) {
+      const a = rnd(0, Math.PI * 2), sp = rnd(far * 0.25, far * 0.75);
+      world.coins.push({ x: b.x, y: b.y - 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.8, kind: pc.kind,
+        value: pc.value, life: s.tearDuration + 1.2, max: s.tearDuration + 1.2, fly: false, sp: 0, big: r.tier >= 1,
+        z: 0, vz: rnd(420, 720), spin: rnd(0, 6), air: true });
+    }
+    world.fx.push({ kind: 'ring', x: b.x, y: b.y - 20, r0: 10, r1: 120 + 60 * r.waves.length, t: 0.4, life: 0.4, color: TIERS[r.tier].glow });
+    burst(world, b.x, b.y - 30, 24, [TIERS[r.tier].color, TIERS[r.tier].glow, '#ffffff'], 300, 3, 0, 0.7);
+    shake(world, 9); sfx(world, 'burst');
+  }
 }
 
 function endTear(world) {
