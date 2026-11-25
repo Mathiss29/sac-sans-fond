@@ -1,6 +1,7 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
 import { ZONES, TIERS, NODES, HEROES, HERO_ORDER, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
+import { unlockAudio, play, setMuted } from './audio.js';
 import { createWorld, startExpedition, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
 import { render, drawHero, drawBag, getMap } from './render.js';
 
@@ -120,7 +121,19 @@ function toAtelier() {
   renderTree();
 }
 
+// Son : coupé ou non, mémorisé dans la sauvegarde.
+function refreshMute() {
+  setMuted(!!save.muted);
+  document.querySelectorAll('.mute').forEach(b => { b.textContent = save.muted ? '🔇' : '🔊'; b.setAttribute('aria-label', save.muted ? 'Remettre le son' : 'Couper le son'); });
+}
+document.querySelectorAll('.mute').forEach(b => b.addEventListener('click', () => { unlockAudio(); save.muted = !save.muted; writeSave(save); refreshMute(); }));
+window.addEventListener('pointerdown', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
+refreshMute();
+
 function drainEvents() {
+  for (const s of world.sfx) play(s.name, s);
+  world.sfx.length = 0;
   for (const ev of world.events) {
     if (ev.kind === 'banner') bannerQ.push(ev);
     else if (ev.kind === 'coins') save.coins += ev.value;
@@ -248,6 +261,7 @@ function buy(n) {
   const c = nodeCost(n, lv);
   if (save.coins < c) return;
   save.coins -= c; save.level[n.id] = lv + 1;
+  unlockAudio(); play('buy');
   writeSave(save);
   stats = computeStats(save.level);
   renderTree();

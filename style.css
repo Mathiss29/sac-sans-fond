@@ -70,6 +70,9 @@ button.card.sel { border-color: var(--gold); box-shadow: 0 0 14px rgba(255, 207,
 #minimap { position: absolute; pointer-events: auto; right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   width: 190px; border: 2px solid var(--line); border-radius: 8px; background: #1c2a1c; cursor: pointer; touch-action: none; box-shadow: 0 4px 14px rgba(0,0,0,.45); }
 
+#muteRun { position: absolute; pointer-events: auto; left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--panel); font-size: 16px; }
+.mute { font-size: 16px; line-height: 1; }
+
 /* Écrans */
 .screen { position: absolute; inset: 0; display: flex; flex-direction: column; background: rgba(20, 13, 7, .8); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
 .screenHead { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;

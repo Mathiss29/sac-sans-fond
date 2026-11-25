@@ -36,13 +36,13 @@ export const GOLD_WISP = { chance: 0.025, value: 15, hp: 1.5, speed: 1.7, color:
 // Héros. shot : projectile (arrow, frost, note) ou 'melee'. Les dégâts et cadences de base
 // sont multipliés par les améliorations de l'Atelier (voir computeStats).
 export const HEROES = {
-  archer: { name: 'Archer', plural: 'Archers', range: 200, damage: 3, cooldown: 0.9, shot: 'arrow', speed: 560, walkSpeed: 26,
+  archer: { name: 'Archer', plural: 'Archers', range: 200, damage: 3, cooldown: 0.9, shot: 'arrow', speed: 560, walkSpeed: 60,
     blurb: 'Tire de loin sur la cible la plus proche.' },
-  mage: { name: 'Mage de givre', plural: 'Mages', range: 170, damage: 2.5, cooldown: 1.7, shot: 'frost', speed: 380, walkSpeed: 22,
+  mage: { name: 'Mage de givre', plural: 'Mages', range: 170, damage: 2.5, cooldown: 1.7, shot: 'frost', speed: 380, walkSpeed: 52,
     aoe: 55, slow: 0.5, slowTime: 1.6, blurb: 'Éclats de givre : dégâts de zone et ralentissement.' },
-  knight: { name: 'Chevalier', plural: 'Chevaliers', range: 30, damage: 8, cooldown: 0.8, shot: 'melee', walkSpeed: 75,
+  knight: { name: 'Chevalier', plural: 'Chevaliers', range: 30, damage: 8, cooldown: 0.8, shot: 'melee', walkSpeed: 120,
     cleave: 34, blurb: 'Fonce au contact et frappe tout ce qui l\'entoure.' },
-  bard: { name: 'Barde', plural: 'Bardes', range: 160, damage: 1, cooldown: 1.2, shot: 'note', speed: 300, walkSpeed: 30,
+  bard: { name: 'Barde', plural: 'Bardes', range: 160, damage: 1, cooldown: 1.2, shot: 'note', speed: 300, walkSpeed: 62,
     aura: 150, auraBoost: 0.3, blurb: 'Ses chansons font tirer plus vite les héros proches.' },
 };
 export const HERO_ORDER = ['archer', 'mage', 'knight', 'bard'];
