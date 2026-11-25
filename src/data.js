@@ -11,6 +11,8 @@ export const TIERS = [
   { id: 'celeste', name: 'Sac d\'étoffe céleste', color: '#5fd6f0', seam: '#1d6f8a', glow: '#d8fbff', mult: 4 },
 ];
 export const FULL_BONUS = 1.25;
+// Sac plein : les pièces en trop débordent ; seule une petite part arrive quand même dans la bourse.
+export const OVERFLOW_RATE = 0.1;
 
 export const ZONES = [
   {
@@ -107,57 +109,57 @@ export const NODES = [
     desc: 'Le vieux mage te confie son sac. Tout part d\'ici.', effect: () => 'Débloqué' },
 
   // Compagnie : les héros
-  { id: 'arrowDmg', parent: 'root', name: 'Flèches aiguisées', branch: 'Compagnie', hero: 'archer', x: 5, y: 3, max: 10, cost: 8, growth: 1.6,
-    desc: 'Les flèches des archers font plus mal.', effect: l => `Dégâts ×${fmtNum(1 + 0.5 * l)}` },
-  { id: 'arrowRate', parent: 'arrowDmg', name: 'Carquois rapide', branch: 'Compagnie', hero: 'archer', x: 4, y: 3, max: 6, cost: 20, growth: 1.8,
+  { id: 'arrowDmg', parent: 'root', name: 'Flèches aiguisées', branch: 'Compagnie', hero: 'archer', x: 5, y: 3, max: 10, cost: 20, growth: 1.75,
+    desc: 'Les flèches des archers font plus mal.', effect: l => `Dégâts ×${fmtNum(1 + 0.35 * l)}` },
+  { id: 'arrowRate', parent: 'arrowDmg', name: 'Carquois rapide', branch: 'Compagnie', hero: 'archer', x: 4, y: 3, max: 6, cost: 45, growth: 1.9,
     desc: 'Les archers tirent plus souvent.', effect: l => `Cadence +${Math.round((1 / Math.pow(0.88, l) - 1) * 100)} %` },
-  { id: 'archers', parent: 'arrowDmg', name: 'Recrue', branch: 'Compagnie', hero: 'archer', x: 6, y: 3, max: 4, cost: 50, growth: 2.6,
+  { id: 'archers', parent: 'arrowDmg', name: 'Recrue', branch: 'Compagnie', hero: 'archer', x: 6, y: 3, max: 4, cost: 120, growth: 2.6,
     desc: 'Un archer de plus à larguer à chaque expédition.', effect: l => `${3 + l} archers` },
-  { id: 'mage', parent: 'arrowDmg', name: 'Mage de givre', branch: 'Compagnie', hero: 'mage', x: 5, y: 2, max: 3, cost: 90, growth: 3,
+  { id: 'mage', parent: 'arrowDmg', name: 'Mage de givre', branch: 'Compagnie', hero: 'mage', x: 5, y: 2, max: 3, cost: 220, growth: 3,
     desc: 'Un mage rejoint la compagnie. Ses éclats de givre touchent en zone et ralentissent.', effect: l => `${l} mage${l > 1 ? 's' : ''}` },
-  { id: 'mageDmg', parent: 'mage', name: 'Givre mordant', branch: 'Compagnie', hero: 'mage', x: 4, y: 2, max: 8, cost: 60, growth: 1.7,
-    desc: 'Les éclats de givre font plus mal et couvrent une zone plus large.', effect: l => `Dégâts ×${fmtNum(1 + 0.5 * l)}, zone +${10 * l} %` },
-  { id: 'knight', parent: 'archers', name: 'Chevalier', branch: 'Compagnie', hero: 'knight', x: 7, y: 3, max: 3, cost: 160, growth: 3,
+  { id: 'mageDmg', parent: 'mage', name: 'Givre mordant', branch: 'Compagnie', hero: 'mage', x: 4, y: 2, max: 8, cost: 120, growth: 1.8,
+    desc: 'Les éclats de givre font plus mal et couvrent une zone plus large.', effect: l => `Dégâts ×${fmtNum(1 + 0.35 * l)}, zone +${10 * l} %` },
+  { id: 'knight', parent: 'archers', name: 'Chevalier', branch: 'Compagnie', hero: 'knight', x: 7, y: 3, max: 3, cost: 400, growth: 3,
     desc: 'Un chevalier fonce sur les élémentaires et frappe tout autour de lui.', effect: l => `${l} chevalier${l > 1 ? 's' : ''}` },
-  { id: 'knightDmg', parent: 'knight', name: 'Lame trempée', branch: 'Compagnie', hero: 'knight', x: 7, y: 2, max: 8, cost: 110, growth: 1.7,
-    desc: 'Les chevaliers frappent plus fort.', effect: l => `Dégâts ×${fmtNum(1 + 0.5 * l)}` },
-  { id: 'bard', parent: 'mage', name: 'Barde', branch: 'Compagnie', hero: 'bard', x: 5, y: 1, max: 2, cost: 300, growth: 3.5,
+  { id: 'knightDmg', parent: 'knight', name: 'Lame trempée', branch: 'Compagnie', hero: 'knight', x: 7, y: 2, max: 8, cost: 220, growth: 1.8,
+    desc: 'Les chevaliers frappent plus fort.', effect: l => `Dégâts ×${fmtNum(1 + 0.35 * l)}` },
+  { id: 'bard', parent: 'mage', name: 'Barde', branch: 'Compagnie', hero: 'bard', x: 5, y: 1, max: 2, cost: 700, growth: 3.5,
     desc: 'Un barde joue pour les héros proches : ils tirent et frappent plus vite.', effect: l => `${l} barde${l > 1 ? 's' : ''}` },
-  { id: 'bardAura', parent: 'bard', name: 'Ballade entraînante', branch: 'Compagnie', hero: 'bard', x: 4, y: 1, max: 5, cost: 200, growth: 1.9,
+  { id: 'bardAura', parent: 'bard', name: 'Ballade entraînante', branch: 'Compagnie', hero: 'bard', x: 4, y: 1, max: 5, cost: 400, growth: 1.9,
     desc: 'La chanson du barde porte plus loin et donne plus d\'entrain.', effect: l => `Cadence +${30 + 8 * l} %, portée +${15 * l} %` },
 
   // Sac
   // Les paliers d'abord (toile → cuir → soie → céleste) ; les coutures agrandissent ensuite chaque palier,
   // 4 niveaux par palier débloqué.
-  { id: 'capacity', parent: 'tierCuir', name: 'Coutures solides', branch: 'Sac', x: 6, y: 5, max: 12, cost: 10, growth: 1.7,
+  { id: 'capacity', parent: 'tierCuir', name: 'Coutures solides', branch: 'Sac', x: 6, y: 5, max: 12, cost: 30, growth: 1.8,
     cap: L => 4 * ((L('tierCuir') ? 1 : 0) + (L('tierSoie') ? 1 : 0) + (L('tierCeleste') ? 1 : 0)),
     capMsg: 'Débloque le palier suivant du sac pour coudre plus loin.',
     desc: 'Le sac contient plus de pièces par palier.', effect: l => `${fmtNum(Math.round(120 * Math.pow(1.6, l)))} pièces au premier palier` },
-  { id: 'tierCuir', parent: 'root', name: 'Cuir tanné', branch: 'Sac', tier: 1, x: 6, y: 4, max: 1, cost: 60, growth: 1,
+  { id: 'tierCuir', parent: 'root', name: 'Cuir tanné', branch: 'Sac', tier: 1, x: 6, y: 4, max: 1, cost: 300, growth: 1,
     desc: 'Une fois la toile pleine, le sac passe en cuir : la Déchirure rapporte davantage.', effect: () => 'Palier cuir ×1,6' },
-  { id: 'tierSoie', parent: 'tierCuir', name: 'Soie enchantée', branch: 'Sac', tier: 2, x: 7, y: 4, max: 1, cost: 700, growth: 1,
+  { id: 'tierSoie', parent: 'tierCuir', name: 'Soie enchantée', branch: 'Sac', tier: 2, x: 7, y: 4, max: 1, cost: 3000, growth: 1,
     desc: 'Un troisième palier, cousu de soie et de runes.', effect: () => 'Palier soie ×2,5' },
-  { id: 'tierCeleste', parent: 'tierSoie', name: 'Étoffe céleste', branch: 'Sac', tier: 3, x: 8, y: 4, max: 1, cost: 6000, growth: 1,
+  { id: 'tierCeleste', parent: 'tierSoie', name: 'Étoffe céleste', branch: 'Sac', tier: 3, x: 8, y: 4, max: 1, cost: 12000, growth: 1,
     desc: 'Le dernier palier : une étoffe tissée de ciel étoilé.', effect: () => 'Palier céleste ×4' },
-  { id: 'mouth', parent: 'capacity', name: 'Gueule vorace', branch: 'Sac', x: 6, y: 6, max: 6, cost: 40, growth: 1.9,
+  { id: 'mouth', parent: 'capacity', name: 'Gueule vorace', branch: 'Sac', x: 6, y: 6, max: 6, cost: 90, growth: 1.9,
     desc: 'Le sac aspire tout seul les pièces de plus loin.', effect: l => `Aspiration ${Math.round(60 * (1 + 0.5 * l))} px` },
 
   // Arcanes
-  { id: 'duration', parent: 'root', name: 'Longue expédition', branch: 'Arcanes', x: 5, y: 5, max: 6, cost: 12, growth: 1.9,
+  { id: 'duration', parent: 'root', name: 'Longue expédition', branch: 'Arcanes', x: 5, y: 5, max: 6, cost: 35, growth: 2,
     desc: 'Chaque expédition dure plus longtemps.', effect: l => `${30 + 5 * l} s par expédition` },
-  { id: 'horde', parent: 'duration', name: 'Appel des élémentaires', branch: 'Arcanes', x: 4, y: 5, max: 5, cost: 80, growth: 2,
+  { id: 'horde', parent: 'duration', name: 'Appel des élémentaires', branch: 'Arcanes', x: 4, y: 5, max: 5, cost: 180, growth: 2,
     desc: 'Les élémentaires apparaissent plus vite et en plus grand nombre.', effect: l => `Apparitions +${20 * l} %` },
-  { id: 'bossDmg', parent: 'duration', name: 'Fléau des primordiaux', branch: 'Arcanes', x: 5, y: 6, max: 6, cost: 150, growth: 2,
+  { id: 'bossDmg', parent: 'duration', name: 'Fléau des primordiaux', branch: 'Arcanes', x: 5, y: 6, max: 6, cost: 300, growth: 2,
     desc: 'Tes héros font plus de dégâts aux élémentaires primordiaux.', effect: l => `Dégâts aux boss ×${fmtNum(1 + 0.4 * l)}` },
 
   // Récolte
-  { id: 'glove', parent: 'root', name: 'Gant élargi', branch: 'Récolte', x: 4, y: 4, max: 6, cost: 10, growth: 1.8,
+  { id: 'glove', parent: 'root', name: 'Gant élargi', branch: 'Récolte', x: 4, y: 4, max: 6, cost: 25, growth: 1.9,
     desc: 'Le gant attire les pièces de plus loin.', effect: l => `Rayon ${Math.round(54 * (1 + 0.18 * l))} px` },
-  { id: 'attraction', parent: 'glove', name: 'Focus tenace', branch: 'Récolte', x: 3, y: 4, max: 5, cost: 35, growth: 1.9,
+  { id: 'attraction', parent: 'glove', name: 'Focus tenace', branch: 'Récolte', x: 3, y: 4, max: 5, cost: 70, growth: 1.9,
     desc: 'Le Focus (clic maintenu : les héros visent la zone du gant) et l\'Attraction de la Déchirure durent plus longtemps.', effect: l => `${fmtNum(3 + 0.75 * l)} s de Focus` },
-  { id: 'coinLife', parent: 'glove', name: 'Pièces patientes', branch: 'Récolte', x: 4, y: 5, max: 5, cost: 30, growth: 1.8,
+  { id: 'coinLife', parent: 'glove', name: 'Pièces patientes', branch: 'Récolte', x: 4, y: 5, max: 5, cost: 60, growth: 1.9,
     desc: 'Les pièces restent plus longtemps au sol avant de disparaître.', effect: l => `${8 + 2 * l} s au sol` },
-  { id: 'goldWisp', parent: 'attraction', name: 'Flair doré', branch: 'Récolte', x: 2, y: 4, max: 5, cost: 120, growth: 2,
+  { id: 'goldWisp', parent: 'attraction', name: 'Flair doré', branch: 'Récolte', x: 2, y: 4, max: 5, cost: 250, growth: 2,
     desc: 'Les feux follets dorés apparaissent plus souvent.', effect: l => `Chance ×${fmtNum(1 + 0.6 * l)}` },
 ];
 
@@ -176,9 +178,9 @@ export function computeStats(level) {
     heroes: { archer: BASE.archers + L('archers'), mage: L('mage'), knight: L('knight'), bard: L('bard') },
     archers: BASE.archers + L('archers'),
     damage: {
-      archer: HEROES.archer.damage * (1 + 0.5 * L('arrowDmg')),
-      mage: HEROES.mage.damage * (1 + 0.5 * L('mageDmg')),
-      knight: HEROES.knight.damage * (1 + 0.5 * L('knightDmg')),
+      archer: HEROES.archer.damage * (1 + 0.35 * L('arrowDmg')),
+      mage: HEROES.mage.damage * (1 + 0.35 * L('mageDmg')),
+      knight: HEROES.knight.damage * (1 + 0.35 * L('knightDmg')),
       bard: HEROES.bard.damage,
     },
     cooldown: {

@@ -241,6 +241,9 @@ const GX = 120, GY = 110, PAD = 70;
 let selected = 'root';
 const L = id => save.level[id] || 0;
 const visible = n => !n.parent || L(n.parent) > 0 || L(n.id) > 0;
+// nœuds devinés : enfants d'un nœud visible mais pas encore acheté (silhouette verrouillée)
+const teaser = n => !visible(n) && n.parent && visible(NODES.find(m => m.id === n.parent));
+const BRANCH_COLOR = { 'Départ': '#ffe7a0', Compagnie: '#ef6f52', Sac: '#ffcf4a', Arcanes: '#b48cff', 'Récolte': '#86d873' };
 // niveau maximum achetable pour l'instant (certains nœuds se débloquent par étapes)
 const capOf = n => n.cap ? Math.min(n.max, n.cap(L)) : n.max;
 const pos = n => ({ x: PAD + n.x * GX - GX + 20, y: PAD + n.y * GY - GY + 30 });
@@ -278,27 +281,47 @@ function renderTree() {
   svg.setAttribute('width', W); svg.setAttribute('height', H);
   inner.querySelectorAll('.node,.branchLbl').forEach(e => e.remove());
   svg.innerHTML = '';
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); parent.append(e); return e; };
+  // lueur des chemins achetés
+  const defs = el('defs', {});
+  const f = el('filter', { id: 'glow', x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
+  el('feGaussianBlur', { stdDeviation: 3, result: 'b' }, f);
+  const m = el('feMerge', {}, f); el('feMergeNode', { in: 'b' }, m); el('feMergeNode', { in: 'SourceGraphic' }, m);
+  // cercle de runes autour du sac du mage
+  const R = pos(NODES[0]);
+  el('circle', { cx: R.x, cy: R.y, r: 74, fill: 'none', stroke: 'rgba(255,231,160,.18)', 'stroke-width': 2 });
+  el('circle', { cx: R.x, cy: R.y, r: 88, fill: 'none', stroke: 'rgba(255,231,160,.12)', 'stroke-width': 10, 'stroke-dasharray': '2 9' });
   for (const n of NODES) {
-    if (!visible(n) || !n.parent) continue;
-    const a = pos(NODES.find(m => m.id === n.parent)), b = pos(n);
-    const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    Object.entries({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: L(n.id) ? '#ffcf4a' : '#6b4f2f', 'stroke-width': L(n.id) ? 4 : 3, 'stroke-linecap': 'round' })
-      .forEach(([k, v]) => ln.setAttribute(k, v));
-    svg.append(ln);
+    if (!n.parent || !(visible(n) || teaser(n))) continue;
+    const a = pos(NODES.find(q => q.id === n.parent)), b = pos(n), col = BRANCH_COLOR[n.branch] || '#ffcf4a', own = L(n.id) > 0;
+    // chemin légèrement courbé, de couleur de la branche
+    const mx = (a.x + b.x) / 2 + (b.y - a.y) * 0.08, my = (a.y + b.y) / 2 - (b.x - a.x) * 0.08;
+    el('path', { d: `M${a.x},${a.y} Q${mx},${my} ${b.x},${b.y}`, fill: 'none', stroke: own ? col : 'rgba(201,180,142,.35)', 'stroke-width': own ? 5 : 3,
+      'stroke-linecap': 'round', 'stroke-dasharray': own ? '' : '2 8', filter: own ? 'url(#glow)' : '' });
+  }
+  for (const [name, x, y] of [['Compagnie', 5, 0.35], ['Sac', 8.6, 3.55], ['Arcanes', 5.6, 6.55], ['Récolte', 2, 3.55]]) {
+    const lb = document.createElement('div'); lb.className = 'branchLbl'; lb.textContent = name; lb.style.setProperty('--c', BRANCH_COLOR[name]);
+    const q = pos({ x, y }); lb.style.left = q.x + 'px'; lb.style.top = q.y + 'px'; inner.append(lb);
   }
   for (const n of NODES) {
-    if (!visible(n)) continue;
+    const shown = visible(n), tz = !shown && teaser(n);
+    if (!shown && !tz) continue;
     const p = pos(n), lv = L(n.id), isMax = lv >= n.max, capped = !isMax && lv >= capOf(n);
     const b = document.createElement('button');
-    b.className = 'node' + (lv ? ' owned' : '') + (isMax ? ' max' : !capped && save.coins >= nodeCost(n, lv) ? ' afford' : '') + (selected === n.id ? ' sel' : '');
+    b.className = 'node' + (tz ? ' teaser' : '') + (lv ? ' owned' : '') + (isMax ? ' max' : !tz && !capped && save.coins >= nodeCost(n, lv) ? ' afford' : '') + (selected === n.id ? ' sel' : '') + (n.id === 'root' ? ' root' : '');
+    b.style.setProperty('--c', BRANCH_COLOR[n.branch] || '#ffcf4a');
     b.style.left = p.x + 'px'; b.style.top = p.y + 'px';
-    b.setAttribute('aria-label', n.name);
-    b.append(nodeIcon(n));
-    const l = document.createElement('span'); l.className = 'lv num';
-    l.textContent = isMax ? (n.max > 1 ? 'MAX' : '✓') : `${lv}/${n.max}`;
-    b.append(l);
+    b.setAttribute('aria-label', tz ? 'Compétence verrouillée' : n.name);
+    if (tz) { const q = document.createElement('span'); q.className = 'q'; q.textContent = '?'; b.append(q); }
+    else b.append(nodeIcon(n));
+    if (!tz && n.id !== 'root') {
+      const l = document.createElement('span'); l.className = 'lv num';
+      l.textContent = isMax ? (n.max > 1 ? 'MAX' : '✓') : `${lv}/${n.max}`;
+      b.append(l);
+    }
     b.onclick = () => { selected = n.id; renderTree(); };
-    b.ondblclick = () => { selected = n.id; buy(n); };
+    if (!tz) b.ondblclick = () => { selected = n.id; buy(n); };
     inner.append(b);
   }
   renderInfo();
@@ -309,6 +332,14 @@ function renderInfo() {
   const n = NODES.find(m => m.id === selected) || NODES[0];
   const lv = L(n.id), isMax = lv >= n.max;
   const box = $('info'); box.innerHTML = '';
+  box.style.setProperty('--c', BRANCH_COLOR[n.branch] || '#ffcf4a');
+  if (!visible(n)) {
+    const par = NODES.find(m => m.id === n.parent);
+    const br = document.createElement('div'); br.className = 'branch'; br.textContent = n.branch;
+    const h = document.createElement('h3'); h.textContent = '???';
+    const k = document.createElement('p'); k.className = 'locked'; k.textContent = `🔒 Achète d'abord « ${par.name} » pour révéler cette compétence.`;
+    box.append(br, h, k); return;
+  }
   const br = document.createElement('div'); br.className = 'branch';
   br.textContent = n.branch + (n.max > 1 ? ` · niveau ${lv}/${n.max}` : '');
   const h = document.createElement('h3'); h.textContent = n.name;
@@ -436,10 +467,12 @@ $('reset').onclick = () => {
 };
 
 // Musique du moment : Atelier, expédition, ou boss dans son antre.
+// musique d'expédition : propre à l'ambiance quand elle en a une (matin, minuit), sinon le thème commun
+const stageTrack = () => ({ matin: 'matin', minuit: 'minuit' }[world.stage && world.stage.id] || 'expedition');
 function musicFor() {
-  if (world.phase === 'expedition') return world.mode === 'arena' ? 'boss' : 'expedition';
+  if (world.phase === 'expedition') return world.mode === 'arena' ? 'boss' : stageTrack();
   if (world.phase === 'done' && world.mode === 'arena') return 'boss';
-  if (world.phase === 'tear') return 'expedition';
+  if (world.phase === 'tear') return stageTrack();
   return 'atelier';
 }
 

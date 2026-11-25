@@ -1,5 +1,5 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
-import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, bagMax, tierOf } from './data.js';
+import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, bagMax, tierOf } from './data.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -477,13 +477,13 @@ function addToBag(world, value) {
   const before = tierOf(r.bag, s);
   const into = Math.min(Math.max(0, max - r.bag), value);
   r.bag += into;
-  if (value - into > 0) { r.overflow += value - into; world.events.push({ kind: 'coins', value: value - into }); }
+  if (value - into > 0) { const v = (value - into) * OVERFLOW_RATE; r.overflow += v; world.events.push({ kind: 'coins', value: v }); }
   const after = tierOf(r.bag, s);
   if (after > before) { shake(world, 6); sfx(world, 'tier'); burst(world, world.mapW / 2, world.mapH / 2 - 30, 40, [TIERS[after].glow, TIERS[after].color, '#ffffff'], 220, 2, 0, 0.9); }
   if (after > before) world.events.push({ kind: 'banner', title: TIERS[after].name + ' !', sub: `Déchirure ×${String(TIERS[after].mult).replace('.', ',')}` });
   if (r.bag >= max && !r.full) {
     r.full = true;
-    world.events.push({ kind: 'banner', title: 'Sac plein !', sub: 'Bonus +25 % à la Déchirure. Le surplus va directement dans ta bourse.' });
+    world.events.push({ kind: 'banner', title: 'Sac plein !', sub: 'Bonus +25 % à la Déchirure. Le surplus déborde : seule 1 pièce sur 10 est sauvée.' });
   }
 }
 

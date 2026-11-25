@@ -67,6 +67,8 @@ const TRACKS = {
   atelier: 'assets/music/atelier-prairie-pixel.mp3',
   expedition: 'assets/music/expedition-arpege-fantasy.mp3',
   boss: 'assets/music/boss-rage-des-demons.mp3',
+  matin: 'assets/music/expedition-matin.mp3',
+  minuit: 'assets/music/expedition-minuit.mp3',
 };
 const MUSIC_VOL = 0.42;
 const players = {};
