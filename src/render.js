@@ -2,10 +2,10 @@
 import { TIERS, bagMax, tierOf } from './data.js';
 import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos } from './game.js';
 
-import { buildSprites, loadHeroSheets, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
+import { buildSprites, loadHeroSheets, loadMonsterSheets, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
 
 const SPR = buildSprites();
-export const heroSheetsReady = loadHeroSheets();
+export const heroSheetsReady = Promise.all([loadHeroSheets(), loadMonsterSheets().then(() => { for (const k in iconCache) delete iconCache[k]; })]);
 
 // Taille d'un pixel d'art à l'écran : 2 en général (vue large), 3 sur très grand écran.
 export function pixelSize(w, h) { return Math.max(2, Math.min(4, Math.floor(Math.min(w, h) / 420))); }
@@ -51,14 +51,18 @@ export function enemyIcon(type) {
 }
 
 export function drawEnemy(g, e, t, px = 3) {
-  const frames = SPR.enemies[e.gold ? 'gold' : e.type] || SPR.enemies.wisp;
-  const f = frames[Math.floor(e.ph * 0.9) % frames.length];
+  const key = e.boss ? 'boss' : e.gold ? 'gold' : e.type;
+  let frames = SPR.enemies[key] || SPR.enemies.wisp;
+  const drawn = SPR.enemyScale && SPR.enemyScale[key];
+  // boss dessiné : 4 images de repos, puis 4 de coup de poing quand il frappe
+  if (drawn && e.boss && frames.length === 8) frames = e.atk > 0 ? frames.slice(4) : frames.slice(0, 4);
+  const f = drawn && e.boss && e.atk > 0 ? frames[Math.min(3, Math.floor((1 - e.atk / 0.7) * 4))] : e.type === 'mimic' ? frames[e.awake && Math.floor(e.ph * 2) % 2 ? 1 : e.awake ? 1 : 0] : frames[Math.floor(e.ph * (e.type === 'goblin' ? 3 : 0.9)) % frames.length];
   // le boss est frappé sans arrêt : un bref éclair seulement, sinon il resterait blanc
   const flash = e.boss ? e.hit > 0.09 && Math.floor(t * 20) % 3 === 0 : e.hit > 0.06 || (e.hit > 0 && Math.floor(t * 30) % 2);
   const img = flash ? f.white : f.c;
-  const k = e.boss ? px * 2 : px;
+  const k = (e.boss ? px * 2 : px) * (drawn || 1);
   const w = img.width * k, h = img.height * k;
-  const fly = e.type !== 'golem';
+  const fly = e.type === 'wisp' || e.type === 'wind' || e.boss;
   const hover = fly ? Math.round(Math.sin(e.ph * 1.3) * 1.5) * px : 0;
   shadow(g, e.x, e.y + h * 0.45, w * 0.32, px * 1.6);
   if (e.type === 'wisp' || e.gold || e.boss) {
@@ -66,7 +70,17 @@ export function drawEnemy(g, e, t, px = 3) {
     halo.addColorStop(0, e.gold ? 'rgba(255,230,120,.45)' : 'rgba(255,170,80,.35)'); halo.addColorStop(1, 'rgba(255,170,80,0)');
     g.fillStyle = halo; g.beginPath(); g.arc(e.x, e.y + hover, w * 0.9, 0, 7); g.fill();
   }
-  g.drawImage(img, Math.round(e.x - w / 2), Math.round(e.y - h / 2 + hover), w, h);
+  if (drawn && !e.boss && Math.cos(e.a) > 0.2) {
+    // les planches regardent vers la gauche : on retourne quand le monstre va à droite
+    g.save(); g.translate(Math.round(e.x), 0); g.scale(-1, 1);
+    g.drawImage(img, Math.round(-w / 2), Math.round(e.y - h / 2 + hover), w, h); g.restore();
+  } else g.drawImage(img, Math.round(e.x - w / 2), Math.round(e.y - h / 2 + hover), w, h);
+  if (e.event) {
+    // créature d'événement : une flèche dorée qui rebondit au-dessus d'elle
+    const ay = Math.round(e.y - h / 2 - px * 6 + Math.abs(Math.sin(t * 5)) * -px * 3);
+    g.fillStyle = '#24161e'; g.fillRect(Math.round(e.x) - px * 3, ay - px, px * 6, px * 2); g.fillRect(Math.round(e.x) - px * 2, ay + px, px * 4, px); g.fillRect(Math.round(e.x) - px, ay + px * 2, px * 2, px);
+    g.fillStyle = '#ffd246'; g.fillRect(Math.round(e.x) - px * 2, ay - px + 1, px * 4, px * 2 - 1); g.fillRect(Math.round(e.x) - px, ay + px, px * 2, px);
+  }
   if (e.slow > 0) {
     // ralenti : petits éclats de givre qui tournent autour
     for (let i = 0; i < 4; i++) {
@@ -176,6 +190,13 @@ export function render(g, world, dpr) {
   g.fillStyle = arena ? '#1a0f12' : '#1c2a1c'; g.fillRect(0, 0, w, h);
   g.drawImage(map.c, sx, sy, Math.ceil(w / px), Math.ceil(h / px), 0, 0, Math.ceil(w / px) * px, Math.ceil(h / px) * px);
   const t = world.t;
+  if (!arena && world.stage && world.stage.id === 'neige') {
+    // sol enneigé : seulement le décor, les personnages gardent leurs couleurs
+    g.save();
+    g.globalCompositeOperation = 'saturation'; g.fillStyle = 'rgba(128,128,128,0.6)'; g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'screen'; g.fillStyle = 'rgba(200,215,240,0.42)'; g.fillRect(0, 0, w, h);
+    g.restore();
+  }
 
   // lucioles d'ambiance (braises dans l'antre)
   g.fillStyle = arena ? 'rgba(255,150,70,.7)' : 'rgba(255,245,190,.5)';
@@ -306,6 +327,7 @@ export function render(g, world, dpr) {
   if (!arena) drawButterflies(g, world, t, px);
   g.restore();
   if (arena) drawEmbers(g, world, t, px); else drawLeaves(g, world, t, px);
+  if (!arena && world.stage) drawAmbiance(g, world, t, camX, camY, dpr);
   g.drawImage(vignette(w, h, dpr), 0, 0, w, h);
   const cb = world.combo;
   if (cb.t > 0 && cb.n >= 3 && world.pointer.inside) {
@@ -336,6 +358,60 @@ export function render(g, world, dpr) {
     g.beginPath(); g.arc(p.x, p.y, rad, 0, 7); g.stroke(); g.setLineDash([]);
     if (on) { g.fillStyle = 'rgba(255,214,102,.08)'; g.beginPath(); g.arc(p.x, p.y, rad, 0, 7); g.fill(); }
     g.fillStyle = '#fff8e1'; g.beginPath(); g.arc(p.x, p.y, 3, 0, 7); g.fill();
+  }
+}
+
+// ---------- Ambiances d'étape ----------
+let nightC = null;
+function drawAmbiance(g, world, t, camX, camY, dpr) {
+  const { w, h } = world, id = world.stage.id;
+  if (id === 'crepuscule') {
+    g.save();
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = 'rgba(255,190,140,0.55)'; g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'screen';
+    const sun = g.createLinearGradient(0, 0, 0, h);
+    sun.addColorStop(0, 'rgba(255,150,80,0.22)'); sun.addColorStop(1, 'rgba(120,60,140,0.10)');
+    g.fillStyle = sun; g.fillRect(0, 0, w, h);
+    g.restore();
+  } else if (id === 'minuit') {
+    // nuit : un voile sombre, troué de lumière autour des héros, du sac, des feux follets et du butin
+    if (!nightC || nightC.width !== w || nightC.height !== h) { nightC = document.createElement('canvas'); nightC.width = w; nightC.height = h; }
+    const n = nightC.getContext('2d');
+    n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, w, h);
+    n.fillStyle = 'rgba(12,16,44,0.78)'; n.fillRect(0, 0, w, h);
+    n.globalCompositeOperation = 'destination-out';
+    const hole = (x, y, r, a = 1) => {
+      x -= camX; y -= camY;
+      if (x < -r || y < -r || x > w + r || y > h + r) return;
+      const gr = n.createRadialGradient(x, y, r * 0.15, x, y, r);
+      gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      n.fillStyle = gr; n.beginPath(); n.arc(x, y, r, 0, 7); n.fill();
+    };
+    const b = bagPos(world);
+    hole(b.x, b.y, 200, 0.9);
+    for (const u of world.heroes) hole(u.x, u.y, 120 + 6 * Math.sin(t * 3 + u.x), 0.85);
+    for (const e of world.enemies) if (e.type === 'wisp' || e.boss || e.event) hole(e.x, e.y, e.boss ? 160 : e.type === 'vein' ? 110 : 55, 0.7);
+    for (const c of world.coins) if (c.value >= 5) hole(c.x, c.y, 30, 0.5);
+    const p = world.pointer;
+    if (p.inside) hole(p.x + camX, p.y + camY, 90, 0.6);
+    g.drawImage(nightC, 0, 0, w, h);
+    // étoiles
+    g.fillStyle = '#dfe8ff';
+    for (let i = 0; i < 40; i++) {
+      g.globalAlpha = 0.15 + 0.25 * Math.abs(Math.sin(t * 0.8 + i * 1.7));
+      g.fillRect(((i * 131.7) % w), ((i * 71.3) % (h * 0.5)), 2, 2);
+    }
+    g.globalAlpha = 1;
+  } else if (id === 'neige') {
+    g.fillStyle = '#ffffff';
+    for (let i = 0; i < 220; i++) {
+      const sp = 30 + (i % 7) * 9, sz = 3 + (i % 3);
+      const x = ((i * 97.13 + Math.sin(t * 0.7 + i) * 30 - camX * 0.3) % w + w) % w;
+      const y = ((i * 53.71 + t * sp - camY * 0.3) % h + h) % h;
+      g.globalAlpha = 0.5 + 0.4 * ((i * 13) % 5) / 5;
+      g.fillRect(Math.round(x), Math.round(y), sz, sz);
+    }
+    g.globalAlpha = 1;
   }
 }
 

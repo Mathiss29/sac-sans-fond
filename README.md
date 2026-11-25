@@ -39,7 +39,8 @@ Dans l'antre (60 s) : le boss annonce des cercles de feu qui étourdissent les h
 Les trois morceaux de `assets/music/` sont de Mathis, créés avec Suno (abonnement Pro) :
 
 - **Atelier** : *Pixel Meadow*
-- **Expédition** : *Fantasy Battle Arp*
+- **Expédition** : *Fantasy Battle Arp* (crépuscule, neige)
+- **Expédition, matin** et **expédition, minuit** : deux morceaux d'ambiance
 - **Boss** (dans son antre) : *Pixel Demons Rage*
 
 Le bouton 🔊 coupe musique et bruitages.
