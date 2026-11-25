@@ -280,7 +280,7 @@ function screenCount() {
 
 // ---------- Atelier : le grand arbre ----------
 // Une croix qui part du sac. Brouillard : on voit les nœuds achetés, leurs enfants, et des « ? » un cran plus loin.
-const G = 78, PAD = 90;
+const G = 84, PAD = 90;
 const minX = Math.min(...NODES.map(n => n.x)), minY = Math.min(...NODES.map(n => n.y));
 const maxX = Math.max(...NODES.map(n => n.x)), maxY = Math.max(...NODES.map(n => n.y));
 let selected = 'root', hover = null;
@@ -353,8 +353,8 @@ function renderTree() {
     const a = pos(NODE[n.parent]), b = pos(n), own = L(n.id) > 0;
     const d = a.x === b.x || a.y === b.y ? `M${a.x},${a.y} L${b.x},${b.y}` : `M${a.x},${a.y} L${b.x},${a.y} L${b.x},${b.y}`;
     // traits à angle droit, couleur de la branche : vive si achetée, éteinte sinon
-    el('path', { d, fill: 'none', stroke: '#0b0806', 'stroke-width': 7, 'stroke-linejoin': 'miter' });
-    el('path', { d, fill: 'none', stroke: own ? colorOf(n) : visible(n) ? mixDim(colorOf(n)) : '#3a3026', 'stroke-width': 3,
+    el('path', { d, fill: 'none', stroke: '#10140d', 'stroke-width': own ? 8 : 6, 'stroke-linejoin': 'miter' });
+    el('path', { d, fill: 'none', stroke: own ? colorOf(n) : '#272d23', 'stroke-width': own ? 4 : 2,
       'stroke-linejoin': 'miter', 'stroke-dasharray': visible(n) ? '' : '3 4' });
   }
   // étiquette de branche : petit texte en couleur au-dessus du premier nœud de la branche
@@ -389,7 +389,7 @@ function renderTree() {
       if (locked) { const pd = document.createElement('span'); pd.className = 'pad'; pd.textContent = n.soon ? '…' : '🔒'; b.append(pd); }
       if (afford) b.append(Object.assign(document.createElement('span'), { className: 'dot' }));
       if (!seen.has(n.id) && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'newTag', textContent: 'Nouveau' }));
-      if (lv && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'ok', textContent: isMax ? '✓' : lv }));
+      if (lv && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'ok', textContent: '✓' }));
     }
     // un clic achète (comme une caisse enregistreuse) ; survol ou clic montrent la fiche
     b.onclick = () => { selected = n.id; if (!tz && afford) buy(n); else renderTree(); };
@@ -415,27 +415,23 @@ function renderInfo() {
     add('p', 'locked', `Achète d'abord « ${NODE[n.parent].name} » pour révéler cette compétence.`);
     return;
   }
-  add('div', 'branch', branchName(n) + (n.max > 1 && !n.soon ? ` · niveau ${lv}/${n.max}` : '') + (n.badge ? ` · ${n.badge}` : ''));
+  const kind = { up: 'Amélioration', unlock: 'Déblocage', major: 'Majeur', ult: 'Ultime', lock: 'Déblocage', secret: 'Secret', cls: 'Classe' }[n.type] || '';
+  const hd = add('div', 'branch', branchName(n) + (n.badge ? ` · ${n.badge}` : ''));
+  hd.append(Object.assign(document.createElement('i'), { textContent: n.max > 1 && !n.soon ? `Niv. ${lv}/${n.max}` : kind }));
   add('h3', '', n.name);
-  if (n.soon) {
-    add('p', '', n.desc);
-    if (n.cond) add('p', 'cond', n.cond);
-    add('p', 'locked', 'Bientôt dans le jeu.');
-    return;
-  }
   add('p', '', n.desc);
-  add('div', 'eff', isMax ? n.effect(lv) : lv ? `${n.effect(lv)}  →  ${n.effect(lv + 1)}` : n.effect(1));
+  if (n.soon) { if (n.cond) add('p', 'cond', n.cond); add('p', 'locked', 'Bientôt dans le jeu.'); return; }
+  const eff = add('div', 'eff', isMax ? n.effect(lv) : lv ? n.effect(lv) + '  →  ' : '');
+  if (!isMax) eff.append(Object.assign(document.createElement('b'), { textContent: n.effect(lv + 1) }));
   if (lockedNow(n)) { add('p', 'locked', '🔒 ' + n.cond); return; }
-  if (!isMax && lv >= capOf(n)) add('p', 'locked', '🔒 ' + (n.capMsg || 'Pas encore disponible.'));
-  else if (!isMax) {
-    const b = document.createElement('button'); b.className = 'btn';
-    b.append(`Acheter · ${fmt(costOf(n, lv))} `);
-    const i = document.createElement('span'); i.className = 'coin-ico'; b.append(i);
-    b.disabled = save.coins < costOf(n, lv);
-    b.onclick = () => buy(n);
-    box.append(b);
-    if (b.disabled) add('p', 'need', `Encore ${fmt(costOf(n, lv) - save.coins)} pièces`);
-  }
+  if (!isMax && lv >= capOf(n)) { add('p', 'locked', '🔒 ' + (n.capMsg || 'Pas encore disponible.')); return; }
+  if (isMax) return;
+  const c = costOf(n, lv), pr = document.createElement('div'); pr.className = 'price';
+  const amt = document.createElement('span'); const i = document.createElement('span'); i.className = 'coin-ico';
+  amt.append(i, ' ' + fmt(c));
+  pr.append(amt, save.coins >= c ? Object.assign(document.createElement('span'), { className: 'go', textContent: 'Clique pour acheter' })
+    : Object.assign(document.createElement('span'), { className: 'need', textContent: `Il manque ${fmt(c - save.coins)}` }));
+  box.append(pr);
 }
 // La fiche suit le nœud : à sa droite, ou à sa gauche près du bord.
 function placeInfo(n) {
