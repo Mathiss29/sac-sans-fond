@@ -44,6 +44,10 @@ Les trois morceaux de `assets/music/` sont de Mathis, créés avec Suno (abonnem
 
 Le bouton 🔊 coupe musique et bruitages.
 
+## Personnages dessinés
+
+Les planches de `assets/sprites/heros/` (archer) et `assets/sprites/demons/` ont été générées par Mathis avec ChatGPT, puis converties en vrai pixel art (grille, nettoyage du fond, alignement des images) par `tools/convertir-planche-heros.py` et `tools/convertir-planche-ia.py`. Chaque héros a une bande par animation : repos, marche, attaque, coup reçu, victoire.
+
 ## Feuille de route
 
 1. **Boucle de base** (fait) : une contrée, trois familles d'élémentaires, archers, sac à paliers, Déchirure, Atelier, sauvegarde, pixel art maison, grande map avec caméra et mini-map.
