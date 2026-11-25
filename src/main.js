@@ -1,7 +1,7 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
 import { ZONES, TIERS, NODES, HEROES, HERO_ORDER, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
-import { unlockAudio, play, setMuted } from './audio.js';
+import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { createWorld, startExpedition, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
 import { render, drawHero, drawBag, getMap } from './render.js';
 
@@ -127,8 +127,8 @@ function refreshMute() {
   document.querySelectorAll('.mute').forEach(b => { b.textContent = save.muted ? '🔇' : '🔊'; b.setAttribute('aria-label', save.muted ? 'Remettre le son' : 'Couper le son'); });
 }
 document.querySelectorAll('.mute').forEach(b => b.addEventListener('click', () => { unlockAudio(); save.muted = !save.muted; writeSave(save); refreshMute(); }));
-window.addEventListener('pointerdown', unlockAudio);
-window.addEventListener('keydown', unlockAudio);
+window.addEventListener('pointerdown', () => { unlockAudio(); unlockMusic(); });
+window.addEventListener('keydown', () => { unlockAudio(); unlockMusic(); });
 refreshMute();
 
 function drainEvents() {
@@ -358,6 +358,20 @@ $('reset').onclick = () => {
   }
 };
 
+// Musique du moment : Atelier, expédition, ou boss quand on est près de sa clairière.
+function musicFor() {
+  if (world.phase === 'expedition') {
+    const bo = world.run && world.run.boss;
+    if (bo && !bo.dead) {
+      const cx = world.cam.x + world.w / 2, cy = world.cam.y + world.h / 2;
+      if ((bo.x - cx) ** 2 + (bo.y - cy) ** 2 < 750 * 750) return 'boss';
+    }
+    return 'expedition';
+  }
+  if (world.phase === 'tear') return 'expedition';
+  return 'atelier';
+}
+
 // ---------- Boucle à pas fixe ----------
 const STEP = 1 / 60;
 let acc = 0, last = performance.now();
@@ -374,6 +388,7 @@ function frame(now) {
   }
   render(g, world, dpr);
   hud();
+  setTrack(musicFor());
   drawMinimap();
   requestAnimationFrame(frame);
 }
