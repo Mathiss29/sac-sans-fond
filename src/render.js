@@ -319,7 +319,7 @@ export function render(g, world, dpr) {
   for (const tx of world.texts) {
     g.globalAlpha = Math.min(1, tx.life * 3);
     const sc = tx.dmg ? 1 + Math.max(0, 0.6 - tx.pop * 6) : 1;
-    g.font = `800 ${Math.round(tx.size * sc)}px 'Alegreya Sans', system-ui, sans-serif`;
+    g.font = `800 ${Math.round(tx.size * sc)}px 'Pixelify Sans', system-ui, sans-serif`;
     g.strokeStyle = '#24161e'; g.lineWidth = 3.5; g.strokeText(tx.text, tx.x, tx.y);
     g.fillStyle = tx.color; g.fillText(tx.text, tx.x, tx.y);
   }
@@ -333,7 +333,7 @@ export function render(g, world, dpr) {
   if (cb.t > 0 && cb.n >= 3 && world.pointer.inside) {
     const sc = 1 + Math.max(0, cb.t - 0.9) * 2;
     g.globalAlpha = Math.min(1, cb.t * 2);
-    g.font = `800 ${Math.round(18 * sc)}px 'Alegreya SC', Georgia, serif`; g.textAlign = 'left';
+    g.font = `800 ${Math.round(18 * sc)}px 'Pixelify Sans', monospace`; g.textAlign = 'left';
     g.strokeStyle = '#24161e'; g.lineWidth = 4;
     const txt = `×${cb.n}`;
     g.strokeText(txt, world.pointer.x + 22, world.pointer.y - 18); g.fillStyle = cb.n >= 20 ? '#ff9a3c' : '#ffd246'; g.fillText(txt, world.pointer.x + 22, world.pointer.y - 18);
@@ -445,11 +445,11 @@ function drawPortal(g, world, t, px) {
   }
   g.restore();
   g.drawImage(spr.c, x0, y0, W, H);
-  g.font = `800 15px 'Alegreya SC', Georgia, serif`; g.textAlign = 'center'; g.lineJoin = 'round';
+  g.font = `800 15px 'Pixelify Sans', monospace`; g.textAlign = 'center'; g.lineJoin = 'round';
   const label = r && r.lair.done ? 'Portail refermé' : open ? world.zone.boss.lair : 'Portail scellé';
   g.strokeStyle = '#24161e'; g.lineWidth = 4; g.strokeText(label, p.x, y0 - 8);
   g.fillStyle = open ? '#ffb347' : '#c8b8b0'; g.fillText(label, p.x, y0 - 8);
-  if (open) { const sub = 'clique pour entrer'; g.font = `700 12px 'Alegreya Sans', system-ui, sans-serif`; g.strokeText(sub, p.x, y0 + H + 16); g.fillStyle = '#fff2c8'; g.fillText(sub, p.x, y0 + H + 16); }
+  if (open) { const sub = 'clique pour entrer'; g.font = `700 12px 'Pixelify Sans', system-ui, sans-serif`; g.strokeText(sub, p.x, y0 + H + 16); g.fillStyle = '#fff2c8'; g.fillText(sub, p.x, y0 + H + 16); }
 }
 
 function drawBraziers(g, map, t, px) {
