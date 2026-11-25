@@ -114,6 +114,7 @@ function finishExpedition() {
   const r = world.run;
   const gained = r.tearGot + r.overflow + r.lair.got;
   save.expeditions++;
+  const record = save.expeditions > 1 && gained > save.best;
   save.best = Math.max(save.best, gained);
   if (!r.lair.only) save.maxTier = Math.max(save.maxTier || 0, r.tier);
   const unlocked = !lairOpen() && r.tier >= ARENA.unlockTier;
@@ -142,7 +143,13 @@ function finishExpedition() {
     const dd = document.createElement('dd'); dd.textContent = b; dd.className = 'num';
     dl.append(dt, dd);
   }
-  $('resTotal').textContent = '+' + fmt(gained);
+  // le total compte jusqu'au gain, puis on annonce ce qui est achetable
+  const t0 = performance.now(), el = $('resTotal');
+  const tick = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = '+' + fmt(Math.round(gained * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+  $('resRecord').hidden = !record;
+  const can = NODES.filter(n => visible(n) && !n.soon && !lockedNow(n) && L(n.id) < capOf(n) && save.coins >= costOf(n, L(n.id))).length;
+  $('resNews').textContent = can ? `${can} compétence${can > 1 ? 's' : ''} à acheter !` : '';
   $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true; $('attrBox').hidden = true;
   $('result').hidden = false;
   $('back').focus();
@@ -166,6 +173,36 @@ window.addEventListener('pointerdown', () => { unlockAudio(); unlockMusic(); });
 window.addEventListener('keydown', () => { unlockAudio(); unlockMusic(); });
 refreshMute();
 
+// Première fois qu'un événement arrive : le jeu se met en pause et une fiche l'explique.
+let paused = false;
+const EVENT_HELP = {
+  rain: ['Pluie de pièces !', 'Des pièces tombent du ciel pendant quelques secondes. Passe le gant dessus pour les ramasser avant qu\'elles ne disparaissent.', 'coin'],
+  vein: ['Filon d\'or !', 'Un rocher veiné d\'or. Chaque coup de tes héros en fait jaillir des pièces : largue-les près de lui !', 'vein'],
+  goblin: ['Gobelin voleur !', 'Il file avec un sac d\'or. Rattrape-le avec tes héros avant qu\'il ne s\'échappe : il lâche tout son butin.', 'goblin'],
+  mimic: ['Un coffre ?', 'Méfie-toi, c\'est une mimique. Frappe-la pour la réveiller, puis abats-la pour son trésor. Attention, elle mord !', 'mimic'],
+};
+function eventIntro(kind) {
+  save.eventsSeen = save.eventsSeen || {};
+  const h = EVENT_HELP[kind];
+  if (!h || save.eventsSeen[kind]) return;
+  save.eventsSeen[kind] = true; writeSave(save);
+  paused = true;
+  const card = document.createElement('div'); card.className = 'evCard'; card.setAttribute('role', 'dialog'); card.setAttribute('aria-label', h[0]);
+  const ic = document.createElement('canvas'); ic.width = ic.height = 64;
+  const g2 = ic.getContext('2d'); g2.imageSmoothingEnabled = false;
+  const spr = getSprites();
+  const src = h[2] === 'coin' ? spr.coin : spr.enemies[h[2]] && spr.enemies[h[2]][h[2] === 'mimic' ? 0 : 0].c;
+  if (src) { const k = Math.min(56 / src.width, 56 / src.height); g2.drawImage(src, 32 - src.width * k / 2, 32 - src.height * k / 2, src.width * k, src.height * k); }
+  const t = document.createElement('h3'); t.textContent = h[0];
+  const p = document.createElement('p'); p.textContent = h[1];
+  const ok = document.createElement('button'); ok.className = 'btn'; ok.textContent = 'Compris';
+  const close = () => { card.remove(); paused = false; removeEventListener('keydown', key, true); };
+  const key = e => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+  ok.onclick = close; addEventListener('keydown', key, true);
+  const body = document.createElement('div'); body.append(t, p);
+  card.append(ic, body, ok); $('app').append(card); ok.focus();
+}
+
 function drainEvents() {
   for (const s of world.sfx) play(s.name, s);
   world.sfx.length = 0;
@@ -173,6 +210,7 @@ function drainEvents() {
     if (ev.kind === 'banner') bannerQ.push(ev);
     else if (ev.kind === 'coins') save.coins += ev.value;
     else if (ev.kind === 'done') finishExpedition();
+    else if (ev.kind === 'eventIntro') eventIntro(ev.ev);
     else if (ev.kind === 'boss') { save.bosses = save.bosses || {}; save.bosses[world.zone.id] = (save.bosses[world.zone.id] || 0) + 1; writeSave(save); }
     else if (ev.kind === 'arena') { arenaUi(); buildDropBar(); }
     else if (ev.kind === 'tear') { $('dropBar').hidden = true; $('hint').hidden = true; document.querySelectorAll('.edge').forEach(b => { b.hidden = true; }); }
@@ -246,6 +284,8 @@ const G = 78, PAD = 90;
 const minX = Math.min(...NODES.map(n => n.x)), minY = Math.min(...NODES.map(n => n.y));
 const maxX = Math.max(...NODES.map(n => n.x)), maxY = Math.max(...NODES.map(n => n.y));
 let selected = 'root', hover = null;
+// nœuds déjà vus (pour l'étiquette « Nouveau ») ; une ancienne sauvegarde a tout vu
+const seen = new Set(save.seen || []);
 const mixDim = hex => { const v = parseInt(hex.slice(1), 16); const c = k => Math.round(((v >> k) & 255) * 0.42 + 20); return `rgb(${c(16)},${c(8)},${c(0)})`; };
 const L = id => save.level[id] || 0;
 const visible = n => !n.parent || L(n.parent) > 0 || L(n.id) > 0;
@@ -348,11 +388,12 @@ function renderTree() {
       if (n.badge) { const bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = n.badge; b.append(bd); }
       if (locked) { const pd = document.createElement('span'); pd.className = 'pad'; pd.textContent = n.soon ? '…' : '🔒'; b.append(pd); }
       if (afford) b.append(Object.assign(document.createElement('span'), { className: 'dot' }));
+      if (!seen.has(n.id) && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'newTag', textContent: 'Nouveau' }));
       if (lv && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'ok', textContent: isMax ? '✓' : lv }));
     }
     // un clic achète (comme une caisse enregistreuse) ; survol ou clic montrent la fiche
     b.onclick = () => { selected = n.id; if (!tz && afford) buy(n); else renderTree(); };
-    b.onmouseenter = () => { hover = n.id; renderInfo(); };
+    b.onmouseenter = () => { hover = n.id; renderInfo(); if (!seen.has(n.id)) { seen.add(n.id); save.seen = [...seen]; writeSave(save); b.querySelector('.newTag')?.remove(); } };
     b.onmouseleave = () => { hover = null; renderInfo(); };
     inner.append(b);
   }
@@ -414,11 +455,37 @@ function buy(n) {
   if (n.soon || lockedNow(n) || !visible(n) || lv >= capOf(n)) return;
   const c = costOf(n, lv);
   if (save.coins < c) return;
+  const hidden = new Set(NODES.filter(m => !visible(m)).map(m => m.id));
   save.coins -= c; save.level[n.id] = lv + 1;
   unlockAudio(); play('buy');
   writeSave(save);
   stats = computeStats(save.level);
   renderTree();
+  buyFx(n, c, NODES.filter(m => hidden.has(m.id) && visible(m)));
+}
+
+// Effets d'achat : le nœud rebondit, des étincelles jaillissent, le prix s'envole, les nœuds révélés éclosent.
+function buyFx(n, cost, revealed) {
+  const inner = $('treeInner'), el = inner.querySelector(`[data-id="${n.id}"]`), q = pos(n), col = colorOf(n);
+  if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+  for (let i = 0; i < 14; i++) {
+    const sp = document.createElement('i'); sp.className = 'spark';
+    const a = (i / 14) * Math.PI * 2 + Math.random() * 0.4, d = 34 + Math.random() * 34;
+    sp.style.left = q.x + 'px'; sp.style.top = q.y + 'px'; sp.style.background = i % 3 ? col : '#ffe68a';
+    sp.style.setProperty('--dx', Math.cos(a) * d + 'px'); sp.style.setProperty('--dy', Math.sin(a) * d + 'px');
+    inner.append(sp); setTimeout(() => sp.remove(), 650);
+  }
+  const ring = document.createElement('i'); ring.className = 'buyRing'; ring.style.left = q.x + 'px'; ring.style.top = q.y + 'px'; ring.style.borderColor = col;
+  inner.append(ring); setTimeout(() => ring.remove(), 600);
+  if (cost > 0) {
+    const t = document.createElement('span'); t.className = 'costFly'; t.textContent = '−' + fmt(cost);
+    t.style.left = q.x + 'px'; t.style.top = (q.y - 30) + 'px'; inner.append(t); setTimeout(() => t.remove(), 1100);
+  }
+  const w = $('atelierWallet').parentElement; w.classList.remove('spend'); void w.offsetWidth; w.classList.add('spend');
+  revealed.forEach((m, i) => {
+    const e = inner.querySelector(`[data-id="${m.id}"]`);
+    if (e) { e.style.animationDelay = (0.15 + i * 0.08) + 's'; e.classList.add('reveal'); }
+  });
 }
 
 // ---------- Entrées ----------
@@ -504,10 +571,15 @@ window.addEventListener('keyup', e => { if (e.code === 'Space') world.holdKey = 
 $('go').onclick = go;
 $('lairBtn').onclick = goLair;
 $('back').onclick = toAtelier;
+$('again').onclick = () => { $('result').hidden = true; go(); };
+addEventListener('keydown', e => {
+  if ($('result').hidden) return;
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); $('again').click(); }
+});
 let resetArmed = 0;
 $('reset').onclick = () => {
   if (Date.now() - resetArmed < 3000) {
-    save = freshSave(); writeSave(save); selected = 'root'; renderTree();
+    save = freshSave(); seen.clear(); writeSave(save); selected = 'root'; stats = computeStats(save.level); renderTree();
     $('reset').textContent = 'Recommencer à zéro';
   } else {
     resetArmed = Date.now(); $('reset').textContent = 'Clique encore pour tout effacer';
@@ -532,6 +604,7 @@ function frame(now) {
   acc += Math.min(0.25, (now - last) / 1000); last = now;
   const wr = $('walletBox').getBoundingClientRect(), ar = app.getBoundingClientRect();
   world.walletPos = { x: wr.left - ar.left + 20, y: wr.top - ar.top + wr.height / 2 };
+  if (paused) acc = 0;
   while (acc >= STEP) {
     scrollCam(STEP);
     update(world, STEP);
@@ -583,6 +656,7 @@ function centerTree() {
 }
 
 // premier nœud utile sélectionné par défaut
+if (!save.seen && save.expeditions > 0) { for (const n of NODES) if (visible(n)) seen.add(n.id); save.seen = [...seen]; }
 selected = (NODES.find(n => visible(n) && !n.soon && !lockedNow(n) && L(n.id) < n.max && n.id !== 'root') || NODE.root).id;
 renderTree();
 centerTree();

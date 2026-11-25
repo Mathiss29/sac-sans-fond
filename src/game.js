@@ -101,6 +101,7 @@ function startEvent(world, ev) {
   const def = EVENTS[ev.kind], p = eventSpot(world), r = world.run;
   ev.done = true;
   world.events.push({ kind: 'banner', title: def.title, sub: def.sub });
+  world.events.push({ kind: 'eventIntro', ev: ev.kind });
   sfx(world, 'portal');
   const value = eventValue(world, ev.kind);
   if (ev.kind === 'rain') {

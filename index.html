@@ -71,10 +71,14 @@
 
   <section class="screen" id="result" hidden>
     <div class="box">
-      <h2>Bilan de l'expédition</h2>
+      <h2>Expédition terminée</h2>
       <dl id="resList"></dl>
-      <div class="total"><span>Gagné</span><span class="num" id="resTotal">0</span></div>
-      <button class="btn" id="back">Retour à l'Atelier</button>
+      <div class="total"><span>Total <b class="record" id="resRecord" hidden>Record !</b></span><span class="num" id="resTotal">0</span></div>
+      <p id="resNews"></p>
+      <div class="resBtns">
+        <button class="btn second" id="again" type="button">Rejouer <kbd>R</kbd></button>
+        <button class="btn" id="back" type="button">Améliorer <kbd>Entrée</kbd></button>
+      </div>
     </div>
   </section>
 </div>

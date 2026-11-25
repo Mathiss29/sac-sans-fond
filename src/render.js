@@ -301,6 +301,16 @@ export function render(g, world, dpr) {
     }
   }
 
+  // traînées lumineuses derrière les projectiles (flèches blanches, givre bleu, notes dorées)
+  g.lineCap = 'round';
+  for (const a of world.arrows) {
+    const len = a.kind === 'arrow' ? 46 : 26, col = a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
+    const tr = g.createLinearGradient(a.x, a.y, a.x - a.dx * len, a.y - a.dy * len);
+    tr.addColorStop(0, `rgba(${col},.75)`); tr.addColorStop(1, `rgba(${col},0)`);
+    g.strokeStyle = tr; g.lineWidth = a.kind === 'arrow' ? 2.5 : 4;
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * len, a.y - a.dy * len); g.stroke();
+  }
+  g.lineCap = 'butt';
   for (const a of world.arrows) {
     if (a.kind === 'frost') {
       g.fillStyle = '#24161e'; g.fillRect(Math.round(a.x) - px * 2, Math.round(a.y) - px * 2, px * 4, px * 4);
