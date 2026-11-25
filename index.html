@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sac sans Fond</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@700;800&family=Alegreya+Sans:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="cv"></canvas>
+
+  <div id="hud" hidden>
+    <div class="chip" id="walletBox"><span class="coin-ico"></span><span id="wallet" class="num">0</span></div>
+    <div class="chip" id="bagBox">
+      <div id="bagTop"><span id="tierName">Sac de toile</span><span id="tierMult">×1</span></div>
+      <div class="bar"><div id="bagFill"></div></div>
+      <div id="bagTxt" class="num">0 / 120</div>
+    </div>
+    <div class="chip" id="timerBox"><div id="timer" class="num">30.0</div><div id="zoneTxt">Clairière</div></div>
+    <div class="chip" id="attrBox">Attraction<div class="bar"><div id="attrFill"></div></div><small>maintenir le clic ou Espace</small></div>
+  </div>
+  <div id="dropBar" hidden></div>
+  <div id="hint" hidden>Clique pour larguer tes archers · Passe le gant sur les pièces</div>
+  <div id="banner"></div>
+
+  <section class="screen" id="atelier">
+    <header class="screenHead">
+      <div>
+        <h1 class="logo">Sac <span>sans</span> Fond</h1>
+        <p class="sub">Largue tes héros, remplis le sac du vieux mage, puis rafle tout quand il se déchire.</p>
+      </div>
+      <div class="headRight">
+        <div class="chip big"><span class="coin-ico"></span><span id="atelierWallet" class="num">0</span></div>
+        <button class="btn" id="go">Partir en expédition</button>
+      </div>
+    </header>
+    <div id="treeWrap">
+      <div id="treeScroll"><div id="treeInner"><svg id="treeLines"></svg></div></div>
+      <aside id="info"></aside>
+    </div>
+    <footer class="screenFoot">
+      <button class="ghost" id="reset">Recommencer à zéro</button>
+      <span class="sub" id="stats"></span>
+    </footer>
+  </section>
+
+  <section class="screen" id="result" hidden>
+    <div class="box">
+      <h2>Bilan de l'expédition</h2>
+      <dl id="resList"></dl>
+      <div class="total"><span>Gagné</span><span class="num" id="resTotal">0</span></div>
+      <button class="btn" id="back">Retour à l'Atelier</button>
+    </div>
+  </section>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
