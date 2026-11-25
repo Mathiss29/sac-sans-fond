@@ -39,17 +39,19 @@ export function drawEnemy(g, e, t, px = 3) {
   const frames = SPR.enemies[e.gold ? 'gold' : e.type] || SPR.enemies.wisp;
   const f = frames[Math.floor(e.ph * 0.9) % frames.length];
   const img = e.hit > 0 ? f.white : f.c;
-  const w = img.width * px, h = img.height * px;
+  const k = e.boss ? px * 2 : px;
+  const w = img.width * k, h = img.height * k;
   const fly = e.type !== 'golem';
   const hover = fly ? Math.round(Math.sin(e.ph * 1.3) * 1.5) * px : 0;
   shadow(g, e.x, e.y + h * 0.45, w * 0.32, px * 1.6);
-  if (e.type === 'wisp' || e.gold) {
+  if (e.type === 'wisp' || e.gold || e.boss) {
     const halo = g.createRadialGradient(e.x, e.y + hover, 2, e.x, e.y + hover, w * 0.9);
     halo.addColorStop(0, e.gold ? 'rgba(255,230,120,.45)' : 'rgba(255,170,80,.35)'); halo.addColorStop(1, 'rgba(255,170,80,0)');
     g.fillStyle = halo; g.beginPath(); g.arc(e.x, e.y + hover, w * 0.9, 0, 7); g.fill();
   }
   g.drawImage(img, Math.round(e.x - w / 2), Math.round(e.y - h / 2 + hover), w, h);
-  if (e.hp < e.max) {
+  if (e.slow > 0) { g.fillStyle = 'rgba(174,230,255,.35)'; g.fillRect(Math.round(e.x - w / 2), Math.round(e.y - h / 2 + hover), w, h); }
+  if (e.hp < e.max && !e.boss) {
     const bw = Math.max(18, w * 0.7), y = Math.round(e.y - h / 2 + hover - 7);
     g.fillStyle = '#24161e'; g.fillRect(Math.round(e.x - bw / 2) - 1, y - 1, bw + 2, 5);
     g.fillStyle = '#9be36b'; g.fillRect(Math.round(e.x - bw / 2), y, bw * Math.max(0, e.hp / e.max), 3);
@@ -155,7 +157,10 @@ export function render(g, world, dpr) {
   for (const f of world.fx) {
     const k = 1 - f.t / f.life;
     g.strokeStyle = f.color; g.globalAlpha = 1 - k; g.lineWidth = 3;
-    g.beginPath(); g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, 0, 7); g.stroke();
+    g.beginPath();
+    if (f.kind === 'slash') { const a0 = f.face > 0 ? -1.2 : Math.PI - 1.2; g.lineWidth = 4; g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, a0 + k * 1.5, a0 + 1 + k * 1.5); }
+    else g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, 0, 7);
+    g.stroke();
   }
   g.globalAlpha = 1;
 
@@ -170,12 +175,29 @@ export function render(g, world, dpr) {
 
   for (const e of world.enemies) drawEnemy(g, e, t, px);
 
-  for (const u of world.heroes) drawArcher(g, u.x, u.y - u.drop * h * 0.5, u.face, u.bob, 1, px);
+  // aura des bardes
+  for (const u of world.heroes) {
+    if (u.type !== 'bard' || u.drop > 0) continue;
+    g.strokeStyle = 'rgba(255,230,140,.25)'; g.setLineDash([2, 8]); g.lineWidth = 2; g.lineDashOffset = -t * 10;
+    g.beginPath(); g.arc(u.x, u.y + 8, world.stats.bardAura, 0, 7); g.stroke(); g.setLineDash([]);
+  }
+  const heroes = [...world.heroes].sort((a, b) => a.y - b.y);
+  for (const u of heroes) {
+    drawHero(g, u.type, u.x, u.y + 12 - u.drop * h * 0.5, u.face, u.moving ? u.bob * 2 : u.bob * 0.5, 1, px);
+  }
 
-  g.strokeStyle = '#5a3a1a'; g.lineWidth = 2;
   for (const a of world.arrows) {
-    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * 12, a.y - a.dy * 12); g.stroke();
-    g.fillStyle = '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, 1.6, 0, 7); g.fill();
+    if (a.kind === 'frost') {
+      g.fillStyle = '#24161e'; g.fillRect(Math.round(a.x) - px * 2, Math.round(a.y) - px * 2, px * 4, px * 4);
+      g.fillStyle = '#aee6ff'; g.fillRect(Math.round(a.x) - px * 1.5, Math.round(a.y) - px * 1.5, px * 3, px * 3);
+      g.fillStyle = '#f0fbff'; g.fillRect(Math.round(a.x) - px, Math.round(a.y) - px, px, px);
+    } else if (a.kind === 'note') {
+      g.fillStyle = '#ffe68a'; g.font = `700 ${px * 6}px system-ui, sans-serif`; g.textAlign = 'center'; g.fillText('♪', a.x, a.y + px * 2);
+    } else {
+      g.strokeStyle = '#5a3a1a'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * 12, a.y - a.dy * 12); g.stroke();
+      g.fillStyle = '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, 1.6, 0, 7); g.fill();
+    }
   }
 
   for (const tx of world.texts) {
@@ -190,7 +212,7 @@ export function render(g, world, dpr) {
   // curseur : gant d'attraction
   const p = world.pointer;
   if (p.inside && (world.phase === 'expedition' || world.phase === 'tear')) {
-    if (canDrop(world)) drawArcher(g, p.x, p.y, 1, 0, 0.5, px);
+    if (canDrop(world)) drawHero(g, world.run.sel, p.x, p.y + 12, 1, 0, 0.5, px);
     const rad = gloveRadius(world);
     const on = attractionActive(world);
     g.strokeStyle = on ? 'rgba(255,214,102,.95)' : 'rgba(255,248,225,.65)';

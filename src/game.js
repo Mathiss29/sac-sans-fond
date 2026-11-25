@@ -1,5 +1,5 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
-import { ENEMIES, HEROES, TIERS, FULL_BONUS, BASE, MAP, bagMax, tierOf } from './data.js';
+import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, BASE, MAP, bagMax, tierOf } from './data.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -38,13 +38,14 @@ export function startExpedition(world, stats, zone) {
     stats, zone,
     run: {
       t: 0, duration: stats.duration, spawnT: 0, bag: 0, full: false, overflow: 0,
-      kills: 0, toDrop: { archer: stats.archers }, attraction: stats.attraction,
+      kills: 0, toDrop: { ...stats.heroes }, sel: 'archer', attraction: stats.attraction, boss: null, bossKilled: false, golds: 0,
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
     },
   });
   const b = bagPos(world);
   centerCam(world, b.x, b.y + 40);
   for (let i = 0; i < 22; i++) spawnEnemy(world, true);
+  if (zone.boss) spawnBoss(world);
   world.events.push({ kind: 'banner', title: 'Expédition !', sub: zone.name });
 }
 
@@ -73,26 +74,51 @@ function spawnEnemy(world, anywhere = false) {
     x = Math.max(40, Math.min(mapW - 40, x)); y = Math.max(40, Math.min(mapH - 40, y));
     if ((x - bag.x) ** 2 + (y - bag.y) ** 2 > 230 * 230) break;
   }
+  const gold = type === 'wisp' && Math.random() < (world.stats?.goldChance || 0);
   const e = {
-    type, def, x, y, r: def.radius,
+    type, def, x, y, r: def.radius, gold, slow: 0,
     hp: def.hp * world.zone.hpMult, max: def.hp * world.zone.hpMult,
-    value: def.value * world.zone.valueMult,
+    value: def.value * world.zone.valueMult * (gold ? GOLD_WISP.value : 1),
     a: rnd(0, Math.PI * 2),
     ph: rnd(0, 6), age: 0, hit: 0, dead: false,
   };
+  if (gold) { e.hp *= GOLD_WISP.hp; e.max = e.hp; if (world.run) world.run.golds++; }
   world.enemies.push(e);
-  world.fx.push({ kind: 'ring', x, y, r0: 2, r1: def.radius * 1.8, t: 0.4, life: 0.4, color: def.color });
+  world.fx.push({ kind: 'ring', x, y, r0: 2, r1: def.radius * 1.8, t: 0.4, life: 0.4, color: gold ? GOLD_WISP.color : def.color });
+  if (gold && world.phase === 'expedition') world.texts.push({ x, y: y - 26, text: 'Feu follet doré !', color: GOLD_WISP.color, size: 15, life: 1.6 });
   return e;
 }
 
+export function bossHome(world) {
+  const b = world.zone.boss;
+  return { x: b.at[0] * world.mapW, y: b.at[1] * world.mapH, r: b.area * Math.min(world.mapW, world.mapH) * 0.75 };
+}
+
+// L'élémentaire primordial reste dans sa clairière et rôde lentement.
+function spawnBoss(world) {
+  const b = world.zone.boss, home = bossHome(world);
+  const e = {
+    type: 'boss', boss: true, def: { ...b, color: '#ff7a3c', core: '#fff1c2' }, x: home.x, y: home.y, r: b.radius,
+    hp: b.hp * world.zone.hpMult, max: b.hp * world.zone.hpMult, value: b.value * world.zone.valueMult,
+    a: rnd(0, 6), ph: rnd(0, 6), age: 0, hit: 0, dead: false, slow: 0, home,
+  };
+  world.enemies.push(e);
+  world.run.boss = e;
+}
+
 export function canDrop(world) {
-  return world.phase === 'expedition' && world.run.toDrop.archer > 0;
+  return world.phase === 'expedition' && world.run.toDrop[world.run.sel] > 0;
+}
+export function selectHero(world, type) {
+  if (world.run && world.run.toDrop[type] > 0) world.run.sel = type;
 }
 
 export function dropHero(world, x, y) {
   if (!canDrop(world)) return false;
-  world.heroes.push({ type: 'archer', x, y, cd: rnd(0, 0.3), drop: 1, face: 1, bob: rnd(0, 6) });
-  world.run.toDrop.archer--;
+  const r = world.run, type = r.sel;
+  world.heroes.push({ type, x, y, cd: rnd(0, 0.3), drop: 1, face: 1, bob: rnd(0, 6), boost: 0 });
+  r.toDrop[type]--;
+  if (r.toDrop[type] <= 0) { const next = HERO_ORDER.find(k => r.toDrop[k] > 0); if (next) r.sel = next; }
   return true;
 }
 
@@ -106,8 +132,10 @@ function nearestEnemy(world, p) {
   return best;
 }
 
-function damage(world, e, amount) {
+function damage(world, e, amount, slow) {
   if (e.dead) return;
+  if (e.boss) amount *= world.stats.bossMult;
+  if (slow) e.slow = Math.max(e.slow, slow);
   if (e.def.dodge && Math.random() < e.def.dodge) {
     world.texts.push({ x: e.x, y: e.y - e.r - 6, text: 'esquive', color: '#d6f2ff', size: 12, life: 0.7 });
     return;
@@ -119,9 +147,15 @@ function damage(world, e, amount) {
 function killEnemy(world, e) {
   e.dead = true;
   world.run.kills++;
-  const n = Math.min(6, 1 + Math.ceil(Math.log2(1 + e.value / 3)));
+  const n = e.boss ? 40 : Math.min(e.gold ? 12 : 6, 1 + Math.ceil(Math.log2(1 + e.value / 3)));
+  if (e.boss) {
+    world.run.bossKilled = true;
+    world.events.push({ kind: 'boss', name: e.def.name });
+    world.events.push({ kind: 'banner', title: e.def.name + ' vaincu !', sub: 'Une pluie de pièces dans la clairière' });
+    world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 5, t: 0.8, life: 0.8, color: '#ffd246' });
+  }
   for (let i = 0; i < n; i++) {
-    const a = rnd(0, Math.PI * 2), s = rnd(30, 110);
+    const a = rnd(0, Math.PI * 2), s = e.boss ? rnd(60, 260) : rnd(30, 110);
     world.coins.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
       value: e.value / n, life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0 });
   }
@@ -199,9 +233,12 @@ export function update(world, dt) {
 function updateEnemies(world, dt) {
   const w = world.mapW, h = world.mapH;
   for (const e of world.enemies) {
-    e.ph += dt * 3; e.age += dt; e.hit -= dt;
+    e.ph += dt * 3; e.age += dt; e.hit -= dt; e.slow = Math.max(0, e.slow - dt);
     e.a += rnd(-1, 1) * dt * 1.2;
-    const sp = e.def.speed * (0.55 + 0.45 * Math.max(0, Math.sin(e.ph)));
+    let sp = e.def.speed * (0.55 + 0.45 * Math.max(0, Math.sin(e.ph)));
+    if (e.gold) sp *= GOLD_WISP.speed;
+    if (e.slow > 0) sp *= 1 - HEROES.mage.slow;
+    if (e.home && (e.x - e.home.x) ** 2 + (e.y - e.home.y) ** 2 > e.home.r * e.home.r) e.a = Math.atan2(e.home.y - e.y, e.home.x - e.x) + rnd(-0.5, 0.5);
     e.x += Math.cos(e.a) * sp * dt; e.y += Math.sin(e.a) * sp * dt;
     const m = e.r + 10;
     if (e.age > 2) {
@@ -214,23 +251,40 @@ function updateEnemies(world, dt) {
 
 function updateHeroes(world, dt) {
   const s = world.stats;
+  const bards = world.heroes.filter(u => u.type === 'bard' && u.drop <= 0);
   for (const u of world.heroes) {
     if (u.drop > 0) {
       u.drop -= dt * 3;
       if (u.drop <= 0) { u.drop = 0; world.fx.push({ kind: 'ring', x: u.x, y: u.y + 10, r0: 6, r1: 34, t: 0.4, life: 0.4, color: '#fff6dc' }); }
       continue;
     }
-    u.bob += dt * 3; u.cd -= dt;
+    const def = HEROES[u.type];
+    // chanson du barde : les autres héros à portée agissent plus vite
+    u.boost = bards.some(b => b !== u && d2(b, u) < s.bardAura * s.bardAura) ? s.bardBoost : 0;
+    u.bob += dt * 3; u.cd -= dt * (1 + u.boost);
+    if (u.boost > 0 && Math.random() < dt * 0.8) world.texts.push({ x: u.x + rnd(-8, 8), y: u.y - 34, text: '♪', color: '#ffe68a', size: 14, life: 0.7 });
     const t = nearestEnemy(world, u);
     if (!t) continue;
     const dist = Math.sqrt(d2(u, t));
     u.face = t.x >= u.x ? 1 : -1;
-    if (dist > HEROES.archer.range) {
-      u.x += (t.x - u.x) / dist * HEROES.archer.walkSpeed * dt;
-      u.y += (t.y - u.y) / dist * HEROES.archer.walkSpeed * dt;
-    } else if (u.cd <= 0) {
-      world.arrows.push({ x: u.x, y: u.y - 8, target: t, damage: s.arrowDamage, dx: 0, dy: 0 });
-      u.cd = s.arrowCooldown;
+    const reach = def.range + (def.shot === 'melee' ? t.r : 0);
+    if (dist > reach) {
+      u.x += (t.x - u.x) / dist * def.walkSpeed * dt;
+      u.y += (t.y - u.y) / dist * def.walkSpeed * dt;
+      u.moving = true;
+    } else {
+      u.moving = false;
+      if (u.cd > 0) continue;
+      u.cd = s.cooldown[u.type];
+      const dmg = s.damage[u.type];
+      if (def.shot === 'melee') {
+        // coup circulaire : touche la cible et tout ce qui est autour
+        for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave + e.r) ** 2) damage(world, e, dmg);
+        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave + 10, t: 0.22, life: 0.22, color: '#f0f4fa', face: u.face });
+      } else {
+        world.arrows.push({ kind: def.shot, x: u.x, y: u.y - 10, target: t, damage: dmg, dx: 0, dy: 0, speed: def.speed,
+          aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' ? HEROES.mage.slowTime : 0 });
+      }
     }
   }
 }
@@ -240,9 +294,15 @@ function updateArrows(world, dt) {
     const t = a.target;
     const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy) || 1;
     a.dx = dx / d; a.dy = dy / d;
-    a.x += a.dx * HEROES.archer.arrowSpeed * dt; a.y += a.dy * HEROES.archer.arrowSpeed * dt;
+    a.x += a.dx * a.speed * dt; a.y += a.dy * a.speed * dt;
     if (t.dead) a.done = true;
-    else if (d < t.r) { a.done = true; damage(world, t, a.damage); }
+    else if (d < t.r) {
+      a.done = true;
+      if (a.aoe) {
+        for (const e of world.enemies) if (!e.dead && d2(e, t) < (a.aoe + e.r) ** 2) damage(world, e, a.damage, a.slow);
+        world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 6, r1: a.aoe, t: 0.35, life: 0.35, color: '#aee6ff' });
+      } else damage(world, t, a.damage);
+    }
   }
   world.arrows = world.arrows.filter(a => !a.done);
 }
