@@ -2,26 +2,33 @@
 import { TIERS, bagMax, tierOf } from './data.js';
 import { bagPos, canDrop, gloveRadius, attractionActive } from './game.js';
 
-import { buildSprites, bagSprite, buildMeadow } from './sprites.js';
+import { buildSprites, bagSprite, buildMap } from './sprites.js';
 
 const SPR = buildSprites();
-let bg = null, bgKey = '';
 
 // Taille d'un pixel d'art à l'écran : 3 sur ordinateur, 2 sur téléphone.
 export function pixelSize(w, h) { return Math.max(2, Math.min(4, Math.round(Math.min(w, h) / 240))); }
 
-function buildBackground(w, h, dpr, zone, px) {
-  const low = buildMeadow(Math.ceil(w / px), Math.ceil(h / px), zone);
-  const c = document.createElement('canvas');
-  c.width = w * dpr; c.height = h * dpr;
-  const g = c.getContext('2d');
-  g.imageSmoothingEnabled = false;
-  g.drawImage(low, 0, 0, low.width * px * dpr, low.height * px * dpr);
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+// La région est dessinée une fois en basse résolution, puis on n'en affiche que la partie visible.
+let mapInfo = null, mapKey = '', vig = null, vigKey = '';
+export function getMap(world) {
+  const px = pixelSize(world.w, world.h);
+  const key = `${world.zone.id}@${px}:${world.mapW}x${world.mapH}`;
+  if (key !== mapKey) {
+    mapInfo = buildMap(Math.ceil(world.mapW / px), Math.ceil(world.mapH / px), world.zone);
+    mapInfo.px = px; mapKey = key;
+  }
+  return mapInfo;
+}
+function vignette(w, h, dpr) {
+  const key = `${w}x${h}@${dpr}`;
+  if (key === vigKey) return vig;
+  const c = document.createElement('canvas'); c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const v = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.4, w / 2, h / 2, Math.max(w, h) * 0.75);
   v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(20,12,4,.35)');
   g.fillStyle = v; g.fillRect(0, 0, w, h);
-  return c;
+  vig = c; vigKey = key; return c;
 }
 
 function shadow(g, x, y, rx, ry) {
@@ -100,11 +107,13 @@ function shade(hex, f) {
 export function render(g, world, dpr) {
   const { w, h } = world;
   const zone = world.zone;
-  const px = pixelSize(w, h);
-  const key = `${w}x${h}@${dpr}:${zone.id}`;
-  if (key !== bgKey) { bg = buildBackground(w, h, dpr, zone, px); bgKey = key; }
+  const map = getMap(world), px = map.px;
+  // caméra calée sur la grille des pixels d'art pour éviter le scintillement
+  const sx = Math.round(world.cam.x / px), sy = Math.round(world.cam.y / px);
+  const camX = sx * px, camY = sy * px;
   g.imageSmoothingEnabled = false;
-  g.drawImage(bg, 0, 0, w, h);
+  g.fillStyle = '#1c2a1c'; g.fillRect(0, 0, w, h);
+  g.drawImage(map.c, sx, sy, Math.ceil(w / px), Math.ceil(h / px), 0, 0, Math.ceil(w / px) * px, Math.ceil(h / px) * px);
   const t = world.t;
 
   // lucioles d'ambiance
@@ -117,6 +126,7 @@ export function render(g, world, dpr) {
   }
   g.globalAlpha = 1;
 
+  g.save(); g.translate(-camX, -camY);
   const r = world.run;
   if (r && (world.phase === 'expedition' || world.phase === 'tear')) {
     const b = bagPos(world);
@@ -174,6 +184,8 @@ export function render(g, world, dpr) {
     g.fillText(tx.text, tx.x, tx.y);
   }
   g.globalAlpha = 1;
+  g.restore();
+  g.drawImage(vignette(w, h, dpr), 0, 0, w, h);
 
   // curseur : gant d'attraction
   const p = world.pointer;

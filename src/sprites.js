@@ -417,3 +417,141 @@ function tree(g, x, y, r, col, rnd) {
     g.fillRect(x + xx, y + yy, 1, 1);
   }
 }
+
+// Grande map d'une région : chemins de terre, bosquets, étang, clairière du campement au centre,
+// clairière sombre du boss dans un coin. Dessinée en basse résolution (1 pixel = 1 pixel d'art).
+// Renvoie le canvas et quelques repères (en pixels d'art) pour le jeu et la mini-map.
+export function buildMap(w, h, zone, seed = 11) {
+  let s = seed;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const busy = new Uint8Array(w * h); // 1 = chemin/eau/campement : pas d'arbre ni de rocher
+  const mark = (x, y, r) => {
+    for (let yy = -r; yy <= r; yy++) for (let xx = -r; xx <= r; xx++) {
+      const X = Math.round(x + xx), Y = Math.round(y + yy);
+      if (X >= 0 && Y >= 0 && X < w && Y < h && xx * xx + yy * yy <= r * r) busy[Y * w + X] = 1;
+    }
+  };
+  const isBusy = (x, y, r = 0) => {
+    for (let yy = -r; yy <= r; yy += Math.max(1, r)) for (let xx = -r; xx <= r; xx += Math.max(1, r)) {
+      const X = Math.round(x + xx), Y = Math.round(y + yy);
+      if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
+      if (busy[Y * w + X]) return true;
+    }
+    return false;
+  };
+
+  // sol et taches d'herbe
+  g.fillStyle = zone.ground[0]; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < (w * h) / 2200; i++) {
+    const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h), r = 5 + Math.floor(rnd() * 14);
+    g.fillStyle = rnd() < 0.5 ? zone.patch : zone.ground[1];
+    for (let yy = -r; yy <= r; yy++) for (let xx = -r * 2; xx <= r * 2; xx++) {
+      if ((xx * xx) / 4 + yy * yy <= r * r * (0.8 + rnd() * 0.3)) g.fillRect(x + xx, y + yy, 1, 1);
+    }
+  }
+  g.fillStyle = zone.ground[1];
+  for (let i = 0; i < (w * h) / 40; i++) { const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h); g.fillRect(x, y, 1, 2); if (rnd() < 0.4) g.fillRect(x + 1, y + 1, 1, 1); }
+  g.fillStyle = zone.patch;
+  for (let i = 0; i < (w * h) / 120; i++) g.fillRect(Math.floor(rnd() * w), Math.floor(rnd() * h), 1, 1);
+
+  const cx = Math.round(w / 2), cy = Math.round(h / 2);
+  const boss = { x: Math.round(w * 0.84), y: Math.round(h * 0.2), r: Math.round(Math.min(w, h) * 0.13) };
+  const pond = { x: Math.round(w * 0.24), y: Math.round(h * 0.28), r: Math.round(Math.min(w, h) * 0.08) };
+
+  // clairière du boss : sol sombre et cercle de pierres
+  for (let yy = -boss.r; yy <= boss.r; yy++) for (let xx = -boss.r; xx <= boss.r; xx++) {
+    const d = (xx * xx + yy * yy) / (boss.r * boss.r);
+    const edge = 1 - (Math.sin(Math.atan2(yy, xx) * 7) * 0.06 + 0.06);
+    if (d > edge) continue;
+    g.fillStyle = d > edge - 0.12 ? zone.ground[1] : mix(zone.ground[1], -0.28);
+    g.fillRect(boss.x + xx, boss.y + yy, 1, 1);
+  }
+  for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; blob(g, Math.round(boss.x + Math.cos(a) * boss.r * 0.8), Math.round(boss.y + Math.sin(a) * boss.r * 0.6), 2, mix(zone.rock, -0.15), rnd); }
+  mark(boss.x, boss.y, boss.r);
+
+  // chemins : du campement vers les bords et vers la clairière du boss
+  const dirt = zone.path || '#c9a06a', dirtDark = mix(dirt, -0.25), dirtLight = mix(dirt, 0.2);
+  const paths = [
+    [cx, cy, 0, Math.round(h * 0.62)], [cx, cy, w, Math.round(h * 0.45)],
+    [cx, cy, Math.round(w * 0.42), h], [cx, cy, boss.x, boss.y], [cx, cy, Math.round(w * 0.36), 0],
+  ];
+  const dots = [];
+  for (const [x0, y0, x1, y1] of paths) {
+    const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0));
+    const ph = rnd() * 6, amp = 6 + rnd() * 10;
+    const nx = -(y1 - y0) / n, ny = (x1 - x0) / n;
+    for (let i = 0; i <= n; i++) {
+      const k = i / n, wob = Math.sin(k * 7 + ph) * amp * Math.sin(k * Math.PI);
+      dots.push([x0 + (x1 - x0) * k + nx * wob, y0 + (y1 - y0) * k + ny * wob]);
+    }
+  }
+  const PW = 3;
+  g.fillStyle = dirtDark; for (const [x, y] of dots) g.fillRect(Math.round(x) - PW - 1, Math.round(y) - PW, PW * 2 + 2, PW * 2 + 1);
+  g.fillStyle = dirt; for (const [x, y] of dots) g.fillRect(Math.round(x) - PW, Math.round(y) - PW + 1, PW * 2, PW * 2 - 1);
+  g.fillStyle = dirtLight; for (let i = 0; i < dots.length; i += 7) { const [x, y] = dots[i]; g.fillRect(Math.round(x) - 1 + (i % 3), Math.round(y) - 1, 1, 1); }
+  for (const [x, y] of dots) mark(x, y, PW + 3);
+
+  // clairière du campement (là où trône le sac)
+  const camp = Math.round(Math.min(w, h) * 0.055);
+  for (let yy = -camp; yy <= camp; yy++) for (let xx = -camp * 1.4; xx <= camp * 1.4; xx++) {
+    const d = (xx * xx) / (camp * camp * 1.96) + (yy * yy) / (camp * camp);
+    if (d > 1) continue;
+    g.fillStyle = d > 0.86 ? dirtDark : d > 0.7 && rnd() < 0.25 ? dirtLight : dirt;
+    g.fillRect(cx + Math.round(xx), cy + Math.round(yy), 1, 1);
+  }
+  mark(cx, cy, Math.round(camp * 1.5));
+  // pierres autour du campement
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; blob(g, Math.round(cx + Math.cos(a) * camp * 1.5), Math.round(cy + Math.sin(a) * camp * 1.05), 1 + (i % 2), zone.rock, rnd); }
+
+  // étang
+  const water = zone.water || '#3f8fc8', wDark = mix(water, -0.35), wLight = mix(water, 0.45);
+  for (let yy = -pond.r; yy <= pond.r; yy++) for (let xx = -pond.r * 1.6; xx <= pond.r * 1.6; xx++) {
+    const ang = Math.atan2(yy, xx), rr = 1 + Math.sin(ang * 3 + 1) * 0.12;
+    const d = Math.sqrt((xx * xx) / 2.56 + yy * yy) / (pond.r * rr);
+    if (d > 1) continue;
+    g.fillStyle = d > 0.9 ? '#24161e' : d > 0.8 ? mix(zone.ground[1], -0.2) : yy < -pond.r * 0.3 && d > 0.6 ? wLight : d > 0.55 ? water : wDark;
+    g.fillRect(pond.x + Math.round(xx), pond.y + Math.round(yy), 1, 1);
+  }
+  g.fillStyle = wLight;
+  for (let i = 0; i < 14; i++) { const x = pond.x + Math.round((rnd() - 0.5) * pond.r * 2), y = pond.y + Math.round((rnd() - 0.5) * pond.r); g.fillRect(x, y, 3, 1); }
+  mark(pond.x, pond.y, Math.round(pond.r * 1.7));
+
+  // fleurs et rochers sur l'herbe libre
+  for (let i = 0; i < (w * h) / 600; i++) {
+    const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h);
+    if (isBusy(x, y)) continue;
+    g.fillStyle = zone.flower[Math.floor(rnd() * zone.flower.length)];
+    g.fillRect(x - 1, y, 1, 1); g.fillRect(x + 1, y, 1, 1); g.fillRect(x, y - 1, 1, 1); g.fillRect(x, y + 1, 1, 1);
+    g.fillStyle = '#f2b33d'; g.fillRect(x, y, 1, 1);
+  }
+  for (let i = 0; i < (w * h) / 5000; i++) {
+    const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h);
+    if (!isBusy(x, y, 3)) blob(g, x, y, 2 + Math.floor(rnd() * 3), zone.rock, rnd);
+  }
+
+  // bosquets + lisière épaisse sur les bords
+  const trees = [];
+  const tryTree = (x, y) => {
+    const r = 6 + Math.floor(rnd() * 5);
+    if (x < -4 || y < -4 || x > w + 4 || y > h + 4 || isBusy(x, y + r, Math.round(r * 0.6))) return;
+    trees.push([Math.round(x), Math.round(y), r]);
+  };
+  const clumps = Math.round((w * h) / 9000);
+  for (let i = 0; i < clumps; i++) {
+    const x0 = rnd() * w, y0 = rnd() * h, rad = 14 + rnd() * 30, n = 4 + Math.floor(rnd() * 12);
+    for (let k = 0; k < n; k++) { const a = rnd() * 7, d = Math.sqrt(rnd()) * rad; tryTree(x0 + Math.cos(a) * d * 1.3, y0 + Math.sin(a) * d); }
+  }
+  const edgeN = Math.round((w + h) / 4);
+  for (let i = 0; i < edgeN; i++) {
+    const edge = Math.floor(rnd() * 4), d = rnd() * 22 - 4;
+    const x = edge === 0 || edge === 2 ? rnd() * w : edge === 1 ? w - d : d;
+    const y = edge === 1 || edge === 3 ? rnd() * h : edge === 0 ? d : h - d + 4;
+    tryTree(x, y);
+  }
+  trees.sort((a, b) => a[1] - b[1]);
+  for (const [x, y, r] of trees) tree(g, x, y, r, zone.tree, rnd);
+
+  return { c, camp: { x: cx, y: cy, r: camp }, boss, pond };
+}

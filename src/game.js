@@ -1,12 +1,13 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
-import { ENEMIES, HEROES, TIERS, FULL_BONUS, BASE, bagMax, tierOf } from './data.js';
+import { ENEMIES, HEROES, TIERS, FULL_BONUS, BASE, MAP, bagMax, tierOf } from './data.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
 
+// w, h : taille de l'écran. mapW, mapH : taille de la région. cam : coin haut-gauche de l'écran dans la région.
 export function createWorld(w, h) {
   return {
-    w, h,
+    w, h, mapW: MAP.w, mapH: MAP.h, cam: { x: (MAP.w - w) / 2, y: (MAP.h - h) / 2 },
     phase: 'idle',      // idle | expedition | tear | done
     enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [],
     pointer: { x: -999, y: -999, inside: false, down: false, usedForDrop: false },
@@ -16,7 +17,20 @@ export function createWorld(w, h) {
   };
 }
 
-export function bagPos(world) { return { x: world.w / 2, y: world.h * 0.56 }; }
+export function bagPos(world) { return { x: world.mapW / 2, y: world.mapH / 2 }; }
+
+// Position du gant dans la région.
+export function pointerWorld(world) { const p = world.pointer; return { x: p.x + world.cam.x, y: p.y + world.cam.y }; }
+
+export function clampCam(world) {
+  const c = world.cam;
+  c.x = Math.max(0, Math.min(world.mapW - world.w, c.x));
+  c.y = Math.max(0, Math.min(world.mapH - world.h, c.y));
+  if (world.mapW < world.w) c.x = (world.mapW - world.w) / 2;
+  if (world.mapH < world.h) c.y = (world.mapH - world.h) / 2;
+}
+export function moveCam(world, dx, dy) { world.cam.x += dx; world.cam.y += dy; clampCam(world); }
+export function centerCam(world, x, y) { world.cam.x = x - world.w / 2; world.cam.y = y - world.h / 2; clampCam(world); }
 
 export function startExpedition(world, stats, zone) {
   Object.assign(world, {
@@ -28,10 +42,9 @@ export function startExpedition(world, stats, zone) {
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
     },
   });
-  for (let i = 0; i < 6; i++) {
-    const e = spawnEnemy(world);
-    e.x = rnd(world.w * 0.15, world.w * 0.85); e.y = rnd(world.h * 0.2, world.h * 0.85);
-  }
+  const b = bagPos(world);
+  centerCam(world, b.x, b.y + 40);
+  for (let i = 0; i < 22; i++) spawnEnemy(world, true);
   world.events.push({ kind: 'banner', title: 'Expédition !', sub: zone.name });
 }
 
@@ -43,21 +56,32 @@ function pickEnemyType(zone) {
   return entries[0][0];
 }
 
-function spawnEnemy(world) {
+// Les élémentaires apparaissent partout dans la région, jamais collés au sac,
+// et plus souvent autour des héros pour qu'ils aient de quoi faire.
+function spawnEnemy(world, anywhere = false) {
   const type = pickEnemyType(world.zone);
   const def = ENEMIES[type];
-  const { w, h } = world;
-  const side = Math.floor(rnd(0, 4)), m = 24;
-  const x = side === 0 ? rnd(0, w) : side === 1 ? w + m : side === 2 ? rnd(0, w) : -m;
-  const y = side === 0 ? -m : side === 1 ? rnd(60, h) : side === 2 ? h + m : rnd(60, h);
+  const { mapW, mapH } = world;
+  const bag = bagPos(world);
+  let x, y;
+  for (let k = 0; k < 12; k++) {
+    if (!anywhere && world.heroes.length && Math.random() < 0.55) {
+      const u = world.heroes[Math.floor(Math.random() * world.heroes.length)];
+      const a = rnd(0, Math.PI * 2), d = rnd(220, 520);
+      x = u.x + Math.cos(a) * d; y = u.y + Math.sin(a) * d;
+    } else { x = rnd(60, mapW - 60); y = rnd(60, mapH - 60); }
+    x = Math.max(40, Math.min(mapW - 40, x)); y = Math.max(40, Math.min(mapH - 40, y));
+    if ((x - bag.x) ** 2 + (y - bag.y) ** 2 > 230 * 230) break;
+  }
   const e = {
     type, def, x, y, r: def.radius,
     hp: def.hp * world.zone.hpMult, max: def.hp * world.zone.hpMult,
     value: def.value * world.zone.valueMult,
-    a: Math.atan2(h / 2 - y, w / 2 - x) + rnd(-0.6, 0.6),
+    a: rnd(0, Math.PI * 2),
     ph: rnd(0, 6), age: 0, hit: 0, dead: false,
   };
   world.enemies.push(e);
+  world.fx.push({ kind: 'ring', x, y, r0: 2, r1: def.radius * 1.8, t: 0.4, life: 0.4, color: def.color });
   return e;
 }
 
@@ -75,7 +99,7 @@ export function dropHero(world, x, y) {
 function nearestEnemy(world, p) {
   let best = null, bd = Infinity;
   for (const e of world.enemies) {
-    if (e.dead || e.x < 0 || e.y < 0 || e.x > world.w || e.y > world.h) continue;
+    if (e.dead) continue;
     const d = d2(p, e);
     if (d < bd) { bd = d; best = e; }
   }
@@ -139,7 +163,7 @@ export function update(world, dt) {
 
   updateEnemies(world, dt);
   if (world.phase === 'idle') {
-    while (world.enemies.length < 6) spawnEnemy(world);
+    while (world.enemies.length < 20) spawnEnemy(world, true);
     return;
   }
   if (world.phase === 'done') return;
@@ -156,6 +180,8 @@ export function update(world, dt) {
     updateArrows(world, dt);
     if (r.t >= r.duration) { r.t = r.duration; startTear(world); }
   } else if (world.phase === 'tear') {
+    const b = bagPos(world), k = Math.min(1, dt * 4);
+    world.cam.x += (b.x - world.w / 2 - world.cam.x) * k; world.cam.y += (b.y - world.h / 2 - world.cam.y) * k; clampCam(world);
     if (r.shake > 0) {
       r.shake -= dt;
       if (r.shake <= 0) burstBag(world);
@@ -171,7 +197,7 @@ export function update(world, dt) {
 }
 
 function updateEnemies(world, dt) {
-  const { w, h } = world;
+  const w = world.mapW, h = world.mapH;
   for (const e of world.enemies) {
     e.ph += dt * 3; e.age += dt; e.hit -= dt;
     e.a += rnd(-1, 1) * dt * 1.2;
@@ -180,7 +206,7 @@ function updateEnemies(world, dt) {
     const m = e.r + 10;
     if (e.age > 2) {
       if (e.x < m) e.a = rnd(-0.8, 0.8); else if (e.x > w - m) e.a = Math.PI + rnd(-0.8, 0.8);
-      if (e.y < m + 50) e.a = Math.PI / 2 + rnd(-0.8, 0.8); else if (e.y > h - m - 40) e.a = -Math.PI / 2 + rnd(-0.8, 0.8);
+      if (e.y < m) e.a = Math.PI / 2 + rnd(-0.8, 0.8); else if (e.y > h - m) e.a = -Math.PI / 2 + rnd(-0.8, 0.8);
     }
   }
   world.enemies = world.enemies.filter(e => !e.dead);
@@ -224,7 +250,9 @@ function updateArrows(world, dt) {
 function updateCoins(world, dt) {
   const gr = gloveRadius(world);
   const bag = bagPos(world);
-  const target = world.phase === 'tear' ? world.walletPos : bag;
+  const wp = world.walletPos || { x: 20, y: 20 };
+  const target = world.phase === 'tear' ? { x: wp.x + world.cam.x, y: wp.y + world.cam.y } : bag;
+  const p = pointerWorld(world), inside = world.pointer.inside;
   const mouth = world.phase === 'expedition' ? world.stats.bagMouth : 0;
   for (const c of world.coins) {
     if (c.fly) {
@@ -240,8 +268,7 @@ function updateCoins(world, dt) {
     c.life -= dt;
     if (c.life <= 0) { c.dead = true; continue; }
     const fresh = c.life < c.max - 0.15;
-    const p = world.pointer;
-    if (fresh && p.inside && (c.x - p.x) ** 2 + (c.y - p.y) ** 2 < gr * gr) { c.fly = true; c.sp = 120; }
+    if (fresh && inside && (c.x - p.x) ** 2 + (c.y - p.y) ** 2 < gr * gr) { c.fly = true; c.sp = 120; }
     else if (fresh && mouth && d2(c, bag) < mouth * mouth) { c.fly = true; c.sp = 60; }
   }
   world.coins = world.coins.filter(c => !c.dead);

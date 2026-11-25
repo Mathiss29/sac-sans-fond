@@ -1,8 +1,8 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
 import { ZONES, TIERS, NODES, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
-import { createWorld, startExpedition, update, dropHero, canDrop } from './game.js';
-import { render, drawHero, drawBag } from './render.js';
+import { createWorld, startExpedition, update, dropHero, canDrop, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
+import { render, drawHero, drawBag, getMap } from './render.js';
 
 const $ = id => document.getElementById(id);
 const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
@@ -19,6 +19,7 @@ function resize() {
   dpr = Math.min(2, window.devicePixelRatio || 1);
   cv.width = world.w * dpr; cv.height = world.h * dpr;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  clampCam(world);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -48,7 +49,7 @@ function go() {
   stats = computeStats(save.level);
   startExpedition(world, stats, ZONES[0]);
   $('atelier').hidden = true; $('result').hidden = true;
-  $('hud').hidden = false; $('dropBar').hidden = false; $('hint').hidden = false;
+  $('hud').hidden = false; $('dropBar').hidden = false; $('hint').hidden = false; $('mapUi').hidden = false; document.querySelectorAll('.edge').forEach(b => { b.hidden = false; });
   buildDropBar();
 }
 
@@ -63,8 +64,8 @@ function buildDropBar() {
   const cnt = document.createElement('span'); cnt.className = 'cnt num'; cnt.textContent = n;
   b.append(c, name, cnt);
   box.append(b);
-  if (n <= 0) $('hint').textContent = 'Passe le gant sur les pièces · Maintiens le clic pour l\'Attraction';
-  else $('hint').textContent = 'Clique pour larguer tes archers · Passe le gant sur les pièces';
+  if (n <= 0) $('hint').textContent = 'ZQSD ou flèches pour te déplacer · Passe le gant sur les pièces';
+  else $('hint').textContent = 'Clique pour larguer tes archers · ZQSD ou flèches pour te déplacer';
 }
 
 function finishExpedition() {
@@ -89,7 +90,7 @@ function finishExpedition() {
     dl.append(dt, dd);
   }
   $('resTotal').textContent = '+' + fmt(gained);
-  $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true;
+  $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true;
   $('result').hidden = false;
   $('back').focus();
 }
@@ -106,7 +107,7 @@ function drainEvents() {
     if (ev.kind === 'banner') bannerQ.push(ev);
     else if (ev.kind === 'coins') save.coins += ev.value;
     else if (ev.kind === 'done') finishExpedition();
-    else if (ev.kind === 'tear') { $('dropBar').hidden = true; $('hint').hidden = true; }
+    else if (ev.kind === 'tear') { $('dropBar').hidden = true; $('hint').hidden = true; document.querySelectorAll('.edge').forEach(b => { b.hidden = true; }); }
   }
   world.events.length = 0;
 }
@@ -239,10 +240,63 @@ cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') p.insi
 cv.addEventListener('pointerdown', e => {
   setPointer(e); p.down = true; p.usedForDrop = false;
   try { cv.setPointerCapture(e.pointerId); } catch (_) { /* rien */ }
-  if (canDrop(world) && p.y > 60) { dropHero(world, p.x, p.y); p.usedForDrop = true; buildDropBar(); }
+  if (canDrop(world) && p.y > 60) { const q = pointerWorld(world); dropHero(world, q.x, q.y); p.usedForDrop = true; buildDropBar(); }
 });
 cv.addEventListener('pointerup', e => { p.down = false; if (e.pointerType !== 'mouse') p.inside = false; });
 cv.addEventListener('pointercancel', () => { p.down = false; p.inside = false; });
+// Déplacement de la caméra : ZQSD sur clavier français, WASD sur clavier anglais (mêmes touches physiques), ou flèches.
+const CAM_KEYS = { KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+const held = new Set();
+const playing = () => world.phase === 'expedition' || world.phase === 'tear';
+window.addEventListener('keydown', e => {
+  if (CAM_KEYS[e.code] && playing()) { held.add(e.code); e.preventDefault(); }
+});
+window.addEventListener('keyup', e => held.delete(e.code));
+window.addEventListener('blur', () => { held.clear(); edgeHeld.clear(); });
+const edgeHeld = new Set();
+document.querySelectorAll('.edge').forEach(b => {
+  const dir = b.dataset.dir;
+  b.addEventListener('pointerdown', e => { edgeHeld.add(dir); try { b.setPointerCapture(e.pointerId); } catch (_) { /* rien */ } });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, () => edgeHeld.delete(dir));
+});
+const EDGE = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+function scrollCam(dt) {
+  if (world.phase !== 'expedition') return;
+  let dx = 0, dy = 0;
+  for (const k of held) { dx += CAM_KEYS[k][0]; dy += CAM_KEYS[k][1]; }
+  for (const k of edgeHeld) { dx += EDGE[k][0]; dy += EDGE[k][1]; }
+  if (!dx && !dy) return;
+  const n = Math.hypot(dx, dy), sp = 760 * dt;
+  moveCam(world, dx / n * sp, dy / n * sp);
+}
+
+// ---------- Mini-map ----------
+const mm = $('minimap'), mg = mm.getContext('2d');
+function drawMinimap() {
+  if (!playing()) return;
+  const map = getMap(world);
+  const W = mm.clientWidth, H = Math.round(W * world.mapH / world.mapW);
+  if (mm.width !== W * dpr || mm.height !== H * dpr) { mm.width = W * dpr; mm.height = H * dpr; mm.style.height = H + 'px'; }
+  const k = W / world.mapW;
+  mg.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mg.imageSmoothingEnabled = true;
+  mg.drawImage(map.c, 0, 0, W, H);
+  const dot = (x, y, r, col) => { mg.fillStyle = col; mg.fillRect(Math.round(x * k - r / 2), Math.round(y * k - r / 2), r, r); };
+  for (const c of world.coins) dot(c.x, c.y, 2, '#ffd34d');
+  for (const e of world.enemies) dot(e.x, e.y, 3, '#ff6b4a');
+  const b = bagPos(world); dot(b.x, b.y, 6, '#fff2c8');
+  for (const u of world.heroes) dot(u.x, u.y, 4, '#7ee06b');
+  mg.strokeStyle = '#fff'; mg.lineWidth = 1.5;
+  mg.strokeRect(world.cam.x * k, world.cam.y * k, world.w * k, world.h * k);
+}
+function minimapJump(e) {
+  if (world.phase !== 'expedition') return;
+  const r = mm.getBoundingClientRect();
+  centerCam(world, (e.clientX - r.left) / r.width * world.mapW, (e.clientY - r.top) / r.height * world.mapH);
+}
+mm.addEventListener('pointerdown', e => { minimapJump(e); try { mm.setPointerCapture(e.pointerId); } catch (_) { /* rien */ } });
+mm.addEventListener('pointermove', e => { if (e.buttons) minimapJump(e); });
+
 window.addEventListener('keydown', e => {
   if (e.code === 'Space' && (world.phase === 'expedition' || world.phase === 'tear')) { world.holdKey = true; e.preventDefault(); }
 });
@@ -269,6 +323,7 @@ function frame(now) {
   const wr = $('walletBox').getBoundingClientRect(), ar = app.getBoundingClientRect();
   world.walletPos = { x: wr.left - ar.left + 20, y: wr.top - ar.top + wr.height / 2 };
   while (acc >= STEP) {
+    scrollCam(STEP);
     update(world, STEP);
     drainEvents();
     tickBanner(STEP);
@@ -276,6 +331,7 @@ function frame(now) {
   }
   render(g, world, dpr);
   hud();
+  drawMinimap();
   requestAnimationFrame(frame);
 }
 

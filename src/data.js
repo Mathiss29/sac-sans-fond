@@ -16,7 +16,7 @@ export const ZONES = [
   {
     id: 'clairiere', name: 'Clairière',
     ground: ['#6fa65a', '#4f8a45'], patch: '#86bb68', flower: ['#f6e27a', '#f29bb8', '#ffffff'],
-    rock: '#8c8f86', tree: '#2f6b3c',
+    rock: '#8c8f86', tree: '#2f6b3c', path: '#c9a06a', water: '#3f8fc8',
     hpMult: 1, valueMult: 1,
     spawn: { wisp: 5, golem: 2, wind: 3 },
   },
@@ -33,10 +33,13 @@ export const HEROES = {
   archer: { name: 'Archer', range: 200, damage: 3, cooldown: 0.9, arrowSpeed: 560, walkSpeed: 24 },
 };
 
+// Taille d'une région, en pixels d'écran (environ 3 × 3 écrans d'ordinateur).
+export const MAP = { w: 2700, h: 1800 };
+
 export const BASE = {
   duration: 30,          // s
-  spawnEvery: 0.75,      // s entre deux apparitions
-  maxEnemies: 28,
+  spawnEvery: 0.45,      // s entre deux apparitions
+  maxEnemies: 55,
   archers: 3,
   bagCapacity: 120,      // pièces pour le premier palier
   gloveRadius: 46,       // px
