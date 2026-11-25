@@ -229,7 +229,7 @@ const GEM_PAL = { ...LOOT_PAL, O: '#123a52', l: '#b8f2ff' };
 
 // ---------- Construction des canvas ----------
 
-function toCanvas(rows, pal) {
+export function toCanvas(rows, pal) {
   const h = rows.length, w = Math.max(...rows.map(r => r.length));
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d');
@@ -240,7 +240,7 @@ function toCanvas(rows, pal) {
   return c;
 }
 // Version blanche du sprite, pour le flash quand il est touché.
-function whiteOf(c) {
+export function whiteOf(c) {
   const w = document.createElement('canvas'); w.width = c.width; w.height = c.height;
   const g = w.getContext('2d'); g.drawImage(c, 0, 0);
   g.globalCompositeOperation = 'source-in'; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
