@@ -242,10 +242,11 @@ function screenCount() {
 
 // ---------- Atelier : le grand arbre ----------
 // Une croix qui part du sac. Brouillard : on voit les nœuds achetés, leurs enfants, et des « ? » un cran plus loin.
-const G = 100, PAD = 90;
+const G = 66, PAD = 70;
 const minX = Math.min(...NODES.map(n => n.x)), minY = Math.min(...NODES.map(n => n.y));
 const maxX = Math.max(...NODES.map(n => n.x)), maxY = Math.max(...NODES.map(n => n.y));
-let selected = 'root';
+let selected = 'root', hover = null;
+const mixDim = hex => { const v = parseInt(hex.slice(1), 16); const c = k => Math.round(((v >> k) & 255) * 0.42 + 20); return `rgb(${c(16)},${c(8)},${c(0)})`; };
 const L = id => save.level[id] || 0;
 const visible = n => !n.parent || L(n.parent) > 0 || L(n.id) > 0;
 const teaser = n => !visible(n) && n.parent && visible(NODE[n.parent]);
@@ -305,46 +306,53 @@ function renderTree() {
   el('feGaussianBlur', { stdDeviation: 3, result: 'b' }, f);
   const m = el('feMerge', {}, f); el('feMergeNode', { in: 'b' }, m); el('feMergeNode', { in: 'SourceGraphic' }, m);
   const R = pos(NODE.root);
-  el('circle', { cx: R.x, cy: R.y, r: 74, fill: 'none', stroke: 'rgba(255,231,160,.18)', 'stroke-width': 2 });
-  el('circle', { cx: R.x, cy: R.y, r: 88, fill: 'none', stroke: 'rgba(255,231,160,.12)', 'stroke-width': 10, 'stroke-dasharray': '2 9' });
   // chemins droits, en coude quand il le faut (grille)
   for (const n of NODES) {
     if (!n.parent || !(visible(n) || teaser(n))) continue;
     const a = pos(NODE[n.parent]), b = pos(n), own = L(n.id) > 0;
     const d = a.x === b.x || a.y === b.y ? `M${a.x},${a.y} L${b.x},${b.y}` : `M${a.x},${a.y} L${b.x},${a.y} L${b.x},${b.y}`;
-    el('path', { d, fill: 'none', stroke: own ? colorOf(n) : visible(n) ? 'rgba(201,180,142,.45)' : 'rgba(201,180,142,.22)', 'stroke-width': own ? 5 : 3,
-      'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-dasharray': own ? '' : '2 8', filter: own ? 'url(#glow)' : '' });
+    // traits à angle droit, couleur de la branche : vive si achetée, éteinte sinon
+    el('path', { d, fill: 'none', stroke: '#0b0806', 'stroke-width': 7, 'stroke-linejoin': 'miter' });
+    el('path', { d, fill: 'none', stroke: own ? colorOf(n) : visible(n) ? mixDim(colorOf(n)) : '#3a3026', 'stroke-width': 3,
+      'stroke-linejoin': 'miter', 'stroke-dasharray': visible(n) ? '' : '3 4' });
   }
-  // étiquettes des branches, seulement quand un de leurs nœuds est visible
-  for (const [br, x, y, txt] of TREE_LABELS) {
-    if (!NODES.some(n => n.branch === br && visible(n) && n.id !== 'root' && Math.abs(n.x - x) <= 1.5 && Math.abs(n.y - y) <= 2)) continue;
-    const lb2 = document.createElement('div'); lb2.className = 'branchLbl'; lb2.textContent = txt || BRANCHES[br][0];
-    lb2.style.setProperty('--c', BRANCHES[br][1]);
-    const q = pos({ x, y }); lb2.style.left = q.x + 'px'; lb2.style.top = q.y + 'px'; inner.append(lb2);
+  // étiquette de branche : petit texte en couleur au-dessus du premier nœud de la branche
+  const labelled = new Set();
+  for (const n of NODES) {
+    if (n.id === 'root' || labelled.has(n.branch) || !visible(n) || NODE[n.parent].branch === n.branch) continue;
+    labelled.add(n.branch);
+    const lb2 = document.createElement('div'); lb2.className = 'branchLbl'; lb2.textContent = branchName(n);
+    lb2.style.setProperty('--c', colorOf(n));
+    // branche verticale : étiquette à côté du nœud ; branche horizontale : au-dessus
+    const q = pos(n), par = NODE[n.parent];
+    if (par.x === n.x) { lb2.classList.add(n.x < 0 ? 'left' : 'right'); lb2.style.left = (q.x + (n.x < 0 ? -32 : 32)) + 'px'; lb2.style.top = q.y + 'px'; }
+    else { lb2.style.left = q.x + 'px'; lb2.style.top = (q.y - 38) + 'px'; }
+    inner.append(lb2);
   }
   for (const n of NODES) {
     const shown = visible(n), tz = !shown && teaser(n);
     if (!shown && !tz) continue;
     const p = pos(n), lv = L(n.id), isMax = lv >= n.max, capped = !isMax && lv >= capOf(n), locked = shown && lockedNow(n);
+    const afford = !tz && !isMax && !locked && !capped && save.coins >= costOf(n, lv);
     const b = document.createElement('button');
     b.className = 'node t-' + n.type + (tz ? ' teaser' : '') + (lv ? ' owned' : '') + (n.soon && shown ? ' soon' : '') + (locked && !n.soon ? ' locked' : '')
-      + (isMax ? ' max' : !tz && !locked && !capped && save.coins >= costOf(n, lv) ? ' afford' : '') + (selected === n.id ? ' sel' : '') + (n.id === 'root' ? ' root' : '');
+      + (isMax ? ' max' : '') + (afford ? ' afford' : '') + (selected === n.id ? ' sel' : '') + (n.id === 'root' ? ' root' : '');
     b.style.setProperty('--c', colorOf(n));
     b.style.left = p.x + 'px'; b.style.top = p.y + 'px';
+    b.dataset.id = n.id;
     b.setAttribute('aria-label', tz ? 'Compétence cachée' : n.name);
     if (tz) { const q = document.createElement('span'); q.className = 'q'; q.textContent = '?'; b.append(q); }
     else {
       b.append(nodeIcon(n));
       if (n.badge) { const bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = n.badge; b.append(bd); }
       if (locked) { const pd = document.createElement('span'); pd.className = 'pad'; pd.textContent = n.soon ? '…' : '🔒'; b.append(pd); }
+      if (afford) b.append(Object.assign(document.createElement('span'), { className: 'dot' }));
+      if (lv && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'ok', textContent: isMax ? '✓' : lv }));
     }
-    if (!tz && n.id !== 'root' && !n.soon) {
-      const l = document.createElement('span'); l.className = 'lv num';
-      l.textContent = isMax ? (n.max > 1 ? 'MAX' : '✓') : `${lv}/${n.max}`;
-      b.append(l);
-    }
-    b.onclick = () => { selected = n.id; renderTree(); };
-    if (!tz) b.ondblclick = () => { selected = n.id; buy(n); };
+    // un clic achète (comme une caisse enregistreuse) ; survol ou clic montrent la fiche
+    b.onclick = () => { selected = n.id; if (!tz && afford) buy(n); else renderTree(); };
+    b.onmouseenter = () => { hover = n.id; renderInfo(); };
+    b.onmouseleave = () => { hover = null; renderInfo(); };
     inner.append(b);
   }
   renderInfo();
@@ -353,9 +361,10 @@ function renderTree() {
 }
 
 function renderInfo() {
-  const n = NODE[selected] || NODE.root;
+  const n = NODE[hover || selected] || NODE.root;
   const lv = L(n.id), isMax = lv >= n.max;
   const box = $('info'); box.innerHTML = '';
+  queueMicrotask(() => placeInfo(n));
   box.style.setProperty('--c', colorOf(n));
   const add = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; box.append(e); return e; };
   if (!visible(n)) {
@@ -382,7 +391,20 @@ function renderInfo() {
     b.disabled = save.coins < costOf(n, lv);
     b.onclick = () => buy(n);
     box.append(b);
+    if (b.disabled) add('p', 'need', `Encore ${fmt(costOf(n, lv) - save.coins)} pièces`);
   }
+}
+// La fiche suit le nœud : à sa droite, ou à sa gauche près du bord.
+function placeInfo(n) {
+  const box = $('info'), wrap = $('treeWrap'), el = $('treeInner').querySelector(`[data-id="${n.id}"]`);
+  if (!el) { box.style.left = '-9999px'; return; }
+  const r = el.getBoundingClientRect(), w = wrap.getBoundingClientRect();
+  const bw = Math.min(300, w.width - 32);
+  let x = r.right - w.left + 12;
+  if (x + bw > w.width - 8) x = r.left - w.left - bw - 12;
+  x = Math.max(8, x);
+  const y = Math.max(8, Math.min(r.top - w.top - 10, w.height - box.offsetHeight - 8));
+  box.style.left = x + 'px'; box.style.top = y + 'px';
 }
 
 function buy(n) {
@@ -541,6 +563,7 @@ let treeZoom = 1;
   });
   addEventListener('pointerup', () => { if (drag && drag.moved) { sc.classList.remove('drag'); suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); } drag = null; });
   sc.addEventListener('click', e => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); } }, true);
+  sc.addEventListener('scroll', () => placeInfo(NODE[hover || selected] || NODE.root));
   sc.addEventListener('wheel', e => {
     e.preventDefault();
     const r = sc.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
