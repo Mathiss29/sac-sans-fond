@@ -12,7 +12,7 @@ python3 -m http.server 8000
 
 puis ouvrir http://localhost:8000.
 
-Contrôles : clic pour larguer un héros, survol pour ramasser les pièces, clic maintenu ou Espace pour l'Attraction (rayon doublé).
+Contrôles : clic sur la carte pour larguer le héros choisi (1 à 4 ou clic sur sa carte pour changer), ZQSD / WASD / flèches ou boutons des bords pour se déplacer, clic sur la mini-map pour y aller, survol pour ramasser les pièces, clic maintenu ou Espace pour l'Attraction (rayon doublé).
 
 ## Organisation du code
 
@@ -20,14 +20,15 @@ Contrôles : clic pour larguer un héros, survol pour ramasser les pièces, clic
 | --- | --- |
 | `src/data.js` | Toutes les données d'équilibrage : paliers du sac, ennemis, héros, contrées, nœuds de l'Atelier |
 | `src/game.js` | Logique d'une expédition : apparitions, combat, récolte, sac, Déchirure |
-| `src/render.js` | Dessin sur le canvas (formes dessinées par le code en attendant les sprites) |
+| `src/sprites.js` | Pixel art maison (héros, élémentaires, pièce) et dessin procédural du sac et de la map |
+| `src/render.js` | Dessin sur le canvas, caméra |
 | `src/main.js` | Boucle à pas fixe, entrées, interface (HUD, Atelier, bilan) |
 | `src/save.js` | Sauvegarde locale versionnée |
 
 ## Feuille de route
 
-1. **Boucle de base** (cette version) : une contrée, trois familles d'élémentaires, archers, sac à paliers, Déchirure, Atelier de 8 nœuds, sauvegarde.
-2. Progression : Atelier complet, mage, chevalier et barde, gueule du sac améliorable, bourrer le sac, boss primordiaux, 5 contrées.
-3. Sensations : sons, effets, sprites.
+1. **Boucle de base** (fait) : une contrée, trois familles d'élémentaires, archers, sac à paliers, Déchirure, Atelier, sauvegarde, pixel art maison, grande map avec caméra et mini-map.
+2. **Progression** (cette version) : mage, chevalier et barde, 4 paliers du sac, gueule du sac améliorable, premier boss primordial, feu follet doré, Atelier de 22 nœuds.
+3. Contrées : 5 régions avec leur boss, bourrer le sac, sons et effets.
 4. Profondeur : événements, équipement, Curiosités, colporteur, grimoire.
 5. Équilibrage, version web publique, puis .exe avec Electron.

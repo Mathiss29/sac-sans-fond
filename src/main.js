@@ -1,7 +1,8 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, TIERS, NODES, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { ZONES, TIERS, NODES, HEROES, HERO_ORDER, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
-import { createWorld, startExpedition, update, dropHero, canDrop, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
+import { unlockAudio, play, setMuted } from './audio.js';
+import { createWorld, startExpedition, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
 import { render, drawHero, drawBag, getMap } from './render.js';
 
 const $ = id => document.getElementById(id);
@@ -53,19 +54,35 @@ function go() {
   buildDropBar();
 }
 
+// Cartes des héros à larguer : un clic (ou 1, 2, 3, 4) choisit lequel tombera au prochain clic sur la carte.
+const heroIcons = {};
+function heroIcon(type) {
+  if (heroIcons[type]) return heroIcons[type];
+  const c = document.createElement('canvas'); c.width = c.height = 68;
+  const cg = c.getContext('2d'); cg.imageSmoothingEnabled = false; drawHero(cg, type, 34, 64, 1, 0, 1, 3);
+  return (heroIcons[type] = c);
+}
 function buildDropBar() {
   const box = $('dropBar'); box.innerHTML = '';
-  const n = world.run.toDrop.archer;
-  const b = document.createElement('div');
-  b.className = 'card' + (n <= 0 ? ' empty' : '');
-  const c = document.createElement('canvas'); c.width = c.height = 68;
-  const cg = c.getContext('2d'); cg.imageSmoothingEnabled = false; drawHero(cg, 'archer', 34, 62, 1, 0, 1, 3);
-  const name = document.createElement('span'); name.textContent = 'Archers';
-  const cnt = document.createElement('span'); cnt.className = 'cnt num'; cnt.textContent = n;
-  b.append(c, name, cnt);
-  box.append(b);
-  if (n <= 0) $('hint').textContent = 'ZQSD ou flèches pour te déplacer · Passe le gant sur les pièces';
-  else $('hint').textContent = 'Clique pour larguer tes archers · ZQSD ou flèches pour te déplacer';
+  const r = world.run;
+  const types = HERO_ORDER.filter(k => stats.heroes[k] > 0);
+  types.forEach((type, i) => {
+    const n = r.toDrop[type];
+    const b = document.createElement('button');
+    b.className = 'card' + (n <= 0 ? ' empty' : '') + (r.sel === type && n > 0 ? ' sel' : '');
+    b.title = `${HEROES[type].name} (touche ${i + 1}) : ${HEROES[type].blurb}`;
+    const c = document.createElement('canvas'); c.width = c.height = 68;
+    c.getContext('2d').drawImage(heroIcon(type), 0, 0);
+    const key = document.createElement('span'); key.className = 'key'; key.textContent = i + 1;
+    const name = document.createElement('span'); name.className = 'nm'; name.textContent = HEROES[type].plural;
+    const cnt = document.createElement('span'); cnt.className = 'cnt num'; cnt.textContent = n;
+    b.append(key, c, name, cnt);
+    b.onclick = () => { selectHero(world, type); buildDropBar(); };
+    box.append(b);
+  });
+  const left = types.reduce((t, k) => t + r.toDrop[k], 0);
+  if (left <= 0) $('hint').textContent = 'ZQSD ou flèches pour te déplacer · Passe le gant sur les pièces';
+  else $('hint').textContent = `Clique sur la carte pour larguer : ${HEROES[r.sel].name} · ZQSD ou flèches pour te déplacer`;
 }
 
 function finishExpedition() {
@@ -83,6 +100,8 @@ function finishExpedition() {
     ['Pièces raflées', `${fmt(r.tearGot)} / ${fmt(r.tearTotal)}`],
   ];
   if (r.overflow > 0) rows.push(['Surplus du sac plein', '+' + fmt(r.overflow)]);
+  if (r.golds) rows.push(['Feux follets dorés aperçus', fmt(r.golds)]);
+  rows.push([world.zone.boss.name, r.bossKilled ? 'vaincu !' : r.boss ? `${Math.round((1 - Math.max(0, r.boss.hp) / r.boss.max) * 100)} % de dégâts` : '—']);
   const dl = $('resList'); dl.innerHTML = '';
   for (const [a, b] of rows) {
     const dt = document.createElement('dt'); dt.textContent = a;
@@ -102,11 +121,24 @@ function toAtelier() {
   renderTree();
 }
 
+// Son : coupé ou non, mémorisé dans la sauvegarde.
+function refreshMute() {
+  setMuted(!!save.muted);
+  document.querySelectorAll('.mute').forEach(b => { b.textContent = save.muted ? '🔇' : '🔊'; b.setAttribute('aria-label', save.muted ? 'Remettre le son' : 'Couper le son'); });
+}
+document.querySelectorAll('.mute').forEach(b => b.addEventListener('click', () => { unlockAudio(); save.muted = !save.muted; writeSave(save); refreshMute(); }));
+window.addEventListener('pointerdown', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
+refreshMute();
+
 function drainEvents() {
+  for (const s of world.sfx) play(s.name, s);
+  world.sfx.length = 0;
   for (const ev of world.events) {
     if (ev.kind === 'banner') bannerQ.push(ev);
     else if (ev.kind === 'coins') save.coins += ev.value;
     else if (ev.kind === 'done') finishExpedition();
+    else if (ev.kind === 'boss') { save.bosses = save.bosses || {}; save.bosses[world.zone.id] = (save.bosses[world.zone.id] || 0) + 1; writeSave(save); }
     else if (ev.kind === 'tear') { $('dropBar').hidden = true; $('hint').hidden = true; document.querySelectorAll('.edge').forEach(b => { b.hidden = true; }); }
   }
   world.events.length = 0;
@@ -134,6 +166,9 @@ function hud() {
   $('timer').style.color = world.phase === 'tear' ? 'var(--gold)' : (left < 5 ? 'var(--ember)' : 'var(--parch)');
   $('zoneTxt').textContent = world.phase === 'tear' ? 'Déchirure !' : world.zone.name;
   $('attrFill').style.width = (r.attraction / stats.attraction * 100) + '%';
+  const boss = r.boss;
+  $('bossBar').hidden = !(boss && world.phase === 'expedition' && !boss.dead);
+  if (boss && !boss.dead) { $('bossName').textContent = boss.def.name; $('bossFill').style.width = Math.max(0, boss.hp / boss.max * 100) + '%'; }
 }
 
 // ---------- Atelier ----------
@@ -146,10 +181,10 @@ const pos = n => ({ x: PAD + n.x * GX - GX + 20, y: PAD + n.y * GY - GY + 30 });
 function nodeIcon(n) {
   const c = document.createElement('canvas'); c.width = c.height = 92;
   const ig = c.getContext('2d'); ig.imageSmoothingEnabled = false;
-  if (n.branch === 'Compagnie') drawHero(ig, 'archer', 46, 84, 1, 0, 1, 4);
-  else if (n.branch === 'Sac' || n.id === 'root') drawBag(ig, 46, 86, n.id === 'tierCuir' ? 1 : 0, 0.1, 0, 0, 3);
+  if (n.hero) drawHero(ig, n.hero, 46, 84, 1, 0, 1, 4);
+  else if (n.branch === 'Sac' || n.id === 'root') drawBag(ig, 46, 86, n.tier || 0, 0.1, 0, 0, 3);
   ig.scale(2, 2);
-  if (n.branch === 'Compagnie' || n.branch === 'Sac' || n.id === 'root') return c;
+  if (n.hero || n.branch === 'Sac' || n.id === 'root') return c;
   else if (n.branch === 'Arcanes') {
     ig.strokeStyle = '#e8d6a8'; ig.lineWidth = 2.5; ig.fillStyle = '#ffcf4a';
     ig.beginPath(); ig.moveTo(13, 8); ig.lineTo(33, 8); ig.lineTo(13, 38); ig.lineTo(33, 38); ig.closePath(); ig.stroke();
@@ -226,6 +261,7 @@ function buy(n) {
   const c = nodeCost(n, lv);
   if (save.coins < c) return;
   save.coins -= c; save.level[n.id] = lv + 1;
+  unlockAudio(); play('buy');
   writeSave(save);
   stats = computeStats(save.level);
   renderTree();
@@ -250,6 +286,11 @@ const held = new Set();
 const playing = () => world.phase === 'expedition' || world.phase === 'tear';
 window.addEventListener('keydown', e => {
   if (CAM_KEYS[e.code] && playing()) { held.add(e.code); e.preventDefault(); }
+  const m = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
+  if (m && world.phase === 'expedition') {
+    const type = HERO_ORDER.filter(k => stats.heroes[k] > 0)[+m[1] - 1];
+    if (type) { selectHero(world, type); buildDropBar(); }
+  }
 });
 window.addEventListener('keyup', e => held.delete(e.code));
 window.addEventListener('blur', () => { held.clear(); edgeHeld.clear(); });
@@ -283,9 +324,11 @@ function drawMinimap() {
   mg.drawImage(map.c, 0, 0, W, H);
   const dot = (x, y, r, col) => { mg.fillStyle = col; mg.fillRect(Math.round(x * k - r / 2), Math.round(y * k - r / 2), r, r); };
   for (const c of world.coins) dot(c.x, c.y, 2, '#ffd34d');
-  for (const e of world.enemies) dot(e.x, e.y, 3, '#ff6b4a');
+  for (const e of world.enemies) if (!e.boss) dot(e.x, e.y, e.gold ? 4 : 3, e.gold ? '#ffe14a' : '#ff6b4a');
   const b = bagPos(world); dot(b.x, b.y, 6, '#fff2c8');
   for (const u of world.heroes) dot(u.x, u.y, 4, '#7ee06b');
+  const bo = world.run && world.run.boss;
+  if (bo && !bo.dead) { dot(bo.x, bo.y, 8, '#24161e'); dot(bo.x, bo.y, 6, '#ff5a2a'); }
   mg.strokeStyle = '#fff'; mg.lineWidth = 1.5;
   mg.strokeRect(world.cam.x * k, world.cam.y * k, world.w * k, world.h * k);
 }

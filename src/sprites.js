@@ -186,6 +186,7 @@ const WIND = [
 ];
 const ENEMY_PAL = {
   wisp: { f: '#ff9a3c', F: '#e65032', l: '#ffe682', L: '#fffadc' },
+  boss: { f: '#ff5a2a', F: '#a8242a', l: '#ffb040', L: '#fff0b0', O: '#3a0e14' },
   gold: { f: '#ffd246', F: '#d2961e', l: '#fff096', L: '#ffffff', O: '#5a3a10' },
   golem: { k: '#be7850', K: '#8c5238', y: '#ffd25a', d: '#6a3a24' },
   wind: { w: '#8ed2e6', W: '#e6f7fb', O: '#2a3e5a' },
@@ -247,6 +248,7 @@ export function buildSprites() {
   SPR.enemies = {
     wisp: mk(WISP, ENEMY_PAL.wisp),
     gold: mk(WISP, ENEMY_PAL.gold),
+    boss: mk(WISP, ENEMY_PAL.boss),
     golem: mk(GOLEM, ENEMY_PAL.golem),
     wind: mk(WIND, ENEMY_PAL.wind),
   };

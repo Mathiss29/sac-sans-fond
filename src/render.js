@@ -38,18 +38,28 @@ function shadow(g, x, y, rx, ry) {
 export function drawEnemy(g, e, t, px = 3) {
   const frames = SPR.enemies[e.gold ? 'gold' : e.type] || SPR.enemies.wisp;
   const f = frames[Math.floor(e.ph * 0.9) % frames.length];
-  const img = e.hit > 0 ? f.white : f.c;
-  const w = img.width * px, h = img.height * px;
+  const img = e.hit > 0.06 || (e.hit > 0 && Math.floor(t * 30) % 2) ? f.white : f.c;
+  const k = e.boss ? px * 2 : px;
+  const w = img.width * k, h = img.height * k;
   const fly = e.type !== 'golem';
   const hover = fly ? Math.round(Math.sin(e.ph * 1.3) * 1.5) * px : 0;
   shadow(g, e.x, e.y + h * 0.45, w * 0.32, px * 1.6);
-  if (e.type === 'wisp' || e.gold) {
+  if (e.type === 'wisp' || e.gold || e.boss) {
     const halo = g.createRadialGradient(e.x, e.y + hover, 2, e.x, e.y + hover, w * 0.9);
     halo.addColorStop(0, e.gold ? 'rgba(255,230,120,.45)' : 'rgba(255,170,80,.35)'); halo.addColorStop(1, 'rgba(255,170,80,0)');
     g.fillStyle = halo; g.beginPath(); g.arc(e.x, e.y + hover, w * 0.9, 0, 7); g.fill();
   }
   g.drawImage(img, Math.round(e.x - w / 2), Math.round(e.y - h / 2 + hover), w, h);
-  if (e.hp < e.max) {
+  if (e.slow > 0) {
+    // ralenti : petits éclats de givre qui tournent autour
+    for (let i = 0; i < 4; i++) {
+      const an = t * 3 + i * Math.PI / 2, rx = w * 0.55, ry = h * 0.35;
+      const ix = Math.round(e.x + Math.cos(an) * rx), iy = Math.round(e.y + hover + Math.sin(an) * ry);
+      g.fillStyle = '#24161e'; g.fillRect(ix - px, iy - px, px * 3, px * 3);
+      g.fillStyle = i % 2 ? '#aee6ff' : '#f0fbff'; g.fillRect(ix - px + 1, iy - px + 1, px * 3 - 2, px * 3 - 2);
+    }
+  }
+  if (e.hp < e.max && !e.boss) {
     const bw = Math.max(18, w * 0.7), y = Math.round(e.y - h / 2 + hover - 7);
     g.fillStyle = '#24161e'; g.fillRect(Math.round(e.x - bw / 2) - 1, y - 1, bw + 2, 5);
     g.fillStyle = '#9be36b'; g.fillRect(Math.round(e.x - bw / 2), y, bw * Math.max(0, e.hp / e.max), 3);
@@ -109,7 +119,9 @@ export function render(g, world, dpr) {
   const zone = world.zone;
   const map = getMap(world), px = map.px;
   // caméra calée sur la grille des pixels d'art pour éviter le scintillement
-  const sx = Math.round(world.cam.x / px), sy = Math.round(world.cam.y / px);
+  const sh = world.shake > 0.3 ? world.shake : 0;
+  const shx = sh ? (Math.random() - 0.5) * sh * 2 : 0, shy = sh ? (Math.random() - 0.5) * sh * 2 : 0;
+  const sx = Math.round((world.cam.x + shx) / px), sy = Math.round((world.cam.y + shy) / px);
   const camX = sx * px, camY = sy * px;
   g.imageSmoothingEnabled = false;
   g.fillStyle = '#1c2a1c'; g.fillRect(0, 0, w, h);
@@ -127,6 +139,7 @@ export function render(g, world, dpr) {
   g.globalAlpha = 1;
 
   g.save(); g.translate(-camX, -camY);
+  drawClouds(g, world, t, camX, camY);
   const r = world.run;
   if (r && (world.phase === 'expedition' || world.phase === 'tear')) {
     const b = bagPos(world);
@@ -155,7 +168,10 @@ export function render(g, world, dpr) {
   for (const f of world.fx) {
     const k = 1 - f.t / f.life;
     g.strokeStyle = f.color; g.globalAlpha = 1 - k; g.lineWidth = 3;
-    g.beginPath(); g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, 0, 7); g.stroke();
+    g.beginPath();
+    if (f.kind === 'slash') { const a0 = f.face > 0 ? -1.2 : Math.PI - 1.2; g.lineWidth = 4; g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, a0 + k * 1.5, a0 + 1 + k * 1.5); }
+    else g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, 0, 7);
+    g.stroke();
   }
   g.globalAlpha = 1;
 
@@ -164,33 +180,77 @@ export function render(g, world, dpr) {
     const blink = !c.fly && c.life < 1.5 ? (Math.sin(t * 20) > 0 ? 1 : 0.4) : 1;
     g.globalAlpha = a * blink;
     const s = SPR.coin.width * (c.big ? px + 1 : px);
-    g.drawImage(SPR.coin, Math.round(c.x - s / 2), Math.round(c.y - s / 2), s, s);
+    const z = c.z || 0;
+    if (z > 1) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(Math.round(c.x - s * 0.3), Math.round(c.y + s * 0.35), Math.round(s * 0.6), px); }
+    const sw = Math.max(px, Math.round(s * Math.abs(Math.cos(t * 6 + (c.spin || 0))) / px) * px);
+    g.drawImage(SPR.coin, Math.round(c.x - sw / 2), Math.round(c.y - s / 2 - z), sw, s);
+    if (!c.fly && Math.sin(t * 3 + (c.spin || 0) * 5) > 0.97) { g.fillStyle = '#fff'; g.fillRect(Math.round(c.x + s * 0.2), Math.round(c.y - s * 0.4 - z), px, px); }
   }
   g.globalAlpha = 1;
 
   for (const e of world.enemies) drawEnemy(g, e, t, px);
-
-  for (const u of world.heroes) drawArcher(g, u.x, u.y - u.drop * h * 0.5, u.face, u.bob, 1, px);
-
-  g.strokeStyle = '#5a3a1a'; g.lineWidth = 2;
-  for (const a of world.arrows) {
-    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * 12, a.y - a.dy * 12); g.stroke();
-    g.fillStyle = '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, 1.6, 0, 7); g.fill();
-  }
-
-  for (const tx of world.texts) {
-    g.globalAlpha = Math.min(1, tx.life * 2); g.fillStyle = tx.color;
-    g.font = `700 ${tx.size}px 'Alegreya Sans', system-ui, sans-serif`; g.textAlign = 'center';
-    g.fillText(tx.text, tx.x, tx.y);
+  for (const q of world.particles) {
+    g.globalAlpha = Math.min(1, q.life / q.max * 1.6); g.fillStyle = q.color;
+    const sz = q.size * px * 0.75;
+    g.fillRect(Math.round(q.x - sz / 2), Math.round(q.y - sz / 2), Math.round(sz), Math.round(sz));
   }
   g.globalAlpha = 1;
+
+  // aura des bardes
+  for (const u of world.heroes) {
+    if (u.type !== 'bard' || u.drop > 0) continue;
+    g.strokeStyle = 'rgba(255,230,140,.25)'; g.setLineDash([2, 8]); g.lineWidth = 2; g.lineDashOffset = -t * 10;
+    g.beginPath(); g.arc(u.x, u.y + 8, world.stats.bardAura, 0, 7); g.stroke(); g.setLineDash([]);
+  }
+  const heroes = [...world.heroes].sort((a, b) => a.y - b.y);
+  for (const u of heroes) {
+    const rc = (u.recoil || 0) * px * 1.5;
+    if (u.drop > 0) { g.fillStyle = `rgba(0,0,0,${0.25 * (1 - u.drop)})`; g.beginPath(); g.ellipse(u.x, u.y + 10, 18 * (1 - u.drop * 0.6), 6 * (1 - u.drop * 0.6), 0, 0, 7); g.fill(); }
+    drawHero(g, u.type, u.x - u.face * rc, u.y + 12 - u.drop * h * 0.5, u.face, u.moving ? u.bob * 2 : u.bob * 0.5, 1, px);
+  }
+
+  for (const a of world.arrows) {
+    if (a.kind === 'frost') {
+      g.fillStyle = '#24161e'; g.fillRect(Math.round(a.x) - px * 2, Math.round(a.y) - px * 2, px * 4, px * 4);
+      g.fillStyle = '#aee6ff'; g.fillRect(Math.round(a.x) - px * 1.5, Math.round(a.y) - px * 1.5, px * 3, px * 3);
+      g.fillStyle = '#f0fbff'; g.fillRect(Math.round(a.x) - px, Math.round(a.y) - px, px, px);
+    } else if (a.kind === 'note') {
+      g.fillStyle = '#ffe68a'; g.font = `700 ${px * 6}px system-ui, sans-serif`; g.textAlign = 'center'; g.fillText('♪', a.x, a.y + px * 2);
+    } else {
+      g.strokeStyle = '#5a3a1a'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * 12, a.y - a.dy * 12); g.stroke();
+      g.fillStyle = '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, 1.6, 0, 7); g.fill();
+    }
+  }
+
+  g.textAlign = 'center'; g.lineJoin = 'round';
+  for (const tx of world.texts) {
+    g.globalAlpha = Math.min(1, tx.life * 3);
+    const sc = tx.dmg ? 1 + Math.max(0, 0.6 - tx.pop * 6) : 1;
+    g.font = `800 ${Math.round(tx.size * sc)}px 'Alegreya Sans', system-ui, sans-serif`;
+    g.strokeStyle = '#24161e'; g.lineWidth = 3.5; g.strokeText(tx.text, tx.x, tx.y);
+    g.fillStyle = tx.color; g.fillText(tx.text, tx.x, tx.y);
+  }
+  g.globalAlpha = 1;
+  drawButterflies(g, world, t, px);
   g.restore();
+  drawLeaves(g, world, t, px);
   g.drawImage(vignette(w, h, dpr), 0, 0, w, h);
+  const cb = world.combo;
+  if (cb.t > 0 && cb.n >= 3 && world.pointer.inside) {
+    const sc = 1 + Math.max(0, cb.t - 0.9) * 2;
+    g.globalAlpha = Math.min(1, cb.t * 2);
+    g.font = `800 ${Math.round(18 * sc)}px 'Alegreya SC', Georgia, serif`; g.textAlign = 'left';
+    g.strokeStyle = '#24161e'; g.lineWidth = 4;
+    const txt = `×${cb.n}`;
+    g.strokeText(txt, world.pointer.x + 22, world.pointer.y - 18); g.fillStyle = cb.n >= 20 ? '#ff9a3c' : '#ffd246'; g.fillText(txt, world.pointer.x + 22, world.pointer.y - 18);
+    g.globalAlpha = 1;
+  }
 
   // curseur : gant d'attraction
   const p = world.pointer;
   if (p.inside && (world.phase === 'expedition' || world.phase === 'tear')) {
-    if (canDrop(world)) drawArcher(g, p.x, p.y, 1, 0, 0.5, px);
+    if (canDrop(world)) drawHero(g, world.run.sel, p.x, p.y + 12, 1, 0, 0.5, px);
     const rad = gloveRadius(world);
     const on = attractionActive(world);
     g.strokeStyle = on ? 'rgba(255,214,102,.95)' : 'rgba(255,248,225,.65)';
@@ -198,5 +258,49 @@ export function render(g, world, dpr) {
     g.beginPath(); g.arc(p.x, p.y, rad, 0, 7); g.stroke(); g.setLineDash([]);
     if (on) { g.fillStyle = 'rgba(255,214,102,.08)'; g.beginPath(); g.arc(p.x, p.y, rad, 0, 7); g.fill(); }
     g.fillStyle = '#fff8e1'; g.beginPath(); g.arc(p.x, p.y, 3, 0, 7); g.fill();
+  }
+}
+
+// ---------- Ambiance ----------
+// Ombres de nuages qui glissent sur la région.
+function drawClouds(g, world, t, camX, camY) {
+  g.fillStyle = 'rgba(10,30,20,.10)';
+  for (let i = 0; i < 7; i++) {
+    const span = world.mapW + 800;
+    const x = ((i * 977 + t * (14 + i * 3)) % span) - 400;
+    const y = (i * 613) % world.mapH;
+    if (x + 300 < camX || x - 300 > camX + world.w || y + 200 < camY || y - 200 > camY + world.h) continue;
+    g.beginPath();
+    g.ellipse(x, y, 220 + (i % 3) * 60, 90 + (i % 2) * 30, 0, 0, 7);
+    g.ellipse(x + 140, y + 30, 150, 70, 0, 0, 7);
+    g.ellipse(x - 120, y + 20, 130, 60, 0, 0, 7);
+    g.fill();
+  }
+}
+// Papillons qui volettent près des fleurs (coordonnées de la région).
+function drawButterflies(g, world, t, px) {
+  const cols = ['#ffffff', '#f6e27a', '#f29bb8', '#aee6ff'];
+  for (let i = 0; i < 26; i++) {
+    const bx = (i * 811) % world.mapW, by = (i * 457 + 200) % world.mapH;
+    const x = bx + Math.sin(t * 0.7 + i) * 60 + Math.sin(t * 2.3 + i * 2) * 12;
+    const y = by + Math.cos(t * 0.5 + i * 1.7) * 40 + Math.sin(t * 3 + i) * 6;
+    if (x < world.cam.x - 20 || x > world.cam.x + world.w + 20 || y < world.cam.y - 20 || y > world.cam.y + world.h + 20) continue;
+    const flap = Math.sin(t * 18 + i) > 0;
+    g.fillStyle = cols[i % cols.length];
+    g.fillRect(Math.round(x - px * (flap ? 2 : 1)), Math.round(y), px * (flap ? 2 : 1), px * 2);
+    g.fillRect(Math.round(x + px), Math.round(y), px * (flap ? 2 : 1), px * 2);
+    g.fillStyle = '#24161e'; g.fillRect(Math.round(x), Math.round(y), px, px * 2);
+  }
+}
+// Feuilles qui tombent et dérivent (coordonnées de l'écran).
+function drawLeaves(g, world, t, px) {
+  const cols = ['#5a9a48', '#86bb68', '#c9a24a'];
+  for (let i = 0; i < 14; i++) {
+    const sp = 30 + (i % 4) * 9;
+    const y = ((i * 131 + t * sp) % (world.h + 40)) - 20;
+    const x = ((i * 293 + t * 18 + Math.sin(t * 1.3 + i) * 30) % (world.w + 40)) - 20;
+    g.fillStyle = cols[i % 3];
+    const tw = Math.sin(t * 4 + i) > 0;
+    g.fillRect(Math.round(x), Math.round(y), px * (tw ? 2 : 1), px);
   }
 }

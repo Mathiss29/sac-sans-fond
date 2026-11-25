@@ -22,6 +22,7 @@
     <div class="chip" id="timerBox"><div id="timer" class="num">30.0</div><div id="zoneTxt">Clairière</div></div>
     <div class="chip" id="attrBox">Attraction<div class="bar"><div id="attrFill"></div></div><small>maintenir le clic ou Espace</small></div>
   </div>
+  <div id="bossBar" hidden><span id="bossName"></span><div class="bar"><div id="bossFill"></div></div></div>
   <div id="dropBar" hidden></div>
   <div id="mapUi" hidden>
     <button class="edge" data-dir="up" aria-label="Aller vers le haut">▲</button>
@@ -29,6 +30,7 @@
     <button class="edge" data-dir="left" aria-label="Aller vers la gauche">◀</button>
     <button class="edge" data-dir="right" aria-label="Aller vers la droite">▶</button>
     <canvas id="minimap" aria-label="Carte de la région"></canvas>
+    <button class="ghost mute" id="muteRun" type="button">🔊</button>
   </div>
   <div id="hint" hidden>Clique pour larguer tes archers · Passe le gant sur les pièces</div>
   <div id="banner"></div>
@@ -41,6 +43,7 @@
       </div>
       <div class="headRight">
         <div class="chip big"><span class="coin-ico"></span><span id="atelierWallet" class="num">0</span></div>
+        <button class="ghost mute" type="button">🔊</button>
         <button class="btn" id="go">Partir en expédition</button>
       </div>
     </header>
