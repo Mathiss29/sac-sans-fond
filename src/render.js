@@ -1,5 +1,6 @@
 // Tout le dessin sur le canvas, en pixel art (sprites dans sprites.js).
 import { TIERS, bagMax, tierOf } from './data.js';
+const UI_FONT = "'Silkscreen', 'Pixelify Sans', monospace";
 import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos } from './game.js';
 
 import { buildSprites, loadHeroSheets, loadMonsterSheets, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
@@ -213,7 +214,7 @@ export function render(g, world, dpr) {
   const r = world.run;
   if (arena) drawBraziers(g, map, t, px);
   else if (r && (world.phase === 'expedition' || world.phase === 'tear')) drawPortal(g, world, t, px);
-  if (r && !arena && (world.phase === 'expedition' || world.phase === 'tear')) {
+  if (r && !arena && (world.phase === 'expedition' || world.phase === 'tear' || world.phase === 'done')) {
     const b = bagPos(world);
     const max = bagMax(world.stats);
     if (world.phase === 'expedition') {
@@ -223,9 +224,28 @@ export function render(g, world, dpr) {
       g.strokeStyle = 'rgba(255,240,200,.18)'; g.setLineDash([3, 6]);
       g.beginPath(); g.arc(b.x, b.y, world.stats.bagMouth, 0, 7); g.stroke(); g.setLineDash([]);
     } else if (r.shake > 0) {
-      drawBag(g, b.x, b.y + 30, r.tier, Math.min(1, r.bag / max) + 0.1, t, r.shake, px);
+      const ct = r.climb ?? r.tier;
+      drawBag(g, b.x, b.y + 30, ct, Math.min(1, r.bag / max) + 0.1, t, r.shake, px);
+      // nom du palier atteint au-dessus du sac, qui « saute » à chaque montée
+      const age = r.climbAge || 0, sc = 1 + Math.max(0, 0.35 - age) * 1.6;
+      g.save(); g.translate(Math.round(b.x), Math.round(b.y - 58)); g.scale(sc, sc);
+      g.font = `400 20px ${UI_FONT}`; g.textAlign = 'center'; g.lineJoin = 'round';
+      const name = TIERS[ct].name.replace(/^Sac (de |d')/, '').toUpperCase() + ' !';
+      g.strokeStyle = '#10140d'; g.lineWidth = 5; g.strokeText(name, 0, 0);
+      g.fillStyle = TIERS[ct].glow; g.fillText(name, 0, 0);
+      if (ct > 0) {
+        const tag = '×' + String(TIERS[ct].mult).replace('.', ',');
+        g.font = `400 16px ${UI_FONT}`; const tw = g.measureText(tag).width + 12;
+        g.fillStyle = '#10140d'; g.fillRect(42, 26, tw + 6, 26);
+        g.fillStyle = TIERS[ct].color; g.fillRect(44, 28, tw + 2, 22);
+        g.fillStyle = '#1b1610'; g.fillRect(46, 30, tw - 2, 18);
+        g.fillStyle = TIERS[ct].glow; g.textAlign = 'left'; g.fillText(tag, 51, 45);
+      }
+      g.restore();
+      if (age < 0.18) { g.globalAlpha = (0.18 - age) / 0.18 * 0.85; g.fillStyle = '#ffffff'; g.beginPath(); g.arc(b.x, b.y + 4, 34, 0, 7); g.fill(); g.globalAlpha = 1; }
     } else {
-      // lambeaux du sac déchiré
+      // le sac vidé reste là, ouvert, au milieu de ses lambeaux
+      drawBag(g, b.x, b.y + 30, r.tier, 0.05, t, 0, px);
       g.fillStyle = TIERS[r.tier].color; g.globalAlpha = 0.8;
       for (let i = 0; i < 6; i++) {
         const a = i * 1.05 + 0.3;
@@ -339,6 +359,14 @@ export function render(g, world, dpr) {
   if (arena) drawEmbers(g, world, t, px); else drawLeaves(g, world, t, px);
   if (!arena && world.stage) drawAmbiance(g, world, t, camX, camY, dpr);
   g.drawImage(vignette(w, h, dpr), 0, 0, w, h);
+  if (r && !arena && world.phase === 'done') {
+    // fin d'expédition : la scène s'assombrit, un rond de lumière reste sur le sac
+    const b = bagPos(world), k = Math.min(1, (r.doneT || 0) * 1.6);
+    const sx = b.x - camX, sy = b.y - camY + 10;
+    const gr = g.createRadialGradient(sx, sy, 40, sx, sy, Math.max(w, h) * 0.55);
+    gr.addColorStop(0, 'rgba(8,10,6,0)'); gr.addColorStop(0.25, `rgba(8,10,6,${0.45 * k})`); gr.addColorStop(1, `rgba(8,10,6,${0.85 * k})`);
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  }
   const cb = world.combo;
   if (cb.t > 0 && cb.n >= 3 && world.pointer.inside) {
     const sc = 1 + Math.max(0, cb.t - 0.9) * 2;
@@ -363,11 +391,22 @@ export function render(g, world, dpr) {
     }
     const rad = gloveRadius(world);
     const on = attractionActive(world);
-    g.strokeStyle = on ? 'rgba(255,214,102,.95)' : 'rgba(255,248,225,.65)';
-    g.lineWidth = on ? 3 : 1.5; g.setLineDash([6, 6]); g.lineDashOffset = -t * 20;
-    g.beginPath(); g.arc(p.x, p.y, rad, 0, 7); g.stroke(); g.setLineDash([]);
-    if (on) { g.fillStyle = 'rgba(255,214,102,.08)'; g.beginPath(); g.arc(p.x, p.y, rad, 0, 7); g.fill(); }
-    g.fillStyle = '#fff8e1'; g.beginPath(); g.arc(p.x, p.y, 3, 0, 7); g.fill();
+    // anneau plein et fin cerné de sombre ; doré et pulsant quand l'attraction tire
+    const pr = on ? rad + Math.sin(t * 10) * 2 : rad;
+    if (on) { g.fillStyle = 'rgba(255,214,102,.10)'; g.beginPath(); g.arc(p.x, p.y, pr, 0, 7); g.fill(); }
+    g.strokeStyle = 'rgba(16,20,13,.55)'; g.lineWidth = on ? 5 : 4;
+    g.beginPath(); g.arc(p.x, p.y, pr, 0, 7); g.stroke();
+    g.strokeStyle = on ? '#ffd666' : 'rgba(244,236,210,.9)'; g.lineWidth = on ? 2.5 : 1.5;
+    g.beginPath(); g.arc(p.x, p.y, pr, 0, 7); g.stroke();
+    // viseur au centre : petit rond et quatre crans
+    const cx = Math.round(p.x), cy = Math.round(p.y), ink = on ? '#ffd666' : '#f4ecd2';
+    g.strokeStyle = '#10140d'; g.lineWidth = 4; g.beginPath(); g.arc(cx, cy, 8, 0, 7); g.stroke();
+    g.strokeStyle = ink; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, 8, 0, 7); g.stroke();
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      g.fillStyle = '#10140d'; g.fillRect(cx + dx * 11 - 2, cy + dy * 11 - 2, 4, 4);
+      g.fillStyle = ink; g.fillRect(cx + dx * 11 - 1, cy + dy * 11 - 1, 2, 2);
+    }
+    g.fillStyle = ink; g.fillRect(cx - 1, cy - 1, 2, 2);
   }
 }
 

@@ -380,7 +380,7 @@ function nearestEnemy(world, p, zone = null) {
   return best;
 }
 
-function damage(world, e, amount, slow, from) {
+function damage(world, e, amount, slow, from, type) {
   if (e.dead) return;
   if (e.boss) amount *= world.stats.bossMult;
   if (slow) e.slow = Math.max(e.slow, slow);
@@ -390,6 +390,8 @@ function damage(world, e, amount, slow, from) {
     world.texts.push({ x: e.x, y: e.y - e.r - 6, text: 'esquive', color: '#d6f2ff', size: 12, life: 0.7 });
     return;
   }
+  const r = world.run;
+  if (type && r) { r.dmg = r.dmg || {}; r.dmg[type] = (r.dmg[type] || 0) + Math.max(0, Math.min(amount, e.hp)); }
   e.hp -= amount; e.hit = 0.12;
   if (e.type === 'vein') {
     // chaque coup fait jaillir une part de l'or, proportionnelle aux dégâts
@@ -512,7 +514,15 @@ export function update(world, dt) {
     if (world.enemies.length < 40) spawnPack(world, true);
     return;
   }
-  if (world.phase === 'done') return;
+  if (world.phase === 'done') {
+    const r = world.run;
+    if (r && world.mode !== 'arena') {
+      r.doneT = (r.doneT || 0) + dt;
+      const b = bagPos(world), k = Math.min(1, dt * 3);
+      world.cam.x += (b.x - world.w * 0.3 - world.cam.x) * k; world.cam.y += (b.y - world.h * 0.5 - world.cam.y) * k; clampCam(world);
+    }
+    return;
+  }
   const r = world.run;
 
   if (world.phase === 'expedition' && world.mode === 'arena') {
@@ -532,7 +542,8 @@ export function update(world, dt) {
     const b = bagPos(world), k = Math.min(1, dt * 4);
     world.cam.x += (b.x - world.w / 2 - world.cam.x) * k; world.cam.y += (b.y - world.h / 2 - world.cam.y) * k; clampCam(world);
     if (r.shake > 0) {
-      r.shake -= dt;
+      r.shake -= dt; r.climbAge += dt;
+      climbTier(world, dt);
       if (r.shake <= 0) burstBag(world);
     } else {
       r.tearT -= dt;
@@ -679,10 +690,10 @@ function updateHeroes(world, dt) {
       if (onScreen(world, u.x, u.y)) sfx(world, def.shot === 'melee' ? 'slash' : def.shot);
       if (def.shot === 'melee') {
         // coup circulaire : touche la cible et tout ce qui est autour
-        for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave * (s.cleave || 1) + e.r) ** 2) damage(world, e, dmg, 0, u);
+        for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave * (s.cleave || 1) + e.r) ** 2) damage(world, e, dmg, 0, u, u.type);
         world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: '#f0f4fa', face: u.face });
       } else {
-        world.arrows.push({ kind: def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target: t, damage: dmg, dx: 0, dy: 0, speed: def.speed,
+        world.arrows.push({ kind: def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target: t, damage: dmg, type: u.type, dx: 0, dy: 0, speed: def.speed,
           aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' ? s.slowTime || HEROES.mage.slowTime : 0 });
       }
     }
@@ -702,10 +713,10 @@ function updateArrows(world, dt) {
     else if (d < t.r) {
       a.done = true;
       if (a.aoe) {
-        for (const e of world.enemies) if (!e.dead && d2(e, t) < (a.aoe + e.r) ** 2) damage(world, e, a.damage, a.slow, t);
+        for (const e of world.enemies) if (!e.dead && d2(e, t) < (a.aoe + e.r) ** 2) damage(world, e, a.damage, a.slow, t, a.type);
         burst(world, t.x, t.y, 10, ['#aee6ff', '#f0fbff', '#5a8cdc'], 120, 2, 0, 0.4);
         world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 6, r1: a.aoe, t: 0.35, life: 0.35, color: '#aee6ff' });
-      } else damage(world, t, a.damage, 0, { x: t.x - a.dx, y: t.y - a.dy });
+      } else damage(world, t, a.damage, 0, { x: t.x - a.dx, y: t.y - a.dy }, a.type);
     }
   }
   world.arrows = world.arrows.filter(a => !a.done);
@@ -764,10 +775,23 @@ function startTear(world) {
   r.tier = tierOf(r.bag, world.stats);
   r.mult = TIERS[r.tier].mult * (r.full ? FULL_BONUS : 1);
   r.tearTotal = r.bag * r.mult * (world.stats.tearMult || 1);
-  r.shake = 1.1;
-  world.events.push({ kind: 'tear' });
+  // Le sac « monte » de palier en palier sous les yeux du joueur avant de céder.
+  r.climb = 0; r.climbT = 0.75; r.climbAge = 0;
+  r.shake = 1.1 + 0.6 * r.tier;
+  world.events.push({ kind: 'tear', dur: r.shake });
   sfx(world, 'rumble');
-  world.events.push({ kind: 'banner', title: 'Les coutures craquent…', sub: '' });
+}
+
+function climbTier(world, dt) {
+  const r = world.run;
+  r.climbT -= dt;
+  if (r.climbT > 0 || r.climb >= r.tier) return;
+  r.climb++; r.climbT = 0.6; r.climbAge = 0;
+  const b = bagPos(world), tier = TIERS[r.climb];
+  world.fx.push({ kind: 'ring', x: b.x, y: b.y - 10, r0: 20, r1: 110, t: 0.45, life: 0.45, color: tier.glow });
+  burst(world, b.x, b.y - 10, 30, [tier.color, tier.glow, '#ffffff'], 260, 3, 0, 0.6);
+  shake(world, 6); sfx(world, 'burst');
+  world.events.push({ kind: 'tierUp', tier: r.climb });
 }
 
 function burstBag(world) {
@@ -789,7 +813,7 @@ function burstBag(world) {
   world.fx.push({ kind: 'ring', x: b.x, y: b.y - 20, r0: 10, r1: Math.max(world.w, world.h) * 0.6, t: 0.7, life: 0.7, color: TIERS[r.tier].glow });
   burst(world, b.x, b.y - 20, 60, [TIERS[r.tier].color, TIERS[r.tier].seam, TIERS[r.tier].glow], 420, 3, 0, 1);
   shake(world, 14); sfx(world, 'burst');
-  world.events.push({ kind: 'banner', title: 'Déchirure !', sub: total > 0 ? 'Rafle les pièces avant qu\'elles ne disparaissent' : 'Le sac était vide…' });
+  world.events.push({ kind: 'burst', title: total > 0 ? 'Rafle tout !' : 'Le sac était vide…', sub: total > 0 ? 'Passe le gant sur les pièces pour les attraper' : '' });
 }
 
 const TEAR_WAVES = 4, TEAR_WAVE_GAP = 0.55;

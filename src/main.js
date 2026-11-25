@@ -43,10 +43,66 @@ function tickBanner(dt) {
   bannerBusy -= dt;
   if (bannerBusy > 0 || !bannerQ.length) return;
   const { title, sub } = bannerQ.shift();
-  const el = $('banner'); el.textContent = title;
+  const el = $('banner'); el.textContent = '';
+  // les lettres tombent une à une, comme un tampon
+  [...title].forEach((ch, i) => { const l = document.createElement('span'); l.className = 'lt'; l.textContent = ch === ' ' ? '\u00a0' : ch; l.style.animationDelay = (i * 0.025) + 's'; el.append(l); });
   if (sub) { const s = document.createElement('small'); s.textContent = sub; el.append(s); }
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   bannerBusy = 1.4;
+}
+
+// ---------- Titre de phase (fin d'expédition) ----------
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function phaseShow(title, sub, bar) {
+  const el = $('phase');
+  $('phaseTitle').textContent = title; $('phaseSub').textContent = sub || ''; $('phaseBar').hidden = !bar;
+  el.hidden = false; el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
+}
+function tierFrac(r, k) {
+  // jusqu'où la barre doit monter une fois le palier k atteint
+  if (k < r.tier) return (k + 1) / TIERS.length;
+  const [lo, hi] = tierRange(r.tier, stats);
+  return (r.tier + Math.max(0.08, Math.min(1, (r.bag - lo) / (hi - lo)))) / TIERS.length;
+}
+function phaseFill(r, k, secs) {
+  const f = $('phaseFill');
+  f.style.transition = `width ${secs}s cubic-bezier(.4,0,.6,1)`;
+  f.style.width = (tierFrac(r, k) * 100) + '%';
+  f.style.background = TIERS[k].color; f.style.boxShadow = `0 0 10px ${TIERS[k].glow}`;
+}
+function flash() { const f = $('flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
+
+// ---------- Transition d'écran : un rideau de losanges pixel ----------
+let wiping = false;
+function wipe(mid) {
+  if (wiping) return;
+  const cv = $('wipe');
+  if (reduceMotion) { mid(); return; }
+  wiping = true;
+  const dpr2 = Math.min(2, devicePixelRatio || 1), W = innerWidth, H = innerHeight;
+  cv.width = W * dpr2; cv.height = H * dpr2; cv.style.display = 'block';
+  const g = cv.getContext('2d'); g.setTransform(dpr2, 0, 0, dpr2, 0, 0);
+  const C = 30, IN = 380, HOLD = 90, OUT = 420, SW = 0.45;
+  let t0 = performance.now(), swapped = false;
+  const frame = now => {
+    const e = now - t0;
+    let p, out = false;
+    if (e < IN) p = e / IN; else if (e < IN + HOLD) p = 1; else { p = 1 - (e - IN - HOLD) / OUT; out = true; }
+    if (!swapped && e >= IN) { swapped = true; mid(); }
+    g.clearRect(0, 0, W, H); g.fillStyle = '#1b1624';
+    for (let y = 0; y <= H + C; y += C) for (let x = 0; x <= W + C; x += C) {
+      const ox = (Math.round(y / C) % 2) * C / 2;
+      const d = ((x + ox) / (W + C)) * SW;                         // balayage de gauche à droite
+      const local = Math.min(1, Math.max(0, p * (1 + SW) - (out ? SW - d : d)));
+      const h = local * C * 1.02;
+      if (h <= 0.5) continue;
+      const cx = x + ox, cy = y;
+      g.beginPath(); g.moveTo(cx, cy - h); g.lineTo(cx + h, cy); g.lineTo(cx, cy + h); g.lineTo(cx - h, cy); g.closePath(); g.fill();
+    }
+    if (e < IN + HOLD + OUT) requestAnimationFrame(frame);
+    else { g.clearRect(0, 0, W, H); cv.style.display = 'none'; wiping = false; }
+  };
+  requestAnimationFrame(frame);
 }
 
 // ---------- Expédition ----------
@@ -59,7 +115,9 @@ function showRunUi() {
   arenaUi();
   buildDropBar();
 }
-function go() {
+function go() { wipe(goNow); }
+function goNow() {
+  $('phase').hidden = true;
   stats = computeStats(save.level);
   startExpedition(world, stats, ZONES[0], lairInfo(), stageFor(save.expeditions));
   showRunUi();
@@ -120,42 +178,76 @@ function finishExpedition() {
   const unlocked = !lairOpen() && r.tier >= ARENA.unlockTier;
   if (unlocked) save.lairOpen = true;
   writeSave(save);
-  const rows = [['Élémentaires vaincus', fmt(r.kills)]];
+  const rows = [['Élémentaires vaincus', fmt(r.kills), '#c4c8b2']];
   if (!r.lair.only) {
-    rows.push(
-      ['Pièces dans le sac', fmt(r.bag)],
-      ['Palier atteint', TIERS[r.tier].name + (r.full ? ' (plein)' : '')],
-      ['Multiplicateur', '×' + r.mult.toFixed(2).replace('.', ',')],
-      ['Pièces raflées', `${fmt(r.tearGot)} / ${fmt(r.tearTotal)}`],
-    );
-    if (r.overflow > 0) rows.push(['Surplus du sac plein', '+' + fmt(r.overflow)]);
-    if (r.golds) rows.push(['Feux follets dorés aperçus', fmt(r.golds)]);
-    if (r.eventsGot) rows.push(['Événements réussis', fmt(r.eventsGot)]);
+    rows.push(['Pièces dans le sac', fmt(r.bag), '#e9cf86']);
+    if (r.overflow > 0) rows.push(['Surplus du sac plein', '+' + fmt(r.overflow), '#e9cf86']);
+    if (r.golds) rows.push(['Feux follets dorés', fmt(r.golds), '#ffd246']);
+    if (r.eventsGot) rows.push(['Événements réussis', fmt(r.eventsGot), '#7fd0ff']);
   }
   if (r.boss) {
-    rows.push([world.zone.boss.name, r.bossKilled ? 'vaincu !' : `${Math.round((1 - Math.max(0, r.boss.hp) / r.boss.max) * 100)} % de dégâts`]);
-    rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got)]);
+    rows.push([world.zone.boss.name, r.bossKilled ? 'vaincu !' : `${Math.round((1 - Math.max(0, r.boss.hp) / r.boss.max) * 100)} % de dégâts`, '#ff9f7a']);
+    rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got), '#ff9f7a']);
   }
-  if (unlocked) rows.push([world.zone.boss.lair, 'portail ouvert !']);
+  if (unlocked) rows.push([world.zone.boss.lair, 'portail ouvert !', '#c8a2ff']);
   const dl = $('resList'); dl.innerHTML = '';
-  for (const [a, b] of rows) {
-    const dt = document.createElement('dt'); dt.textContent = a;
+  for (const [a, b, c] of rows) {
+    const dt = document.createElement('dt'); dt.textContent = a; dt.style.setProperty('--c', c);
     const dd = document.createElement('dd'); dd.textContent = b; dd.className = 'num';
     dl.append(dt, dd);
   }
-  // le total compte jusqu'au gain, puis on annonce ce qui est achetable
-  const t0 = performance.now(), el = $('resTotal');
-  const tick = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = '+' + fmt(Math.round(gained * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(tick); };
-  requestAnimationFrame(tick);
+  // en-tête : numéro d'expédition, palier du sac atteint et multiplicateur
+  $('resSub').textContent = r.lair.only ? world.zone.boss.lair : `Expédition ${save.expeditions} · ${world.zone.stage || world.zone.name}`;
+  const tier = r.tier || 0, [lo, hi] = tierRange(tier, stats);
+  $('resTierIco').style.background = TIERS[tier].color;
+  $('resTierIco').title = TIERS[tier].name;
+  $('resTierFill').style.width = ((tier + Math.max(0.05, Math.min(1, (r.bag - lo) / (hi - lo)))) / TIERS.length * 100) + '%';
+  $('resTierFill').style.background = TIERS[tier].color;
+  $('resMult').textContent = r.lair.only ? '' : '×' + r.mult.toFixed(2).replace(/\.?0+$/, '').replace('.', ',');
+  document.querySelector('#result .resTier').style.display = r.lair.only ? 'none' : '';
+  $('resGot').textContent = r.lair.only ? fmt(r.lair.got) : `${fmt(r.tearGot)} / ${fmt(r.tearTotal)}`;
+  // objectif suivant
+  const bossDone = ((save.bosses || {})[world.zone.id] || 0) > 0;
+  $('resGoal').textContent = lairOpen() && !bossDone ? `${world.zone.boss.name} t'attend dans son antre !`
+    : tier < stats.tiers - 1 ? `Prochain palier : ${TIERS[tier + 1].name}` : 'Sac au palier maximal !';
+  // dégâts par héros, à gauche
+  const dmg = r.dmg || {}, types = HERO_ORDER.filter(k => dmg[k] > 0);
+  const top = Math.max(1, ...types.map(k => dmg[k])), sum = types.reduce((t, k) => t + dmg[k], 0);
+  const ul = $('dmgList'); ul.innerHTML = '';
+  for (const k of types.sort((x, y) => dmg[y] - dmg[x])) {
+    const li = document.createElement('li');
+    const ic = document.createElement('canvas'); ic.width = ic.height = 68; ic.getContext('2d').drawImage(heroIcon(k), 0, 0);
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = HEROES[k].plural;
+    const bar = document.createElement('span'); bar.className = 'dbar'; const fill = document.createElement('i'); bar.append(fill);
+    const v = document.createElement('span'); v.className = 'num'; v.textContent = fmt(Math.round(dmg[k]));
+    const pc = document.createElement('span'); pc.className = 'pc num'; pc.textContent = Math.round(dmg[k] / sum * 100) + ' %';
+    li.append(ic, nm, v, pc, bar); ul.append(li);
+    requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = (dmg[k] / top * 100) + '%'; }));
+  }
+  $('resDmg').hidden = !types.length;
+  const better = save.lastDmg > 0 && sum > save.lastDmg * 1.05 ? Math.round((sum / save.lastDmg - 1) * 100) : 0;
+  $('resBetter').hidden = !better;
+  $('resBetter').textContent = `+${better} % de dégâts par rapport à la dernière fois`;
+  if (sum > 0) { save.lastDmg = sum; writeSave(save); }
   $('resRecord').hidden = !record;
   const can = NODES.filter(n => visible(n) && !n.soon && !lockedNow(n) && L(n.id) < capOf(n) && save.coins >= costOf(n, L(n.id))).length;
   $('resNews').textContent = can ? `${can} compétence${can > 1 ? 's' : ''} à acheter !` : '';
   $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true; $('attrBox').hidden = true;
-  $('result').hidden = false;
-  $('back').focus();
+  $('phase').hidden = true;
+  // la scène s'assombrit d'abord sur le sac, puis le bilan glisse depuis la droite et le total compte
+  setTimeout(() => {
+    if (world.phase !== 'done') return;
+    $('result').hidden = false;
+    $('back').focus();
+    const t0 = performance.now(), el = $('resTotal');
+    const tick = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = '+' + fmt(Math.round(gained * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(tick); };
+    el.textContent = '+0'; requestAnimationFrame(tick);
+  }, world.mode === 'arena' ? 200 : 750);
 }
 
-function toAtelier() {
+function toAtelier() { wipe(toAtelierNow); }
+function toAtelierNow() {
+  $('phase').hidden = true;
   world.phase = 'idle'; world.run = null; world.heroes = []; world.coins = [];
   stats = computeStats(save.level); world.stats = stats;
   $('result').hidden = true; $('atelier').hidden = false;
@@ -213,7 +305,14 @@ function drainEvents() {
     else if (ev.kind === 'eventIntro') eventIntro(ev.ev);
     else if (ev.kind === 'boss') { save.bosses = save.bosses || {}; save.bosses[world.zone.id] = (save.bosses[world.zone.id] || 0) + 1; writeSave(save); }
     else if (ev.kind === 'arena') { arenaUi(); buildDropBar(); }
-    else if (ev.kind === 'tear') { $('dropBar').hidden = true; $('hint').hidden = true; document.querySelectorAll('.edge').forEach(b => { b.hidden = true; }); }
+    else if (ev.kind === 'tierUp') { phaseFill(world.run, ev.tier, 0.5); }
+    else if (ev.kind === 'burst') { flash(); phaseShow(ev.title, ev.sub, false); }
+    else if (ev.kind === 'tear') {
+      const r = world.run, f = $('phaseFill');
+      f.style.transition = 'none'; f.style.width = '0%';
+      phaseShow('Le sac déborde !', '', true);
+      requestAnimationFrame(() => phaseFill(r, 0, 0.7));
+      $('dropBar').hidden = true; $('hint').hidden = true; document.querySelectorAll('.edge').forEach(b => { b.hidden = true; }); }
   }
   world.events.length = 0;
 }
@@ -478,6 +577,10 @@ function buyFx(n, cost, revealed) {
     t.style.left = q.x + 'px'; t.style.top = (q.y - 30) + 'px'; inner.append(t); setTimeout(() => t.remove(), 1100);
   }
   const w = $('atelierWallet').parentElement; w.classList.remove('spend'); void w.offsetWidth; w.classList.add('spend');
+  if (cost > 0) {
+    const d = document.createElement('span'); d.className = 'walletDelta num'; d.textContent = '−' + fmt(cost);
+    w.append(d); setTimeout(() => d.remove(), 1200);
+  }
   revealed.forEach((m, i) => {
     const e = inner.querySelector(`[data-id="${m.id}"]`);
     if (e) { e.style.animationDelay = (0.15 + i * 0.08) + 's'; e.classList.add('reveal'); }
@@ -567,7 +670,7 @@ window.addEventListener('keyup', e => { if (e.code === 'Space') world.holdKey = 
 $('go').onclick = go;
 $('lairBtn').onclick = goLair;
 $('back').onclick = toAtelier;
-$('again').onclick = () => { $('result').hidden = true; go(); };
+$('again').onclick = () => go();
 addEventListener('keydown', e => {
   if ($('result').hidden) return;
   if (e.key === 'r' || e.key === 'R') { e.preventDefault(); $('again').click(); }

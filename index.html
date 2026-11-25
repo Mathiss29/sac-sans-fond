@@ -38,6 +38,8 @@
   </div>
   <div id="hint" hidden>Clique pour larguer tes archers · Passe le gant sur les pièces</div>
   <div id="banner"></div>
+  <div id="phase" hidden><div id="phaseTitle"></div><div id="phaseSub"></div><div class="tbar" id="phaseBar"><i id="phaseFill"></i><b style="left:25%"><u>×1,6</u></b><b style="left:50%"><u>×2,5</u></b><b style="left:75%"><u>×4</u></b></div></div>
+  <div id="flash"></div>
 
   <section class="screen" id="atelier">
     <header class="topBar">
@@ -72,16 +74,24 @@
   <section class="screen" id="result" hidden>
     <div class="box">
       <h2>Expédition terminée</h2>
+      <div class="resSub" id="resSub"></div>
+      <div class="resTier"><span class="tierIco" id="resTierIco"></span><div class="tbar"><i id="resTierFill"></i><b style="left:25%"></b><b style="left:50%"></b><b style="left:75%"></b></div><span id="resMult" class="num"></span></div>
+      <div class="resLine"><span>Ramassé</span><span class="num" id="resGot">0</span></div>
+      <div class="total"><span><span class="coin-ico"></span>Total <b class="record" id="resRecord" hidden>Record !</b></span><span class="num" id="resTotal">0</span></div>
+      <p class="resGoal" id="resGoal"></p>
       <dl id="resList"></dl>
-      <div class="total"><span>Total <b class="record" id="resRecord" hidden>Record !</b></span><span class="num" id="resTotal">0</span></div>
       <p id="resNews"></p>
       <div class="resBtns">
-        <button class="btn second" id="again" type="button">Rejouer <kbd>R</kbd></button>
-        <button class="btn" id="back" type="button">Améliorer <kbd>Entrée</kbd></button>
+        <button class="btn second" id="again" type="button">Rejouer</button>
+        <button class="btn" id="back" type="button">Améliorer</button>
       </div>
+      <div class="resKeys"><span><kbd>R</kbd> rejouer</span><span><kbd>Entrée</kbd> améliorer</span></div>
     </div>
+    <div class="resDmg" id="resDmg"><h4>Dégâts de l'expédition</h4><ul id="dmgList"></ul></div>
+    <div class="resBetter" id="resBetter" hidden></div>
   </section>
 </div>
+<canvas id="wipe" aria-hidden="true"></canvas>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>
