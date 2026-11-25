@@ -14,13 +14,15 @@ export const FULL_BONUS = 1.25;
 
 export const ZONES = [
   {
-    id: 'clairiere', name: 'Clairière',
+    id: 'clairiere', name: 'Clairière', stage: 'Clairière du matin',
     ground: ['#6fa65a', '#4f8a45'], patch: '#86bb68', flower: ['#f6e27a', '#f29bb8', '#ffffff'],
     rock: '#8c8f86', tree: '#2f6b3c', path: '#c9a06a', water: '#3f8fc8',
     hpMult: 1, valueMult: 1,
     spawn: { wisp: 5, golem: 2, wind: 3 },
     // Élémentaire primordial : vit dans la clairière sombre (position en fraction de la région).
-    boss: { name: 'Brasier primordial', hp: 450, value: 260, radius: 40, speed: 16, at: [0.84, 0.2], area: 0.13 },
+    // Élémentaire primordial : on l'affronte dans son antre (voir ARENA). Sur la carte, sa clairière garde le portail.
+    boss: { name: 'Brasier primordial', lair: 'Antre du Brasier', hp: 3400, value: 400, radius: 40, speed: 22, at: [0.84, 0.2], area: 0.13,
+      fireEvery: 3.2, fireRadius: 48, fireWarn: 1.1, stun: 1.8, summonAt: [0.66, 0.33], summonN: 8 },
   },
 ];
 
@@ -36,13 +38,13 @@ export const GOLD_WISP = { chance: 0.025, value: 15, hp: 1.5, speed: 1.7, color:
 // Héros. shot : projectile (arrow, frost, note) ou 'melee'. Les dégâts et cadences de base
 // sont multipliés par les améliorations de l'Atelier (voir computeStats).
 export const HEROES = {
-  archer: { name: 'Archer', plural: 'Archers', range: 200, damage: 3, cooldown: 0.9, shot: 'arrow', speed: 560, walkSpeed: 60,
+  archer: { name: 'Archer', plural: 'Archers', range: 200, damage: 3, cooldown: 0.65, shot: 'arrow', speed: 620, walkSpeed: 100,
     blurb: 'Tire de loin sur la cible la plus proche.' },
-  mage: { name: 'Mage de givre', plural: 'Mages', range: 170, damage: 2.5, cooldown: 1.7, shot: 'frost', speed: 380, walkSpeed: 52,
+  mage: { name: 'Mage de givre', plural: 'Mages', range: 170, damage: 2.5, cooldown: 1.25, shot: 'frost', speed: 440, walkSpeed: 85,
     aoe: 55, slow: 0.5, slowTime: 1.6, blurb: 'Éclats de givre : dégâts de zone et ralentissement.' },
-  knight: { name: 'Chevalier', plural: 'Chevaliers', range: 30, damage: 8, cooldown: 0.8, shot: 'melee', walkSpeed: 120,
+  knight: { name: 'Chevalier', plural: 'Chevaliers', range: 30, damage: 8, cooldown: 0.6, shot: 'melee', walkSpeed: 170,
     cleave: 34, blurb: 'Fonce au contact et frappe tout ce qui l\'entoure.' },
-  bard: { name: 'Barde', plural: 'Bardes', range: 160, damage: 1, cooldown: 1.2, shot: 'note', speed: 300, walkSpeed: 62,
+  bard: { name: 'Barde', plural: 'Bardes', range: 160, damage: 1, cooldown: 0.9, shot: 'note', speed: 360, walkSpeed: 100,
     aura: 150, auraBoost: 0.3, blurb: 'Ses chansons font tirer plus vite les héros proches.' },
 };
 export const HERO_ORDER = ['archer', 'mage', 'knight', 'bard'];
@@ -50,15 +52,20 @@ export const HERO_ORDER = ['archer', 'mage', 'knight', 'bard'];
 // Taille d'une région, en pixels d'écran (environ 3 × 3 écrans d'ordinateur).
 export const MAP = { w: 2700, h: 1800 };
 
+// Antre du boss : une salle fermée où l'on affronte l'élémentaire primordial seul.
+// unlockTier : palier du sac à atteindre une fois en expédition pour ouvrir le portail.
+export const ARENA = { w: 1200, h: 700, duration: 60, lootTime: 8, unlockTier: 2, firstBonus: 3 };
+
 export const BASE = {
   duration: 30,          // s
-  spawnEvery: 0.45,      // s entre deux apparitions
-  maxEnemies: 55,
+  spawnEvery: 1.6,       // s entre deux hordes
+  maxEnemies: 220,
+  startPacks: 9,         // hordes présentes au départ
   archers: 3,
   bagCapacity: 120,      // pièces pour le premier palier
-  gloveRadius: 46,       // px
-  attraction: 1.5,       // s d'Attraction (rayon ×2)
-  attractionRegen: 0.35, // s récupérées par seconde
+  gloveRadius: 54,       // px
+  attraction: 3,         // s de Focus (ou d'Attraction pendant la Déchirure)
+  focusRecovery: 8,      // s pour recharger entièrement la jauge
   coinLife: 8,           // s avant qu'une pièce au sol disparaisse
   bagMouth: 60,          // px, rayon d'aspiration du sac
   tearDuration: 5,       // s pour ramasser pendant la Déchirure
@@ -113,9 +120,9 @@ export const NODES = [
 
   // Récolte
   { id: 'glove', parent: 'root', name: 'Gant élargi', branch: 'Récolte', x: 4, y: 4, max: 6, cost: 10, growth: 1.8,
-    desc: 'Le gant attire les pièces de plus loin.', effect: l => `Rayon ${Math.round(46 * (1 + 0.18 * l))} px` },
-  { id: 'attraction', parent: 'glove', name: 'Attraction tenace', branch: 'Récolte', x: 3, y: 4, max: 5, cost: 35, growth: 1.9,
-    desc: 'L\'Attraction (clic maintenu) dure plus longtemps.', effect: l => `${fmtNum(1.5 + 0.5 * l)} s d'Attraction` },
+    desc: 'Le gant attire les pièces de plus loin.', effect: l => `Rayon ${Math.round(54 * (1 + 0.18 * l))} px` },
+  { id: 'attraction', parent: 'glove', name: 'Focus tenace', branch: 'Récolte', x: 3, y: 4, max: 5, cost: 35, growth: 1.9,
+    desc: 'Le Focus (clic maintenu : les héros visent la zone du gant) et l\'Attraction de la Déchirure durent plus longtemps.', effect: l => `${fmtNum(3 + 0.75 * l)} s de Focus` },
   { id: 'coinLife', parent: 'glove', name: 'Pièces patientes', branch: 'Récolte', x: 4, y: 5, max: 5, cost: 30, growth: 1.8,
     desc: 'Les pièces restent plus longtemps au sol avant de disparaître.', effect: l => `${8 + 2 * l} s au sol` },
   { id: 'goldWisp', parent: 'attraction', name: 'Flair doré', branch: 'Récolte', x: 2, y: 4, max: 5, cost: 120, growth: 2,
@@ -154,7 +161,7 @@ export function computeStats(level) {
     bagCapacity: BASE.bagCapacity * Math.pow(1.6, L('capacity')),
     tiers: 1 + L('tierCuir') + (L('tierCuir') ? L('tierSoie') : 0) + (L('tierCuir') && L('tierSoie') ? L('tierCeleste') : 0),
     gloveRadius: BASE.gloveRadius * (1 + 0.18 * L('glove')),
-    attraction: BASE.attraction + 0.5 * L('attraction'),
+    attraction: BASE.attraction + 0.75 * L('attraction'),
     coinLife: BASE.coinLife + 2 * L('coinLife'),
     bagMouth: BASE.bagMouth * (1 + 0.5 * L('mouth')),
     tearDuration: BASE.tearDuration,

@@ -14,6 +14,15 @@ puis ouvrir http://localhost:8000.
 
 Contrôles : clic sur la carte pour larguer le héros choisi (1 à 4 ou clic sur sa carte pour changer), ZQSD / WASD / flèches ou boutons des bords pour se déplacer, clic sur la mini-map pour y aller, survol pour ramasser les pièces, clic maintenu ou Espace pour l'Attraction (rayon doublé).
 
+## Antre du boss
+
+Le Brasier primordial ne rôde plus sur la carte : on l'affronte dans son antre, une salle fermée. Le portail de sa clairière s'ouvre la première fois que le sac atteint le palier Soie.
+
+- **Par le portail**, pendant une expédition : un clic dessus fait entrer tes héros dans l'antre. La carte, le sac et leur chrono sont mis en pause, puis tu reviens là où tu étais. Une seule visite par expédition.
+- **Par le bouton de l'Atelier** : combat direct, avec tous tes héros à larguer.
+
+Dans l'antre (60 s) : le boss annonce des cercles de feu qui étourdissent les héros pris dedans, et invoque des feux follets à 66 % et 33 % de sa vie, puis attaque plus vite. Vaincu, il lâche une pluie de pièces qui va droit dans la bourse (×3 la première fois) : 8 s pour la rafler.
+
 ## Organisation du code
 
 | Fichier | Rôle |
@@ -31,7 +40,7 @@ Les trois morceaux de `assets/music/` sont de Mathis, créés avec Suno (abonnem
 
 - **Atelier** : *Pixel Meadow*
 - **Expédition** : *Fantasy Battle Arp*
-- **Boss** (près de sa clairière) : *Pixel Demons Rage*
+- **Boss** (dans son antre) : *Pixel Demons Rage*
 
 Le bouton 🔊 coupe musique et bruitages.
 

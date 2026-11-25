@@ -13,15 +13,19 @@
   <canvas id="cv"></canvas>
 
   <div id="hud" hidden>
-    <div class="chip" id="walletBox"><span class="coin-ico"></span><span id="wallet" class="num">0</span></div>
-    <div class="chip" id="bagBox">
-      <div id="bagTop"><span id="tierName">Sac de toile</span><span id="tierMult">×1</span></div>
-      <div class="bar"><div id="bagFill"></div></div>
-      <div id="bagTxt" class="num">0 / 120</div>
+    <div id="hudLeft">
+      <div class="chip" id="walletBox"><span class="coin-ico"></span><span id="wallet" class="num">0</span></div>
+      <div id="runGain" class="num">+0 dans le sac</div>
+      <div class="chip" id="bagBox">
+        <div id="bagTop"><span id="tierName">Sac de toile</span><span id="tierMult">×1</span></div>
+        <div class="bar"><div id="bagFill"></div></div>
+        <div id="bagTxt" class="num">0 / 120</div>
+      </div>
     </div>
     <div class="chip" id="timerBox"><div id="timer" class="num">30.0</div><div id="zoneTxt">Clairière</div></div>
-    <div class="chip" id="attrBox">Attraction<div class="bar"><div id="attrFill"></div></div><small>maintenir le clic ou Espace</small></div>
+    <div class="chip" id="screenBox"><div class="ttl">À l'écran</div><div id="screenList"></div></div>
   </div>
+  <div class="chip" id="attrBox" hidden><div id="attrTop"><span id="attrName">Maintenir le clic : Focus</span><span id="attrTxt" class="num">3 s</span></div><div class="bar"><div id="attrFill"></div></div></div>
   <div id="bossBar" hidden><span id="bossName"></span><div class="bar"><div id="bossFill"></div></div></div>
   <div id="dropBar" hidden></div>
   <div id="mapUi" hidden>
@@ -44,6 +48,7 @@
       <div class="headRight">
         <div class="chip big"><span class="coin-ico"></span><span id="atelierWallet" class="num">0</span></div>
         <button class="ghost mute" type="button">🔊</button>
+        <button class="btn lair" id="lairBtn" type="button">Antre du Brasier</button>
         <button class="btn" id="go">Partir en expédition</button>
       </div>
     </header>

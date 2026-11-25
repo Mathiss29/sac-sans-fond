@@ -1,0 +1,136 @@
+// Démons maison (future région des Enfers), en ASCII comme le reste du pixel art.
+// Style : couleurs sourdes, contours noirs, petites têtes et grandes armes, d'après les références
+// montrées par Mathis (pack de Zerie). Ce sont nos propres dessins : aucun pixel n'est repris.
+// Palette commune (chiffres = rouges du plus sombre au plus clair).
+const PAL = { 'O': '#0c0808', '1': '#3a0908', '2': '#6f1a29', '3': '#7d1818', '4': '#972f34', '5': '#a6483a', '6': '#c26950', 'g': '#5b4b53', 'G': '#7b6a6b', 'h': '#9a918f', 's': '#4d5a53', 'S': '#75716e', 't': '#a8b0a8', 'e': '#f0b050', 'E': '#d18e61', 'p': '#311339', 'P': '#4d122f', 'q': '#6e1438', 'Q': '#811e3d', 'k': '#1f1a1a', 'K': '#32272e', 'L': '#44373d', 'M': '#5b4b53', 'f': '#be512f', 'F': '#e08a40', 'y': '#f4d070', 'w': '#d8d0c4', 'W': '#9a918f' };
+
+const IMP = [
+  '..........................O.',
+  '...O.......O.............OtO',
+  '..OhO.....OhO...........OtsO',
+  '..OGhO...OhGO..........OtsO.',
+  '...OGGOOOGGO..........OtsO..',
+  '...O3444333O.........OtsO...',
+  '..O345433331O.......OtsO....',
+  '..O54eE3eE321O.....OSsO.....',
+  '..O5433333321O....OSsO......',
+  '...O43OkO3321O...OSsO.......',
+  'OO..O43332211O..OSsO........',
+  'OqPO.OO43221OOOOSsO.........',
+  'OQqPOO54433211O4OsO.........',
+  'OqQqP54433332O44O3O.........',
+  '.OqPO4433OOO2OOOO3O.........',
+  '..OO.O433O.O3321OO..........',
+  '.....O433O..O3321O..........',
+  '....O4332O...O3221O.........',
+  '....O3221O....O3211O........',
+  '...O32211O.....O3211O.......',
+  '...OOOOOO......OOOOOO.......',
+];
+const HOUND = [
+  '...........O...O..........',
+  '..........O4O.O4O.........',
+  '.....O...O4f4O4f4O........',
+  '....O4O.OfFfffFf4OO.......',
+  '...O4f4OKLLKfFfLLKO.......',
+  '...OfFfLKLLLKLLLLLKO......',
+  '...OfLLKKLLLLLLLKKKLOO....',
+  '....OLKKLLLLLLLLLKLeLKO...',
+  '....OKKKLLLLLLLLKKKLLLLO..',
+  '..OOKKKKKLLLLLLKKKKKLLKwO.',
+  '.OKKO.OKKKKKKKKKKOOKK2OwO.',
+  'O1KO..OKKKK11KKKKO.OK2OO..',
+  'OKO...OKK1OO1KKKO..OO2O...',
+  '.O...OKKO.O1KK1O....OO....',
+  '.....OK1O..OKK1O..........',
+  '....OKK1O...OK11O.........',
+  '....OOOO....OOOO..........',
+];
+const BLOOD = [
+  '........OOOOO...........',
+  '......OO45544OO.........',
+  '.....O4565544322O.......',
+  '....O456554443222O......',
+  '...O45544OOOO43222O.....',
+  '...O4544OwOwOO32221O....',
+  '..O4544OwOkkOwO3221O....',
+  '..O454OwOkkkkkOw3221O...',
+  '..O454OOkk1kkkkO32221O..',
+  '..O4544OwOkkkOwO32221O..',
+  '.O45444OOwOwOwOO322221O.',
+  '.O454444OOOOOO43222211O.',
+  '.O44544444444443222211O.',
+  'O4544O444444443O222111O.',
+  'O443O24444444322O22111O.',
+  '.OO.O22O44432O222O211O..',
+  '....O1O.O222O.O21O.OO...',
+  '.....O...OOO...OO.......',
+];
+const SKULL = [
+  '.........f..............',
+  '.....f..fFf..f..........',
+  '....fFf.fyFffFf.........',
+  '...fFyFffyyFFyFf........',
+  '...fFyyFFyyyFyFf.....f..',
+  '....fFyyyyyyyFf...f.fF..',
+  '.....OOOOOOOOOO..fFfFf..',
+  '....OhhhhhhhhhWO.fFFf...',
+  '...OhwwhhhhhhhhWOfFf....',
+  '...OhwhhhhhhhhhhWOf.....',
+  '..OhhhOOOhhOOOhhWO......',
+  '..OhhOkkeOhOkkeOhWO.....',
+  '..OhhOkkkOhOkkkOWWO.....',
+  '..OWhhOOOhhhOOOhWWO.....',
+  '...OWhhhhhOOhhhWWO......',
+  '...OOWWhhhhhhhWWOO......',
+  '....OWOwOwOwOwOWO.......',
+  '....OOWOWOWOWOWOO.......',
+  '.....OOOOOOOOOOO........',
+];
+const WARLOCK = [
+  '.......................OOO..',
+  '...O.........O........OyEyO.',
+  '..OhO.......OhO......OyO.OyO',
+  '..OGhO.....OhGO......OEO.OEO',
+  '...OGhO...OhGO........OyOyO.',
+  '....OGOOOOOGO..........OSO..',
+  '....OO22222OO..........OSO..',
+  '...O2244444q2O.........OSO..',
+  '..O224OOOOO4q2O........OSO..',
+  '..O24OkekekO4q2O.......OSO..',
+  '..O24OkkkkkkO4q2O......OSO..',
+  '..O224OkkkkO44q2O......OSO..',
+  '.OO2244OOOO442q2OO....OOSO..',
+  'O22O22444444422qO2O..O54SO..',
+  'O2QO2244444442q2OQ2OO544SO..',
+  'O2QO22444fy444q2OQQ2O543SO..',
+  'OQ2O2244yfy442qO.OOOO43OSO..',
+  '.OOO224444f4442qO....OOOSO..',
+  '...O22444444442qO......OSO..',
+  '...O224444444422qO.....OSO..',
+  '..O2244OOOOOOO422qO....OSO..',
+  '..O224OFyFFyFFO422O....OSO..',
+  '..O2244OOOOOOO4422qO...OSO..',
+  '.O22444444444444422qO..OSO..',
+  '.O224444444444444422qO.OSO..',
+  'O22444444444444444422qOOSO..',
+  'O224444444444444444422qOSO..',
+  'O22Q444444444444444Q22qOSO..',
+  'OO2QQ44444444444444QQ22qOSO.',
+  '.OOOOOOOOOOOOOOOOOOOOOOOOOO.',
+];
+
+// Flammes qui vacillent : on échange les deux tons de feu.
+const flicker = rows => rows.map(r => r.replace(/[fF]/g, c => (c === 'f' ? 'F' : 'f')));
+// Rebond : tout monte d'une ligne.
+const bob = rows => [...rows.slice(1), '.'.repeat(rows[0].length)];
+// Pattes : les quatre dernières lignes décalées d'une colonne.
+const step = rows => rows.map((r, i) => (i >= rows.length - 4 ? '.' + r.slice(0, -1) : r));
+
+export const DEMONS = {
+  imp: { name: 'Diablotin', frames: [IMP, bob(IMP)], pal: PAL },
+  hound: { name: 'Chien des Enfers', frames: [HOUND, flicker(step(HOUND))], pal: PAL },
+  blood: { name: 'Gueule de sang', frames: [BLOOD, bob(BLOOD)], pal: PAL },
+  skull: { name: 'Crâne ardent', frames: [SKULL, flicker(bob(SKULL))], pal: PAL },
+  warlock: { name: 'Sorcier des abîmes', frames: [WARLOCK, flicker(bob(WARLOCK))], pal: PAL },
+};
