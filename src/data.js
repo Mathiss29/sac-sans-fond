@@ -150,6 +150,7 @@ export function computeStats(level, gb = null) {
     critBy: { archer: (G('crit', 'archer') - 1), mage: (G('crit', 'mage') - 1), knight: (G('crit', 'knight') - 1), bard: (G('crit', 'bard') - 1) },
     bossBy: { archer: G('boss', 'archer'), mage: G('boss', 'mage'), knight: G('boss', 'knight'), bard: G('boss', 'bard') },
     gearOn: L('armory') > 0,
+    myths: (gb && gb.myths) || {},
     range: { archer: (shooter + 0.08 * L('hawk')) * G('range', 'archer'), mage: shooter * G('range', 'mage'), bard: shooter * G('range', 'bard'), knight: G('range', 'knight') },
     cleave: (1 + 0.08 * L('whirl')) * (1 + GG('aoe') / 100),
     slowTime: HEROES.mage.slowTime + 0.3 * L('deepFrost'),

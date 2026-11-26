@@ -1,7 +1,7 @@
 // Onglet Compagnie : équipement des lignées, forge (affinage), réserve et recyclage ; écran « Sers-toi ! ».
 import { HEROES, HERO_ORDER } from './data.js';
 import { TREE_ICONS, treeIcons } from './sprites.js';
-import { RARITIES, GEAR_ICONS, ICON_FALLBACK, SLOTS, RESERVE, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText,
+import { RARITIES, GEAR_ICONS, ICON_FALLBACK, WEAPONS, KINDS, CHARM_KINDS, SETS, MYTHS, setOf, setCount, mythText, albumKey, albumBonus, ALBUM_STEP, STAT_TEXT, SLOTS, RESERVE, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText,
   isBetter, refineCost, refineChance, gearBonus } from './gear.js';
 
 const $ = id => document.getElementById(id);
@@ -37,6 +37,7 @@ function iconEl(name, cls = 'gIco') {
 // Effets de rareté sur un cadre d'objet : lueur (rare), reflet et étincelles (épique), rayons tournants (légendaire)
 function rarFx(el, rarity) {
   el.classList.add('rar', 'rar' + rarity);
+  if (rarity >= 4) el.classList.add('rar3');
   if (rarity < 1) return el;
   const back = h('span', 'fxb'), front = h('span', 'fxf');
   if (rarity >= 3) back.append(h('i', 'rays'));
@@ -64,29 +65,35 @@ function heroCount(k) {
 }
 const slotOpen = s => L(SLOTS.find(x => x.id === s).node) > 0;
 
+let view = 'tree';
 export function initCompany(ctx) {
   C = ctx;
   const tabs = document.querySelector('#atelier .tabs');
-  const tree = tabs.querySelector('.tab');
+  const [tree, book] = tabs.querySelectorAll('.tab');
   tree.dataset.view = 'tree';
   const comp = h('button', 'tab', 'Compagnie'); comp.type = 'button'; comp.id = 'tabCompany'; comp.dataset.view = 'company';
   comp.append(h('span', 'tabBang', '!'));
   tree.after(comp);
-  tree.onclick = () => show(false);
-  comp.onclick = () => show(true);
+  book.id = 'tabBook'; book.dataset.view = 'album'; book.append(h('span', 'tabBang', '!'));
+  tree.onclick = () => show('tree');
+  comp.onclick = () => show('company');
+  book.onclick = () => show('album');
   addEventListener('keydown', e => {
     if ($('atelier').hidden || !open) return;
     if (e.key === 'Escape') { recycleMode = false; picked = null; render(); }
   });
   companyRefresh();
 }
-function show(on) {
-  if (on && !L('armory')) return;
-  open = on;
-  $('treeWrap').hidden = on; $('company').hidden = !on;
-  document.querySelectorAll('#atelier .tabs .tab').forEach(t => t.classList.toggle('on', (t.dataset.view === 'company') === on));
-  $('atelier').querySelector('.hintTxt').innerHTML = on ? 'Clique un objet pour l\'équiper<br>Survole pour comparer' : 'Clique une compétence pour l\'acheter<br>Glisse pour voir, molette pour zoomer';
-  if (on) { const g = gearOf(C.save); g.news = 0; C.write(); }
+function show(v) {
+  if (v !== 'tree' && !L('armory')) return;
+  view = v; open = v === 'company';
+  $('treeWrap').hidden = v !== 'tree'; $('company').hidden = v !== 'company'; $('album').hidden = v !== 'album';
+  document.querySelectorAll('#atelier .tabs .tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
+  $('atelier').querySelector('.hintTxt').innerHTML = v === 'company' ? 'Clique un objet pour l\'équiper<br>Survole pour comparer'
+    : v === 'album' ? 'Trouve des objets en expédition<br>pour remplir l\'album' : 'Clique une compétence pour l\'acheter<br>Glisse pour voir, molette pour zoomer';
+  const g = gearOf(C.save);
+  if (v === 'company') { g.news = 0; C.write(); }
+  if (v === 'album') { g.albumNews = 0; C.write(); renderAlbum(); }
   companyRefresh();
 }
 
@@ -96,7 +103,11 @@ export function companyRefresh() {
   t.hidden = !on;
   const g = C.save.gear;
   t.classList.toggle('bang', on && !open && !!(g && (g.news > 0 || !g.visited)));
-  if (!on && open) show(false);
+  const bk = $('tabBook');
+  bk.disabled = !on; bk.title = on ? 'Album des objets' : 'Bientôt';
+  bk.classList.toggle('bang', on && view !== 'album' && !!(g && g.albumNews > 0));
+  if (!on && view !== 'tree') show('tree');
+  if (view === 'album') renderAlbum();
   if (open) render();
 }
 
@@ -167,6 +178,7 @@ function slotCard(g, s, big = true) {
   else if (it) {
     const nm = h('div', 'nm', itemName(it)); nm.style.color = RARITIES[it.rarity].color;
     txt.append(nm, h('div', 'eff', itemText(it, rf)));
+    if (it.myth) txt.append(h('div', 'myth', mythText(it)));
   } else txt.append(h('div', 'nm dim', 'Vide'));
   card.append(frame, txt);
   if (it && big) {
@@ -186,6 +198,17 @@ function renderEquip(g) {
   head.append(ic, h('div', 'cHeadTxt', HEROES[line].plural));
   w.append(head);
   for (const s of SLOTS) w.append(slotCard(g, s));
+  for (const [id, st] of Object.entries(SETS)) {
+    if (st.line !== line) continue;
+    const n = setCount(g, line, id, C.save.level);
+    const box = h('div', 'cSet' + (n >= 2 ? ' on' : ''));
+    box.append(h('div', 'k', `Ensemble ${st.name} · ${n}/3`));
+    const pieces = [WEAPONS[line][st.weapon].names[0].split(' ')[0], ...st.charms.map(c => KINDS[c].names[1])].join(', ');
+    box.append(h('div', 'pc', 'Pièces : ' + pieces + ' (toutes raretés)'));
+    box.append(h('div', 'b' + (n >= 2 ? ' ok' : ''), '2 pièces : ' + STAT_TEXT[st.b2[0]](st.b2[1])));
+    box.append(h('div', 'b' + (n >= 3 ? ' ok' : ''), '3 pièces : ' + STAT_TEXT[st.b3[0]](st.b3[1])));
+    w.append(box);
+  }
   w.append(h('p', 'cHint', 'L\'équipement appartient à la lignée : il reste quand tes héros changent de classe.'));
   return w;
 }
@@ -300,6 +323,9 @@ function detail(g, it) {
   const meta = h('div', 'meta', `${r.name} · ${it.kind === 'weapon' ? 'Arme des ' + HEROES[it.line].plural.toLowerCase() : 'Charme'} · Puissance ${it.power}`);
   const eff = h('div', 'eff', itemText(it));
   d.append(nm, meta, eff);
+  if (it.myth) d.append(h('div', 'myth', mythText(it)));
+  const sid = setOf(it);
+  if (sid) d.append(h('div', 'set', `Ensemble ${SETS[sid].name} (${HEROES[SETS[sid].line].plural.toLowerCase()})`));
   // comparaison avec ce qui est équipé
   const k = it.kind === 'weapon' ? it.line : line;
   const cur = it.kind === 'weapon' ? g.eq[k].weapon : null;
@@ -341,6 +367,44 @@ function changed(sound) {
   C.onChange(); render();
 }
 
+// ---------- Album des objets (Livre d'aventure) ----------
+function renderAlbum() {
+  const g = gearOf(C.save), box = $('album'); box.innerHTML = '';
+  const found = g.found || {}, n = Object.keys(found).length;
+  const head = h('div', 'aHead');
+  head.append(h('h2', '', 'Album des objets'));
+  const prog = h('div', 'aProg');
+  const next = (Math.floor(n / ALBUM_STEP) + 1) * ALBUM_STEP;
+  prog.append(h('span', 'num', `Découverts : ${n} / ${CATALOG_SIZE}`));
+  const bar = h('div', 'aBar'); const fill = h('i'); fill.style.width = ((n % ALBUM_STEP) / ALBUM_STEP * 100) + '%'; bar.append(fill); prog.append(bar);
+  prog.append(h('span', 'aRew', `Bonus de l'album : +${albumBonus(n)} % de dégâts (compagnie) · prochain palier à ${next} : +${albumBonus(next)} %`));
+  head.append(prog);
+  box.append(head);
+  const cell = (it, key, label) => {
+    const has = !!found[key], c = h('div', 'aCell' + (has ? '' : ' miss'));
+    c.style.setProperty('--r', RARITIES[it.rarity].color);
+    c.append(iconEl(it.icon));
+    if (has) rarFx(c, it.rarity);
+    c.title = has ? `${label} (${RARITIES[it.rarity].name})` : `??? (${RARITIES[it.rarity].name})`;
+    return c;
+  };
+  const section = (title, rows) => {
+    const sec = h('section', 'aSec'); sec.append(h('h3', '', title));
+    const grid = h('div', 'aGrid');
+    for (const r of rows) {
+      const row = h('div', 'aRow');
+      const anyFound = RARITIES.some((_, i) => found[r.key(i)]);
+      row.append(h('div', 'aName', anyFound ? r.name : '???'));
+      RARITIES.forEach((_, i) => row.append(cell({ icon: r.icon, rarity: i }, r.key(i), r.names[Math.min(3, i)])));
+      grid.append(row);
+    }
+    sec.append(grid); box.append(sec);
+  };
+  for (const k of HERO_ORDER) section(`Armes des ${HEROES[k].plural.toLowerCase()}`, WEAPONS[k].map((m, mi) => ({ icon: m.icon, name: m.names[0], names: m.names, key: i => `w:${k}:${mi}:${i}` })));
+  section('Charmes', CHARM_KINDS.map(c => ({ icon: KINDS[c].icon, name: KINDS[c].names[1], names: KINDS[c].names, key: i => `c:${c}:${i}` })));
+  box.append(h('p', 'cHint', 'Bestiaire et événements : bientôt dans le Livre d\'aventure.'));
+}
+
 // ---------- « Sers-toi ! » : les objets trouvés sortent de la besace un par un ----------
 export function showLoot(items, done) {
   const g = gearOf(C.save);
@@ -349,13 +413,15 @@ export function showLoot(items, done) {
   const row = h('div', 'lootRow');
   items.forEach((it, i) => {
     const r = RARITIES[it.rarity];
-    const card = h('div', 'lootCard r' + it.rarity); card.style.setProperty('--r', r.color); card.style.animationDelay = (0.25 + i * 0.28) + 's';
+    const card = h('div', 'lootCard r' + it.rarity + (it.rarity >= 4 ? ' r3' : '')); card.style.setProperty('--r', r.color); card.style.animationDelay = (0.25 + i * 0.28) + 's';
     card.append(h('div', 'rar', r.name + (it.rarity >= 2 ? ' !' : '')));
     const fr = h('div', 'fr'); fr.append(iconEl(itemIcon(it))); rarFx(fr, it.rarity); card.append(fr);
     card.append(h('div', 'nm', itemName(it)));
     const tag = it.recycled ? 'Réserve pleine : recyclé' : isBetter(g, it) && C.save.level[{ archer: 'root', mage: 'mage', knight: 'knight', bard: 'bard' }[it.line]] ? 'Meilleur !' : 'Nouveau';
     card.append(h('div', 'tag' + (tag === 'Meilleur !' ? ' best' : ''), tag));
     card.append(h('div', 'eff', itemText(it)));
+    if (it.myth) card.append(h('div', 'myth', mythText(it)));
+    if (it.albumNew) card.append(h('div', 'album', '+1 dans l\'album'));
     row.append(card);
     setTimeout(() => { C.play(it.rarity >= 2 ? 'tier' : 'gold'); }, (0.25 + i * 0.28) * 1000);
   });

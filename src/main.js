@@ -7,7 +7,7 @@ import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, po
 import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
-import { gearOf, gearBonus, RESERVE } from './gear.js';
+import { gearOf, gearBonus, RESERVE, albumKey } from './gear.js';
 import { initCompany, gearIconCanvas, showLoot, companyRefresh, gearSheetReady } from './company.js';
 let iconSheet = null;
 treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
@@ -139,7 +139,8 @@ function gearCtx() {
   if (!(save.level.armory > 0)) return null;
   const g = gearOf(save);
   return { lines: HERO_ORDER.filter(k => stats.heroes[k] > 0), charms: save.level.charm1 > 0,
-    ilvl: Math.min(8, (save.maxTier || 0) + ((save.bosses || {})[ZONES[0].id] || 0)), first: !g.firstDone };
+    ilvl: Math.min(8, (save.maxTier || 0) + ((save.bosses || {})[ZONES[0].id] || 0)), first: !g.firstDone,
+    mythic: ((save.bosses || {})[ZONES[0].id] || 0) >= 2 };
 }
 // Dans l'antre : pas de sac ni de mini-carte ; flèches seulement si la salle dépasse de l'écran.
 function arenaUi() {
@@ -276,7 +277,9 @@ function storeItems(items) {
   for (const it of items) {
     it.id = g.next++;
     it.isNew = true;
-    if (g.inv.length < RESERVE) { g.inv.push(it); g.news++; } else { it.recycled = true; g.shards += [1, 3, 8, 20][it.rarity]; }
+    const key = albumKey(it);
+    if (!g.found[key]) { g.found[key] = 1; it.albumNew = true; g.albumNews = (g.albumNews || 0) + 1; }
+    if (g.inv.length < RESERVE) { g.inv.push(it); g.news++; } else { it.recycled = true; g.shards += [1, 3, 8, 20, 50][it.rarity]; }
     out.push(it);
   }
   g.firstDone = true;

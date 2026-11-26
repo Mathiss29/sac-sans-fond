@@ -28,10 +28,15 @@ Dans l'antre (60 s) : le boss annonce des cercles de feu qui étourdissent les h
 L'Armurerie (branche Équipement de l'arbre, sous les chevaliers) ouvre l'onglet **Compagnie**.
 
 - **Besaces** : en expédition, certains ennemis lâchent une besace qui file seule vers le sac (une garantie à la première expédition armée, jusqu'à 4 par expédition, toujours une sur un boss). À la fin, l'écran **« Sers-toi ! »** montre les objets trouvés avec leur rareté et « Meilleur ! » / « Nouveau ».
-- **Objets** : 24 armes (6 par lignée) et 22 charmes, chacun en 4 raretés (commune, rare, épique, légendaire), soit 184 objets. La puissance dépend de la rareté et de ta progression.
+- **Objets** : 24 armes (6 par lignée) et 22 charmes, chacun en 5 raretés (commune, rare, épique, légendaire, mythique), soit 230 avec la rareté mythique. La puissance dépend de la rareté et de ta progression.
 - **Emplacements** : une arme par lignée, puis 1 et 2 charmes (nœuds de l'arbre). L'équipement appartient à la lignée.
 - **Affinage** (forge) : on affine l'emplacement, pas l'objet (+10 % d'effet par niveau, jusqu'à +15). Sans risque jusqu'à +3, puis chance de réussite décroissante ; un échec garde le niveau et donne +5 % de chance au suivant. Les niveaux avancés coûtent des **éclats**.
-- **Recyclage** : transforme les objets en trop en éclats (1, 3, 8 ou 20 selon la rareté).
+- **Recyclage** : transforme les objets en trop en éclats (1, 3, 8, 20 ou 50 selon la rareté).
+- **Mythique** : 5e rareté, possible après 2 victoires contre le boss. Chaque objet mythique porte un effet unique : Ricochet (archers), Éclatement (mages), Séisme (chevaliers), Écho (bardes), Toucher de Midas et Temps volé (charmes).
+- **Ensembles** : Tempête, Hiver éternel, Rempart, Grande fête. Une arme et deux charmes d'une même famille sur une lignée donnent un bonus à 2 puis à 3 pièces.
+- **Besace en or** : un feu follet doré sur quatre en lâche une (une par expédition), qui contient un objet épique ou mieux.
+- **Chute épique** : une besace épique ou mieux fait trembler l'écran sous un rayon de lumière, et un bandeau s'affiche pour les légendaires.
+- **Album** (Livre d'aventure) : chaque modèle dans chaque rareté. Tous les 10 objets découverts, la compagnie gagne +2 % de dégâts.
 
 Icônes : planche ChatGPT de Mathis convertie dans `assets/sprites/icones/objets.png` (24 premières). Les 24 suivantes (planche 2) utilisent une icône proche en attendant (`ICON_FALLBACK` dans `src/gear.js`).
 

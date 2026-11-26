@@ -286,9 +286,17 @@ export function render(g, world, dpr) {
       g.drawImage(im, Math.round(c.x - sw / 2), Math.round(c.y - sh2 / 2 - z), sw, sh2);
     } else {
       if (c.item) { // besace : halo et rayon de la couleur de sa rareté
-        const col = GEAR_RARITIES[c.item.rarity].color;
-        g.save(); g.globalAlpha *= 0.35 + 0.15 * Math.sin(t * 6); g.fillStyle = col;
-        g.beginPath(); g.arc(c.x, c.y - z, s * 1.2, 0, 7); g.fill();
+        const col = c.golden ? '#ffd246' : GEAR_RARITIES[c.item.rarity].color;
+        g.save();
+        if (c.beam > 0) { // chute épique : un grand rayon tombe du ciel sur la besace
+          const k2 = c.beam / 1.8, bw = Math.round(px * (4 + 10 * k2));
+          g.globalAlpha = 0.25 + 0.5 * k2; g.fillStyle = col;
+          g.fillRect(Math.round(c.x - bw / 2), Math.round(c.y - z - 900), bw, 900);
+          g.globalAlpha = 0.6 * k2; g.fillStyle = '#ffffff';
+          g.fillRect(Math.round(c.x - bw / 6), Math.round(c.y - z - 900), Math.max(px, Math.round(bw / 3)), 900);
+        }
+        g.globalAlpha = (0.35 + 0.15 * Math.sin(t * 6)) * (c.golden || c.item.rarity >= 3 ? 1.4 : 1); g.fillStyle = col;
+        g.beginPath(); g.arc(c.x, c.y - z, s * (c.item.rarity >= 2 ? 1.5 : 1.2), 0, 7); g.fill();
         if (!c.fly) g.fillRect(Math.round(c.x - px), Math.round(c.y - z - s * 3), px * 2, Math.round(s * 2.4));
         g.restore();
       } else if (c.kind !== 'bar') { // halo des gemmes et couronnes

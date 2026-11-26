@@ -8,7 +8,46 @@ export const RARITIES = [
   { id: 'rare', name: 'Rare', color: '#5fb8ff', mult: 1.8, weight: 28, shards: 3 },
   { id: 'epique', name: 'Épique', color: '#c07aff', mult: 3, weight: 8, shards: 8 },
   { id: 'legendaire', name: 'Légendaire', color: '#ff9a3d', mult: 5, weight: 2, shards: 20 },
+  // mythique : seulement après 2 victoires contre un boss ; porte un effet unique (voir MYTHS)
+  { id: 'mythique', name: 'Mythique', color: '#ff4a5a', mult: 7, weight: 0.5, shards: 50 },
 ];
+export const MYTHIC = 4;
+
+// Effets uniques des objets mythiques. line : arme de cette lignée ; sinon charme (pour toute la compagnie)
+export const MYTHS = {
+  bounce: { line: 'archer', title: 'Ricochet', text: 'Chaque flèche rebondit sur un ennemi de plus' },
+  shatter: { line: 'mage', title: 'Éclatement', text: 'Les ennemis tués par le givre explosent en éclats glacés' },
+  quake: { line: 'knight', title: 'Séisme', text: '1 coup sur 4 lance une onde de choc qui frappe tout autour' },
+  echo: { line: 'bard', title: 'Écho', text: '1 note sur 3 est rejouée aussitôt, sur une autre cible' },
+  midas: { title: 'Toucher de Midas', text: '5 % des ennemis meurent en lâchant ×5 de pièces' },
+  hourglass: { title: 'Temps volé', text: 'Chaque besace ramassée ajoute 2 s à l\'expédition' },
+};
+const CHARM_MYTHS = ['midas', 'hourglass'];
+
+// Ensembles : l'arme et deux charmes d'une même famille, portés par la même lignée
+export const SETS = {
+  tempete: { name: 'Tempête', line: 'archer', weapon: 0, charms: ['feather', 'bracelet'],
+    b2: ['rate', 12], b3: ['dmg', 30] },
+  hiver: { name: 'Hiver éternel', line: 'mage', weapon: 0, charms: ['moon', 'tear'],
+    b2: ['crit', 5], b3: ['dmg', 30] },
+  rempart: { name: 'Rempart', line: 'knight', weapon: 0, charms: ['seal', 'totem'],
+    b2: ['boss', 20], b3: ['dmg', 30] },
+  fete: { name: 'Grande fête', line: 'bard', weapon: 0, charms: ['bell', 'mask'],
+    b2: ['rate', 15], b3: ['gold', 20] },
+};
+export function setOf(it, line) {
+  for (const [id, st] of Object.entries(SETS)) {
+    if (it.kind === 'weapon' ? (it.line === st.line && (it.model || 0) === st.weapon) : st.charms.includes(it.kind) && (!line || line === st.line)) return id;
+  }
+  return null;
+}
+// pièces d'ensemble portées par une lignée
+export function setCount(gear, k, setId, level = {}) {
+  const st = SETS[setId]; if (st.line !== k) return 0;
+  let n = 0;
+  for (const s of SLOTS) { const it = gear.eq[k] && gear.eq[k][s.id]; if (it && (level[s.node] > 0 || !Object.keys(level).length) && setOf(it, k) === setId) n++; }
+  return n;
+}
 
 // Icônes : case de assets/sprites/icones/objets.png (voir tools/dessiner-objets.py)
 // planche 1 (ChatGPT, 6×4) ; la planche 2 viendra à la suite (cases 24 à 47)
@@ -118,13 +157,22 @@ export function gearOf(save) {
   if (!save.gear) save.gear = freshGear();
   const g = save.gear;
   for (const k of HERO_ORDER) { g.eq[k] = g.eq[k] || {}; g.ref[k] = g.ref[k] || {}; }
+  if (!g.found) {   // album : tout ce qu'on possède déjà compte comme découvert
+    g.found = {};
+    for (const it of g.inv) g.found[albumKey(it)] = 1;
+    for (const k of HERO_ORDER) for (const s of SLOTS) if (g.eq[k][s.id]) g.found[albumKey(g.eq[k][s.id])] = 1;
+  }
   return g;
 }
 
 const model = it => WEAPONS[it.line][it.model || 0];
-export const itemName = it => it.kind === 'weapon' ? model(it).names[it.rarity] : KINDS[it.kind].names[it.rarity];
+export const itemName = it => (it.kind === 'weapon' ? model(it).names : KINDS[it.kind].names)[Math.min(3, it.rarity)];
 export const itemIcon = it => it.kind === 'weapon' ? model(it).icon : KINDS[it.kind].icon;
 export const CATALOG_SIZE = (Object.values(WEAPONS).reduce((t, l) => t + l.length, 0) + CHARM_KINDS.length) * RARITIES.length;
+// clé d'album : un modèle dans une rareté
+export const albumKey = it => it.kind === 'weapon' ? `w:${it.line}:${it.model || 0}:${it.rarity}` : `c:${it.kind}:${it.rarity}`;
+export const ALBUM_STEP = 10;          // une récompense tous les 10 objets découverts
+export const albumBonus = n => 2 * Math.floor(n / ALBUM_STEP);   // % de dégâts pour toute la compagnie
 export const itemSlotKind = it => it.kind === 'weapon' ? 'weapon' : 'charm';
 // effets de l'objet : [[stat, valeur]], multipliés par l'affinage de l'emplacement
 const round = v => v >= 10 ? Math.round(v) : Math.round(v * 10) / 10;
@@ -137,16 +185,22 @@ export function itemEffects(it, refine = 0) {
 }
 export const itemValue = (it, refine = 0) => itemEffects(it, refine)[0][1];
 export const itemText = (it, refine = 0) => itemEffects(it, refine).map(([st, v]) => STAT_TEXT[st](String(v).replace('.', ','))).join(' · ');
+export const mythText = it => it.myth ? `✦ ${MYTHS[it.myth].title} : ${MYTHS[it.myth].text}` : '';
 
-// Tirage d'un objet. ctx = { lines: lignées possédées, charms: charmes débloqués, ilvl }
-export function rollItem(ctx, id, rnd = Math.random) {
-  let w = rnd() * RARITIES.reduce((t, r) => t + r.weight, 0), rarity = 0;
-  for (let i = 0; i < RARITIES.length; i++) { w -= RARITIES[i].weight; if (w <= 0) { rarity = i; break; } }
+// Tirage d'un objet. ctx = { lines: lignées possédées, charms: charmes débloqués, ilvl, mythic: mythique possible }
+// minRarity : rareté minimale (besace en or : épique ou mieux)
+export function rollItem(ctx, id, rnd = Math.random, minRarity = 0) {
+  const pool = RARITIES.map((r, i) => (i < minRarity || (i === MYTHIC && !ctx.mythic) ? 0 : r.weight));
+  let w = rnd() * pool.reduce((t, x) => t + x, 0), rarity = minRarity;
+  for (let i = 0; i < pool.length; i++) { if (!pool[i]) continue; w -= pool[i]; if (w <= 0) { rarity = i; break; } }
   const lines = ctx.lines.length ? ctx.lines : ['archer'];
   const weapon = !ctx.charms || rnd() < 0.5;
   const power = Math.max(1, Math.round(10 * RARITIES[rarity].mult * (1 + 0.2 * (ctx.ilvl || 0)) * (0.9 + 0.2 * rnd())));
-  if (weapon) { const line = lines[Math.floor(rnd() * lines.length)]; return { id, kind: 'weapon', line, model: Math.floor(rnd() * WEAPONS[line].length), rarity, power }; }
-  return { id, kind: CHARM_KINDS[Math.floor(rnd() * CHARM_KINDS.length)], rarity, power };
+  let it;
+  if (weapon) { const line = lines[Math.floor(rnd() * lines.length)]; it = { id, kind: 'weapon', line, model: Math.floor(rnd() * WEAPONS[line].length), rarity, power }; }
+  else it = { id, kind: CHARM_KINDS[Math.floor(rnd() * CHARM_KINDS.length)], rarity, power };
+  if (rarity === MYTHIC) it.myth = weapon ? Object.keys(MYTHS).find(m => MYTHS[m].line === it.line) : CHARM_MYTHS[Math.floor(rnd() * CHARM_MYTHS.length)];
+  return it;
 }
 
 // Objet équipé comparable : l'arme de la lignée, ou le plus faible des charmes
@@ -172,17 +226,25 @@ export function refineChance(lv, bless = 0, pity = 0) {
 
 // Bonus de l'équipement, pour computeStats. level : niveaux de l'arbre (emplacements débloqués)
 export function gearBonus(gear, level) {
-  const out = { dmg: {}, rate: {}, crit: {}, critDmg: {}, range: {}, boss: {}, gold: 0, drop: 0, time: 0, glove: 0, goldWisp: 0, focus: 0, tear: 0, event: 0, coinLife: 0, aoe: 0, stun: 0 };
+  const out = { dmg: {}, rate: {}, crit: {}, critDmg: {}, range: {}, boss: {}, gold: 0, drop: 0, time: 0, glove: 0, goldWisp: 0, focus: 0, tear: 0, event: 0, coinLife: 0, aoe: 0, stun: 0, myths: {} };
   if (!gear || !(level.armory > 0)) return out;
+  const add = (st, v, k) => { if (GLOBAL_STATS.includes(st)) out[st] += v; else out[st][k] = (out[st][k] || 0) + v; };
+  // ensembles
+  for (const [id, st] of Object.entries(SETS)) {
+    const n = setCount(gear, st.line, id, level);
+    if (n >= 2) add(st.b2[0], st.b2[1], st.line);
+    if (n >= 3) add(st.b3[0], st.b3[1], st.line);
+  }
+  // album : +2 % de dégâts pour tous, tous les 10 objets découverts
+  const ab = albumBonus(Object.keys(gear.found || {}).length);
+  if (ab) for (const k of HERO_ORDER) add('dmg', ab, k);
   for (const k of HERO_ORDER) {
     for (const s of SLOTS) {
       if (!(level[s.node] > 0)) continue;
       const it = gear.eq[k] && gear.eq[k][s.id];
       if (!it) continue;
-      for (const [st, v] of itemEffects(it, (gear.ref[k] || {})[s.id] || 0)) {
-        if (GLOBAL_STATS.includes(st)) out[st] += v;
-        else out[st][k] = (out[st][k] || 0) + v;
-      }
+      if (it.myth) out.myths[it.myth] = true;
+      for (const [st, v] of itemEffects(it, (gear.ref[k] || {})[s.id] || 0)) add(st, v, k);
     }
   }
   return out;
