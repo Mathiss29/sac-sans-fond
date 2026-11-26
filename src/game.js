@@ -1,6 +1,7 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
 import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, ULTS, bagMax, tierOf } from './data.js';
 import { rollItem, RARITIES as GEAR_RARITIES, DROP } from './gear.js';
+import { CARD_DROP } from './curio.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -67,7 +68,7 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
       t: 0, duration: stats.duration, spawnT: 0, bag: 0, full: false, overflow: 0,
       kills: 0, toDrop: { ...stats.heroes }, sel: 'archer', attraction: stats.attraction, boss: null, bossKilled: false, golds: 0,
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
-      lair: { open: !!lair.open, first: !!lair.first, done: false, got: 0, only: false }, arena: null,
+      lair: { open: !!lair.open, first: !!lair.first, done: false, got: 0, only: false, dungeon: !!lair.dungeon }, arena: null,
       happenings: planEvents(stats), eventsGot: 0,
       cnt: { kills: 0, slowed: 0, knocked: 0, auraT: 0 }, areasSeen: {}, mvpAt: zone.families && zone.families.mvp && Math.random() < 0.35 ? stats.duration * rnd(0.2, 0.8) : -1, ult: { archer: 0.5, mage: 0.5, knight: 0.5, bard: 0.5 }, hymnT: 0, reinforced: false,
     },
@@ -264,7 +265,7 @@ export function enterArena(world) {
     u.drop = 0.6 + (i % 4) * 0.1; u.stun = 0; u.cd = rnd(0.2, 0.8);
   });
   const b = world.zone.boss;
-  r.arena = { t: 0, duration: ARENA.duration, fireT: 2.2, summoned: 0, loot: 0, won: false, leaving: 0, mechT: 4, phase: 0 };
+  r.arena = { t: 0, duration: world.zone.boss.duration || ARENA.duration, fireT: 2.2, summoned: 0, loot: 0, won: false, leaving: 0, mechT: 4, phase: 0 };
   const home = { x: aw / 2, y: ah * 0.4, r: Math.min(aw, ah) * 0.26 };
   const e = {
     type: 'boss', boss: true, def: { ...b, color: b.color || '#ff7a3c', core: '#fff1c2' }, x: home.x, y: home.y, r: b.radius,
@@ -685,6 +686,12 @@ function killEnemy(world, e) {
     for (const o of world.enemies) if (!o.dead && o !== e && d2(o, e) < 70 * 70) { o.burn = Math.max(o.burn || 0, 1.5); o.burnDps = dmg; damage(world, o, dmg, 0, e, 'mage'); }
   }
   if (e.event) world.run.eventsGot++;
+  // cartes de créature (Cabinet de curiosités)
+  const rc = world.run;
+  if (world.stats.cards && rc && !e.fake && !e.guard && (rc.cards = rc.cards || []).length < 3 && Math.random() < (e.boss ? 0.5 : CARD_DROP * (e.elite ? 5 : 1))) {
+    const cid = e.boss ? null : e.type;
+    if (cid) { rc.cards.push(cid); world.texts.push({ x: e.x, y: e.y - 34, text: 'Carte !', color: '#e7d3a1', size: 16, life: 1.2 }); sfx(world, 'gold'); }
+  }
   const pal = { vein: ['#ffd246', '#8c8f86', '#fff3a8'], goblin: ['#6fae4c', '#ffd246', '#4a7d34'], mimic: ['#9a6238', '#ffd246', '#8a1e2a'], wisp: ['#ff9a3c', '#ffe682', '#e65032'], golem: ['#be7850', '#8c5238', '#6a3a24'], wind: ['#e6f7fb', '#8ed2e6', '#ffffff'] }[e.type] || ['#ff5a2a', '#ffb040', '#fff0b0'];
   burst(world, e.x, e.y, e.boss ? 70 : e.gold ? 30 : 14, e.gold ? ['#ffd246', '#fff096', '#ffffff'] : pal, e.boss ? 320 : 150, 2, 0, e.boss ? 1.1 : 0.55);
   if (onScreen(world, e.x, e.y)) { sfx(world, e.boss ? 'boss' : e.gold ? 'gold' : 'pop'); shake(world, e.boss ? 14 : e.type === 'golem' ? 3 : 1.5); }

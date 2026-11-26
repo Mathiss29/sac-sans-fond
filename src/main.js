@@ -7,7 +7,9 @@ import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, 
 import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
-import { gearOf, gearBonus, reserveSize, albumKey } from './gear.js';
+import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
+import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
+import { initCurio, curioRefresh } from './curio-ui.js';
 import { initCompany, gearIconCanvas, showLoot, companyRefresh, gearSheetReady } from './company.js';
 let iconSheet = null;
 treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
@@ -16,7 +18,11 @@ const $ = id => document.getElementById(id);
 const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
 let save = loadSave();
 // stats du moment : arbre + équipement de la Compagnie
-function calcStats() { return computeStats(save.level, save.gear ? gearBonus(save.gear, save.level) : null); }
+function calcStats() {
+  const s = computeStats(save.level, curioBonus(save, gearBonus(save.gear, save.level)));
+  s.eventCount += extraEvents(save);
+  return s;
+}
 let stats = calcStats();
 let dpr = 1;
 const world = createWorld(800, 600);
@@ -181,6 +187,18 @@ function renderWorld() {
   }
   info.append(h, bl, foes, dl, btn);
 }
+function randOpen() { const l = LEVELS.map((_, i) => i).filter(levelOpen); return l[Math.floor(Math.random() * l.length)] || 0; }
+function goDungeon() {
+  const c = curioOf(save);
+  if (!(c.keys > 0)) return;
+  c.keys--; writeSave(save);
+  wipe(() => {
+    $('phase').hidden = true;
+    stats = calcStats(); world.gearCtx = gearCtx();
+    startLair(world, stats, dungeonZone(curZone()), { first: false, dungeon: true });
+    showRunUi();
+  });
+}
 function travel(i) {
   if (!levelOpen(i)) return;
   save.region = i; writeSave(save);
@@ -278,7 +296,25 @@ function finishExpedition() {
   const unlocked = !wasOpen && lairOpen();
   const lairWait = !lairOpen() && world.zone.demon && (save.lairs || {})[zid];
   // objets trouvés : rangés dans la réserve (ceux qui ne rentrent pas sont recyclés en éclats)
-  const found = storeItems(r.items || []);
+  // Curiosités : cartes trouvées, donjon, quêtes ; les potions sont bues
+  const extra = [], gc = gearCtx(), news = [];
+  if (r.lair.dungeon && r.bossKilled) {
+    curioOf(save).dungeons++;
+    if (gc) for (let i = 0; i < 2; i++) extra.push(rollItem(gc, 0, Math.random, 1));
+    const pool = Object.keys(world.zone.spawn); (r.cards = r.cards || []).push(pool[Math.floor(Math.random() * pool.length)]);
+    gearOf(save).shards += 20 + 5 * LV();
+  }
+  const qDone = save.curio ? progressQuests(save, { zone: world.zone.dungeon ? null : world.zone.id, kills: r.kills, events: r.eventsGot || 0, tier: r.tier || 0, gained, boss: r.bossKilled && !world.zone.dungeon, lairOnly: r.lair.only }) : [];
+  for (const q of qDone) {
+    news.push(['Quête accomplie', questText(q) + ' → ' + REWARD_TEXT[q.reward], '#e7d3a1']);
+    if (q.reward === 'shards') gearOf(save).shards += 15 + 5 * q.lv;
+    else if (q.reward === 'key') curioOf(save).keys++;
+    else if (q.reward === 'card') (r.cards = r.cards || []).push(CARD_IDS.filter(id => !(save.curio.cards[id]))[0] || CARD_IDS[Math.floor(Math.random() * CARD_IDS.length)]);
+    else if (q.reward === 'gear' && gc) extra.push(rollItem(gc, 0, Math.random, 1));
+  }
+  const cardsGot = r.cards && r.cards.length && L('cabinet') ? addCards(save, r.cards, gearOf) : [];
+  if (save.curio) { save.curio.active = []; fillQuests(save, randOpen()); }
+  const found = storeItems([...(r.items || []), ...extra]);
   const trialsDone = checkTrials(r);
   writeSave(save);
   const rows = [['Élémentaires vaincus', fmt(r.kills), '#c4c8b2']];
@@ -296,6 +332,9 @@ function finishExpedition() {
   if (lairWait) rows.push([world.zone.boss.lair, 'demande « Seigneur des Enfers »', '#ff7a5a']);
   if (r.bossKilled && winsOf(zid) === 1 && LV() + 1 < LEVELS.length) rows.push(['Nouveau niveau', LEVELS[LV() + 1].name + (levelOpen(LV() + 1) ? ' ouvert !' : ' (portail des Enfers requis)'), '#9fe07a']);
   if (found.length) rows.push(['Besaces d\'équipement', String(found.length), '#c07aff']);
+  for (const c of cardsGot) rows.push(['Carte : ' + ENEMIES[c.id].name, c.isNew ? 'nouvelle !' : c.up ? `${c.stars} ★` : '+2 éclats', '#e7d3a1']);
+  if (r.lair.dungeon) rows.push([world.zone.boss.lair, r.bossKilled ? 'pillé : 2 besaces, une carte, des éclats' : 'raté…', '#c8a2ff']);
+  rows.push(...news);
   for (const o of r.relicsGot || []) rows.push([`${o.name} (${RARITIES[o.rar].name})`, '+' + fmt(o.value), RARITIES[o.rar].color]);
   if (r.relics && r.relics.length) rows.push(['Trésors attrapés', `${(r.relicsGot || []).length} / ${r.relics.length}`, '#e9cf86']);
   const dl = $('resList'); dl.innerHTML = '';
@@ -316,7 +355,7 @@ function finishExpedition() {
   $('resGot').textContent = r.lair.only ? fmt(r.lair.got) : `${fmt(r.tearGot)} / ${fmt(r.tearTotal)}`;
   // objectif suivant
   const bossDone = ((save.bosses || {})[world.zone.id] || 0) > 0;
-  $('resGoal').textContent = lairOpen() && !bossDone ? `${world.zone.boss.name} t'attend dans son antre !`
+  $('resGoal').textContent = world.zone.dungeon ? `Clés de donjon restantes : ${curioOf(save).keys}` : lairOpen() && !bossDone ? `${world.zone.boss.name} t'attend dans son antre !`
     : tier < stats.tiers - 1 ? `Prochain palier : ${TIERS[tier + 1].name}` : 'Sac au palier maximal !';
   // dégâts par héros, à gauche
   const dmg = r.dmg || {}, types = HERO_ORDER.filter(k => dmg[k] > 0);
@@ -395,7 +434,7 @@ function toAtelierNow() {
   world.phase = 'idle'; world.run = null; world.heroes = []; world.coins = [];
   stats = calcStats(); world.stats = stats;
   $('result').hidden = true; $('atelier').hidden = false;
-  renderTree(); companyRefresh();
+  renderTree(); companyRefresh(); curioRefresh();
   focusCheapest();
 }
 // En revenant au bilan : la vue se pose sur la compétence achetable la moins chère, qui clignote.
@@ -464,6 +503,7 @@ function drainEvents() {
     else if (ev.kind === 'coins') save.coins += ev.value;
     else if (ev.kind === 'done') finishExpedition();
     else if (ev.kind === 'eventIntro') eventIntro(ev.ev);
+    else if (ev.kind === 'boss' && world.zone.dungeon) { /* gardien de donjon : ne compte pas comme boss de région */ }
     else if (ev.kind === 'boss') { save.bosses = save.bosses || {}; save.bosses[world.zone.id] = (save.bosses[world.zone.id] || 0) + 1; writeSave(save); }
     else if (ev.kind === 'arena') { arenaUi(); buildDropBar(); }
     else if (ev.kind === 'reinforce') buildDropBar();
@@ -1052,9 +1092,12 @@ heroSheetsReady.then(() => { for (const k in heroIcons) delete heroIcons[k]; ren
 
 initCompany({ get save() { return save; }, write: () => writeSave(save), fmt, heroIcon, play, unlockAudio,
   onChange: () => { stats = calcStats(); renderTree(); } });
+initCurio({ get save() { return save; }, write: () => writeSave(save), fmt, play, enemyIcon, gearCtx, goDungeon, open: () => randOpen(),
+  onChange: () => { stats = calcStats(); renderTree(); },
+  storeAndShow: items => { const f = storeItems(items.filter(Boolean)); writeSave(save); if (f.length) showLoot(f, () => { companyRefresh(); }); } });
 gearSheetReady.then(() => renderTree());
 
 // Accès pour les tests automatisés
-window.__game = { world, get save() { return save; }, go, goLair, toAtelier, lairOpen, travel, openWorld, region: i => { save.region = i; world.zone = curZone(); }, useUlt: k => useUlt(world, k),
+window.__game = { world, get save() { return save; }, go, goLair, goDungeon, toAtelier, lairOpen, travel, openWorld, region: i => { save.region = i; world.zone = curZone(); }, useUlt: k => useUlt(world, k),
   buyable: () => NODES.filter(n => visible(n) && !lockedNow(n) && L(n.id) < capOf(n)).map(n => ({ id: n.id, cost: costOf(n, L(n.id)) })),
   buy: id => buy(NODE[id]) };

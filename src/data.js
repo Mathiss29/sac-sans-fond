@@ -317,7 +317,7 @@ export function computeStats(level, gb = null) {
     magnet: 25 * L('magnet'), pull: 70 * (1 + 0.15 * L('quickHand')) * (has('goldHand') ? 2 : 1), mimicTame: has('mimic'), fairy: has('fairyFingers'),
     overflowRate: OVERFLOW_RATE + 0.04 * L('falseBottom'), tripleBottom: has('tripleBottom'), deepMouth: has('deepMouth'),
     gemMult: 1 + 0.15 * L('gems'), crownChance: 0.01 * L('crown'), suction: has('suctionWave'),
-    elite: has('elite'), demonMult: 1 + 0.1 * L('demonBane'), embers: 1 + 0.1 * L('embers'), pact: has('pact'),
+    cards: has('cabinet'), elite: has('elite'), demonMult: 1 + 0.1 * L('demonBane'), embers: 1 + 0.1 * L('embers'), pact: has('pact'),
     goldHorde: L('goldHorde'), lantern: 1 + 0.3 * L('lantern'), furBoots: has('furBoots'), spyglass: has('spyglass'),
     eventMult: (1 + 0.15 * L('hunter')) * (1 + GG('event') / 100),
     stunMult: Math.max(0.2, 1 - GG('stun') / 100) * (1 - 0.25 * L('shield')),
