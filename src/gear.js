@@ -11,7 +11,16 @@ export const RARITIES = [
 ];
 
 // Icônes : case de assets/sprites/icones/objets.png (voir tools/dessiner-objets.py)
-export const GEAR_ICONS = ['bow', 'staff', 'blade', 'lyre', 'ring', 'feather', 'moon', 'purse', 'seal', 'anvil', 'shard', 'satchel'];
+// planche 1 (ChatGPT, 6×4) ; la planche 2 viendra à la suite (cases 24 à 47)
+export const GEAR_ICONS = ['bow', 'quiver', 'arrows', 'staff', 'crystal', 'orb', 'blade', 'sword', 'gauntlet', 'lyre', 'lute', 'horn',
+  'ring', 'feather', 'moon', 'skull', 'eye', 'seal', 'purse', 'satchel', 'hourglass', 'coin', 'anvil', 'shard',
+  'crossbow', 'elvenbow', 'knives', 'grimoire', 'wand', 'skullstaff', 'axe', 'mace', 'spear', 'drum', 'flute', 'tambourine',
+  'clover', 'candle', 'bell', 'compass', 'rune', 'fang', 'totem', 'tear', 'mask', 'bracelet', 'egg', 'potion'];
+// en attendant la planche 2 : icône la plus proche
+export const ICON_FALLBACK = { crossbow: 'bow', elvenbow: 'bow', knives: 'arrows', grimoire: 'staff', wand: 'staff', skullstaff: 'skull',
+  axe: 'blade', mace: 'gauntlet', spear: 'sword', drum: 'horn', flute: 'lute', tambourine: 'lyre',
+  clover: 'coin', candle: 'hourglass', bell: 'horn', compass: 'eye', rune: 'shard', fang: 'skull', totem: 'skull', tear: 'crystal',
+  mask: 'skull', bracelet: 'ring', egg: 'orb', potion: 'crystal' };
 
 // Armes : trois modèles par lignée, chacun avec un nom par rareté. Effet principal : dégâts de la lignée.
 // icon : case de objets.png (sinon icône de l'arbre). bonus : petit effet en plus, propre au modèle.
@@ -19,22 +28,34 @@ export const WEAPONS = {
   archer: [
     { icon: 'bow', names: ['Arc de frêne', 'Arc de chasse', 'Arc du faucon', 'Arc des tempêtes'] },
     { icon: 'quiver', names: ['Carquois de cuir', 'Carquois du pisteur', 'Carquois sans fin', 'Carquois de l\'aurore'], bonus: ['rate', 0.4] },
-    { icon: 'arrow', names: ['Flèches de bouleau', 'Flèches barbelées', 'Flèches d\'argent', 'Flèches du zénith'], bonus: ['crit', 0.15] },
+    { icon: 'arrows', names: ['Flèches de bouleau', 'Flèches barbelées', 'Flèches d\'argent', 'Flèches du zénith'], bonus: ['crit', 0.15] },
+    { icon: 'crossbow', names: ['Arbalète de chêne', 'Arbalète à cric', 'Arbalète du siège', 'Arbalète du jugement'], bonus: ['boss', 0.8] },
+    { icon: 'elvenbow', names: ['Arc de lierre', 'Arc sylvain', 'Arc de la clairière', 'Arc du Vieux Chêne'], bonus: ['range', 0.5] },
+    { icon: 'knives', names: ['Dagues de lancer', 'Dagues du rôdeur', 'Dagues jumelles', 'Dagues de l\'ombre'], bonus: ['critDmg', 0.8] },
   ],
   mage: [
     { icon: 'staff', names: ['Bâton de saule', 'Bâton de givre', 'Sceptre d\'hiver', 'Bâton du blizzard'] },
     { icon: 'crystal', names: ['Cristal fêlé', 'Cristal de glace', 'Cœur de l\'hiver', 'Prisme éternel'], bonus: ['range', 0.4] },
-    { icon: 'firewisp', names: ['Orbe tiède', 'Orbe de braise', 'Orbe du foyer', 'Orbe du phénix'], bonus: ['boss', 1] },
+    { icon: 'orb', names: ['Orbe tiède', 'Orbe de braise', 'Orbe du foyer', 'Orbe du phénix'], bonus: ['boss', 1] },
+    { icon: 'grimoire', names: ['Grimoire usé', 'Grimoire du givre', 'Codex des glaces', 'Livre du premier hiver'], bonus: ['aoe', 0.6] },
+    { icon: 'wand', names: ['Baguette de houx', 'Baguette d\'argent', 'Baguette astrale', 'Baguette des fées'], bonus: ['rate', 0.5] },
+    { icon: 'skullstaff', names: ['Bâton d\'os', 'Bâton du nécromant', 'Bâton des âmes', 'Bâton du roi-liche'], bonus: ['crit', 0.2] },
   ],
   knight: [
     { icon: 'blade', names: ['Épée de fer', 'Lame trempée', 'Épée du rempart', 'Lame de l\'aube'] },
     { icon: 'sword', names: ['Épée longue', 'Épée du sergent', 'Épée du champion', 'Épée des rois'], bonus: ['critDmg', 1] },
-    { icon: 'glove', names: ['Gantelet cabossé', 'Gantelet d\'acier', 'Poing du bastion', 'Poing du titan'], bonus: ['rate', 0.4] },
+    { icon: 'gauntlet', names: ['Gantelet cabossé', 'Gantelet d\'acier', 'Poing du bastion', 'Poing du titan'], bonus: ['rate', 0.4] },
+    { icon: 'axe', names: ['Hache de bûcheron', 'Hache de guerre', 'Hache du berserker', 'Hache des tempêtes'], bonus: ['aoe', 0.6] },
+    { icon: 'mace', names: ['Masse cloutée', 'Masse d\'armes', 'Masse du croisé', 'Masse du jugement'], bonus: ['boss', 0.8] },
+    { icon: 'spear', names: ['Lance de milicien', 'Lance du garde', 'Lance du dragon', 'Lance céleste'], bonus: ['range', 0.6] },
   ],
   bard: [
     { icon: 'lyre', names: ['Lyre de bois', 'Lyre dorée', 'Lyre des vents', 'Lyre des astres'] },
     { icon: 'lute', names: ['Luth de voyage', 'Luth du ménestrel', 'Luth enchanté', 'Luth des légendes'], bonus: ['rate', 0.4] },
     { icon: 'horn', names: ['Cor de berger', 'Cor de chasse', 'Cor de guerre', 'Cor du dernier roi'], bonus: ['boss', 1] },
+    { icon: 'drum', names: ['Tambour de peau', 'Tambour de marche', 'Tambour de guerre', 'Tambour du tonnerre'], bonus: ['aoe', 0.6] },
+    { icon: 'flute', names: ['Flûte de roseau', 'Flûte d\'argent', 'Flûte enchantée', 'Flûte du pâtre céleste'], bonus: ['crit', 0.2] },
+    { icon: 'tambourine', names: ['Tambourin', 'Tambourin à grelots', 'Tambourin des fêtes', 'Tambourin du carnaval'], bonus: ['gold', 0.5] },
   ],
 };
 // stat : dmg (dégâts de la lignée), rate (cadence), crit (points de chance), critDmg (dégâts critiques), range (portée),
@@ -45,8 +66,15 @@ export const STAT_TEXT = {
   critDmg: v => `+${v} % de dégâts critiques`, range: v => `+${v} % de portée`, boss: v => `+${v} % de dégâts aux boss`,
   gold: v => `+${v} % de valeur du butin (compagnie)`, drop: v => `+${v} % de besaces (compagnie)`,
   time: v => `+${v} s par expédition (compagnie)`, glove: v => `+${v} % de rayon du gant (compagnie)`,
+  goldWisp: v => `+${v} % de feux follets dorés (compagnie)`, focus: v => `+${v} s de Focus (compagnie)`,
+  tear: v => `+${v} % de butin à la Déchirure (compagnie)`, event: v => `+${v} % de butin des événements (compagnie)`,
+  coinLife: v => `+${v} s de pièces au sol (compagnie)`, aoe: v => `+${v} % de zone d'attaque (compagnie)`,
+  stun: v => `−${v} % d'étourdissement (compagnie)`,
 };
-export const GLOBAL_STATS = ['gold', 'drop', 'time', 'glove'];
+export const GLOBAL_STATS = ['gold', 'drop', 'time', 'glove', 'goldWisp', 'focus', 'tear', 'event', 'coinLife', 'aoe', 'stun'];
+// effet de chaque stat pour 10 de puissance (sert aussi aux effets secondaires)
+export const STAT_PER = { dmg: 6, rate: 4, crit: 2, critDmg: 10, range: 4, boss: 10, gold: 3, drop: 8, time: 0.8, glove: 3,
+  goldWisp: 15, focus: 0.5, tear: 6, event: 8, coinLife: 0.6, aoe: 6, stun: 8 };
 export const KINDS = {
   weapon: { stat: 'dmg', per: 10 },
   ring: { icon: 'ring', stat: 'dmg', per: 6, names: ['Anneau de cuivre', 'Anneau de braise', 'Anneau du brasier', 'Anneau du soleil noir'] },
@@ -58,9 +86,22 @@ export const KINDS = {
   purse: { icon: 'purse', stat: 'gold', per: 3, names: ['Bourse rapiécée', 'Bourse brodée', 'Bourse du marchand', 'Bourse sans fond'] },
   satchel: { icon: 'satchel', stat: 'drop', per: 8, names: ['Besace usée', 'Besace du pisteur', 'Besace du pillard', 'Besace du dragon'] },
   hourglass: { icon: 'hourglass', stat: 'time', per: 0.8, names: ['Sablier fêlé', 'Sablier de poche', 'Sablier d\'argent', 'Sablier du temps'] },
-  glovecharm: { icon: 'coinclock', stat: 'glove', per: 3, names: ['Pièce porte-bonheur', 'Pièce aimantée', 'Pièce du collecteur', 'Pièce du roi avare'] },
+  glovecharm: { icon: 'coin', stat: 'glove', per: 3, names: ['Pièce porte-bonheur', 'Pièce aimantée', 'Pièce du collecteur', 'Pièce du roi avare'] },
+  clover: { icon: 'clover', stat: 'goldWisp', per: 15, names: ['Trèfle séché', 'Trèfle à quatre feuilles', 'Trèfle doré', 'Trèfle des fées'] },
+  candle: { icon: 'candle', stat: 'focus', per: 0.5, names: ['Bout de chandelle', 'Bougie de cire', 'Cierge du veilleur', 'Flamme éternelle'] },
+  bell: { icon: 'bell', stat: 'tear', per: 6, names: ['Grelot fêlé', 'Clochette d\'argent', 'Cloche du sonneur', 'Cloche de l\'aurore'] },
+  compass: { icon: 'compass', stat: 'event', per: 8, names: ['Boussole rouillée', 'Boussole du pisteur', 'Boussole du chasseur', 'Boussole des trésors'] },
+  rune: { icon: 'rune', stat: 'aoe', per: 6, names: ['Rune ébréchée', 'Rune gravée', 'Rune de puissance', 'Rune primordiale'] },
+  fang: { icon: 'fang', stat: 'dmg', per: 4, bonus: ['crit', 0.6], names: ['Croc de rat', 'Croc de loup', 'Croc de wyverne', 'Croc du grand dragon'] },
+  totem: { icon: 'totem', stat: 'stun', per: 8, names: ['Totem de bois', 'Totem de pierre', 'Totem du chaman', 'Totem des ancêtres'] },
+  tear: { icon: 'tear', stat: 'coinLife', per: 0.6, names: ['Larme de verre', 'Larme de sirène', 'Larme de phénix', 'Larme d\'étoile'] },
+  mask: { icon: 'mask', stat: 'critDmg', per: 7, bonus: ['crit', 0.6], names: ['Masque de chiffon', 'Masque du bouffon', 'Masque du carnaval', 'Masque du roi-fou'] },
+  bracelet: { icon: 'bracelet', stat: 'rate', per: 3, bonus: ['range', 0.6], names: ['Bracelet de corde', 'Bracelet de perles', 'Bracelet d\'argent', 'Bracelet des vents'] },
+  egg: { icon: 'egg', stat: 'dmg', per: 4, bonus: ['boss', 0.6], names: ['Œuf de caille', 'Œuf de griffon', 'Œuf de wyverne', 'Œuf de dragon'] },
+  potion: { icon: 'potion', stat: 'gold', per: 2, bonus: ['drop', 0.6], names: ['Fiole trouble', 'Potion de chance', 'Élixir du marchand', 'Élixir du roi'] },
 };
-export const CHARM_KINDS = ['ring', 'feather', 'moon', 'skull', 'eye', 'seal', 'purse', 'satchel', 'hourglass', 'glovecharm'];
+export const CHARM_KINDS = ['ring', 'feather', 'moon', 'skull', 'eye', 'seal', 'purse', 'satchel', 'hourglass', 'glovecharm',
+  'clover', 'candle', 'bell', 'compass', 'rune', 'fang', 'totem', 'tear', 'mask', 'bracelet', 'egg', 'potion'];
 export const SLOTS = [
   { id: 'weapon', name: 'Arme', node: 'armory' },
   { id: 'charm1', name: 'Charme', node: 'charm1' },
@@ -90,8 +131,8 @@ const round = v => v >= 10 ? Math.round(v) : Math.round(v * 10) / 10;
 export function itemEffects(it, refine = 0) {
   const k = KINDS[it.kind], m = it.power / 10 * (1 + 0.1 * refine);
   const out = [[k.stat, round(k.per * m)]];
-  const bo = it.kind === 'weapon' && model(it).bonus;
-  if (bo) out.push([bo[0], round(KINDS[CHARM_KINDS.find(c => KINDS[c].stat === bo[0])].per * bo[1] * m)]);
+  const bo = it.kind === 'weapon' ? model(it).bonus : k.bonus;
+  if (bo) out.push([bo[0], round(STAT_PER[bo[0]] * bo[1] * m)]);
   return out;
 }
 export const itemValue = (it, refine = 0) => itemEffects(it, refine)[0][1];
@@ -131,7 +172,7 @@ export function refineChance(lv, bless = 0, pity = 0) {
 
 // Bonus de l'équipement, pour computeStats. level : niveaux de l'arbre (emplacements débloqués)
 export function gearBonus(gear, level) {
-  const out = { dmg: {}, rate: {}, crit: {}, critDmg: {}, range: {}, boss: {}, gold: 0, drop: 0, time: 0, glove: 0 };
+  const out = { dmg: {}, rate: {}, crit: {}, critDmg: {}, range: {}, boss: {}, gold: 0, drop: 0, time: 0, glove: 0, goldWisp: 0, focus: 0, tear: 0, event: 0, coinLife: 0, aoe: 0, stun: 0 };
   if (!gear || !(level.armory > 0)) return out;
   for (const k of HERO_ORDER) {
     for (const s of SLOTS) {

@@ -113,6 +113,7 @@ export function fmtNum(n) {
 export function computeStats(level, gb = null) {
   const L = id => level[id] || 0;
   const G = (st, k) => 1 + ((gb && gb[st][k]) || 0) / 100;
+  const GG = st => (gb && gb[st]) || 0;   // bonus de toute la compagnie
   const all = 1 + 0.04 * L('training');
   const shooter = 1 + 0.06 * L('longbow');
   const bardBoost = HEROES.bard.auraBoost + 0.02 * L('bardAura');
@@ -150,27 +151,28 @@ export function computeStats(level, gb = null) {
     bossBy: { archer: G('boss', 'archer'), mage: G('boss', 'mage'), knight: G('boss', 'knight'), bard: G('boss', 'bard') },
     gearOn: L('armory') > 0,
     range: { archer: (shooter + 0.08 * L('hawk')) * G('range', 'archer'), mage: shooter * G('range', 'mage'), bard: shooter * G('range', 'bard'), knight: G('range', 'knight') },
-    cleave: 1 + 0.08 * L('whirl'),
+    cleave: (1 + 0.08 * L('whirl')) * (1 + GG('aoe') / 100),
     slowTime: HEROES.mage.slowTime + 0.3 * L('deepFrost'),
     critChance: 0.12 + 0.03 * L('crit'),
     critMult: 2 + 0.2 * L('critDmg'),
-    mageAoe: HEROES.mage.aoe * (1 + 0.02 * L('mageDmg')),
-    bardAura: HEROES.bard.aura * (1 + 0.04 * L('bardAura') + 0.08 * L('choir')),
+    mageAoe: HEROES.mage.aoe * (1 + 0.02 * L('mageDmg')) * (1 + GG('aoe') / 100),
+    bardAura: HEROES.bard.aura * (1 + 0.04 * L('bardAura') + 0.08 * L('choir')) * (1 + GG('aoe') / 100),
     bardBoost,
     bossMult: (1 + 0.1 * L('bossDmg')) * (1 + 0.1 * L('veteran')),
-    goldChance: GOLD_WISP.chance * (1 + 0.6 * L('goldWisp')),
+    goldChance: GOLD_WISP.chance * (1 + 0.6 * L('goldWisp')) * (1 + GG('goldWisp') / 100),
     bagCapacity: BASE.bagCapacity * Math.pow(1.6, L('capacity')) * Math.pow(1.25, L('seams2')),
     tiers: 1 + L('tierCuir') + (L('tierCuir') ? L('tierSoie') : 0) + (L('tierCuir') && L('tierSoie') ? L('tierCeleste') : 0),
     gloveRadius: BASE.gloveRadius * (1 + 0.18 * L('glove')) * (1 + ((gb && gb.glove) || 0) / 100),
-    attraction: BASE.attraction + 0.75 * L('attraction'),
-    coinLife: BASE.coinLife + 2 * L('coinLife'),
+    attraction: BASE.attraction + 0.75 * L('attraction') + Math.round(GG('focus') * 10) / 10,
+    coinLife: BASE.coinLife + 2 * L('coinLife') + GG('coinLife'),
     bagMouth: BASE.bagMouth * (1 + 0.5 * L('mouth')),
     tearDuration: BASE.tearDuration + 2 * L('tearRain'),
-    tearMult: 1 + 0.1 * L('goldTear'),
+    tearMult: (1 + 0.1 * L('goldTear')) * (1 + GG('tear') / 100),
     tearWaves: 4 + L('wave'),
     valueMult: (1 + 0.05 * L('heavyCoins')) * (1 + ((gb && gb.gold) || 0) / 100),
     events, eventCount: 1 + L('evTwo'),
-    eventMult: 1 + 0.15 * L('hunter'),
+    eventMult: (1 + 0.15 * L('hunter')) * (1 + GG('event') / 100),
+    stunMult: Math.max(0.2, 1 - GG('stun') / 100),
     veinMult: 1 + 0.2 * L('vein'),
     goblinSpeed: Math.max(0.4, 1 - 0.1 * L('goblin')),
     rainLife: 1 + 0.2 * L('goldRain'),

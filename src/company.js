@@ -1,7 +1,7 @@
 // Onglet Compagnie : équipement des lignées, forge (affinage), réserve et recyclage ; écran « Sers-toi ! ».
 import { HEROES, HERO_ORDER } from './data.js';
 import { TREE_ICONS, treeIcons } from './sprites.js';
-import { RARITIES, GEAR_ICONS, SLOTS, RESERVE, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText,
+import { RARITIES, GEAR_ICONS, ICON_FALLBACK, SLOTS, RESERVE, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText,
   isBetter, refineCost, refineChance, gearBonus } from './gear.js';
 
 const $ = id => document.getElementById(id);
@@ -19,6 +19,7 @@ const iconCache = {};
 // Icône 64×64 : planche des objets, sinon planche de l'arbre
 export function gearIconCanvas(name) {
   if (iconCache[name]) return iconCache[name];
+  if (gearSheet && GEAR_ICONS.indexOf(name) * 64 >= gearSheet.width && ICON_FALLBACK[name]) return gearIconCanvas(ICON_FALLBACK[name]);
   const gi = GEAR_ICONS.indexOf(name), ti = TREE_ICONS.indexOf(name);
   const src = gi >= 0 ? gearSheet : ti >= 0 ? treeSheet : null;
   if (!src) return null;

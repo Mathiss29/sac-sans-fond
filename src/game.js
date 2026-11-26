@@ -267,7 +267,7 @@ function updateHazards(world, dt) {
     z.done = true;
     for (const u of world.heroes) {
       if (u.drop > 0 || (u.x - z.x) ** 2 + (u.y + 8 - z.y) ** 2 > z.r * z.r) continue;
-      u.stun = b.stun;
+      u.stun = b.stun * (world.stats.stunMult || 1);
       const dx = u.x - z.x, dy = u.y - z.y, d = Math.hypot(dx, dy) || 1;
       u.x += dx / d * 26; u.y += dy / d * 18;
       world.texts.push({ x: u.x, y: u.y - 40, text: 'étourdi', color: '#ffb347', size: 13, life: 0.9 });
@@ -646,7 +646,7 @@ function moveEventFoe(world, e, dt) {
     if (d > 22) { e.x += (near.x - e.x) / d * sp * dt; e.y += (near.y - e.y) / d * sp * dt; }
     e.bite = (e.bite || 0) - dt;
     if (d < 30 && e.bite <= 0) {
-      e.bite = 1.4; near.stun = Math.max(near.stun || 0, 1.1);
+      e.bite = 1.4; near.stun = Math.max(near.stun || 0, 1.1 * (world.stats.stunMult || 1));
       world.texts.push({ x: near.x, y: near.y - 34, text: 'Croc !', color: '#ff6a5a', size: 16, life: 0.8 });
       sfx(world, 'hit', { crit: true }); shake(world, 3);
     }

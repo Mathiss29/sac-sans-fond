@@ -28,12 +28,12 @@ Dans l'antre (60 s) : le boss annonce des cercles de feu qui étourdissent les h
 L'Armurerie (branche Équipement de l'arbre, sous les chevaliers) ouvre l'onglet **Compagnie**.
 
 - **Besaces** : en expédition, certains ennemis lâchent une besace qui file seule vers le sac (une garantie à la première expédition armée, jusqu'à 4 par expédition, toujours une sur un boss). À la fin, l'écran **« Sers-toi ! »** montre les objets trouvés avec leur rareté et « Meilleur ! » / « Nouveau ».
-- **Objets** : 12 armes (3 par lignée) et 10 charmes, chacun en 4 raretés (commune, rare, épique, légendaire), soit 88 objets. La puissance dépend de la rareté et de ta progression.
+- **Objets** : 24 armes (6 par lignée) et 22 charmes, chacun en 4 raretés (commune, rare, épique, légendaire), soit 184 objets. La puissance dépend de la rareté et de ta progression.
 - **Emplacements** : une arme par lignée, puis 1 et 2 charmes (nœuds de l'arbre). L'équipement appartient à la lignée.
 - **Affinage** (forge) : on affine l'emplacement, pas l'objet (+10 % d'effet par niveau, jusqu'à +15). Sans risque jusqu'à +3, puis chance de réussite décroissante ; un échec garde le niveau et donne +5 % de chance au suivant. Les niveaux avancés coûtent des **éclats**.
 - **Recyclage** : transforme les objets en trop en éclats (1, 3, 8 ou 20 selon la rareté).
 
-Icônes provisoires : `tools/dessiner-objets.py` → `assets/sprites/icones/objets.png`.
+Icônes : planche ChatGPT de Mathis convertie dans `assets/sprites/icones/objets.png` (24 premières). Les 24 suivantes (planche 2) utilisent une icône proche en attendant (`ICON_FALLBACK` dans `src/gear.js`).
 
 ## Organisation du code
 
