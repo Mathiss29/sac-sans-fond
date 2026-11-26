@@ -1,0 +1,522 @@
+// Onglet Compagnie : équipement des lignées, forge (affinage), réserve et recyclage ; écran « Sers-toi ! ».
+import { HEROES, HERO_ORDER } from './data.js';
+import { TREE_ICONS, treeIcons } from './sprites.js';
+import { RARITIES, GEAR_ICONS, ICON_FALLBACK, WEAPONS, KINDS, CHARM_KINDS, SETS, MYTHS, setOf, setCount, mythText, albumKey, albumBonus, ALBUM_STEP, STAT_TEXT, SLOTS, reserveSize, rerollCost, rerollAlt, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText, itemEffects,
+  isBetter, refineCost, refineChance, gearBonus, FORGE_TITLES, forgeTitles, forgeBest, forgeTitleText } from './gear.js';
+
+const $ = id => document.getElementById(id);
+const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+// ---------- Icônes ----------
+let gearSheet = null, treeSheet = null;
+export const gearSheetReady = new Promise(ok => {
+  const im = new Image();
+  im.onload = () => { gearSheet = im; ok(im); }; im.onerror = () => ok(null);
+  im.src = 'assets/sprites/icones/objets.png';
+});
+treeIcons.then(im => { treeSheet = im; });
+const iconCache = {};
+// Icône 64×64 : planche des objets, sinon planche de l'arbre
+export function gearIconCanvas(name) {
+  if (iconCache[name]) return iconCache[name];
+  if (gearSheet && GEAR_ICONS.indexOf(name) * 64 >= gearSheet.width && ICON_FALLBACK[name]) return gearIconCanvas(ICON_FALLBACK[name]);
+  const gi = GEAR_ICONS.indexOf(name), ti = TREE_ICONS.indexOf(name);
+  const src = gi >= 0 ? gearSheet : ti >= 0 ? treeSheet : null;
+  if (!src) return null;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.drawImage(src, (gi >= 0 ? gi : ti) * 64, 0, 64, 64, 0, 0, 64, 64);
+  return (iconCache[name] = c);
+}
+function iconEl(name, cls = 'gIco') {
+  const c = document.createElement('canvas'); c.width = c.height = 64; c.className = cls;
+  const draw = () => { const s = gearIconCanvas(name); if (s) c.getContext('2d').drawImage(s, 0, 0); };
+  draw(); if (!gearIconCanvas(name)) Promise.all([gearSheetReady, treeIcons]).then(draw);
+  return c;
+}
+// Effets de rareté sur un cadre d'objet : lueur (rare), reflet et étincelles (épique), rayons tournants (légendaire)
+function rarFx(el, rarity) {
+  el.classList.add('rar', 'rar' + rarity);
+  if (rarity >= 4) el.classList.add('rar3');
+  if (rarity < 1) return el;
+  const back = h('span', 'fxb'), front = h('span', 'fxf');
+  if (rarity >= 3) back.append(h('i', 'rays'));
+  if (rarity >= 2) {
+    front.append(h('i', 'shine'));
+    const n = rarity >= 3 ? 4 : 2;
+    for (let i = 0; i < n; i++) {
+      const sp = h('i', 'spk'); sp.style.left = [18, 74, 30, 64][i] + '%'; sp.style.top = [22, 30, 76, 70][i] + '%';
+      sp.style.animationDelay = (i * 0.45) + 's'; front.append(sp);
+    }
+  }
+  el.prepend(back); el.append(front);
+  return el;
+}
+const pct = v => String(Math.round(v)).replace('.', ',');
+
+// ---------- État ----------
+let C = null;                       // contexte donné par main.js
+let resFilter = 'all', resSort = 'rarity';
+let line = 'archer', tab = 'equip', refSlot = 'weapon', recycleMode = false, picked = null, open = false;
+const L = id => (C.save.level[id] || 0);
+const owned = () => HERO_ORDER.filter(k => heroCount(k) > 0);
+function heroCount(k) {
+  const lv = C.save.level, n = id => lv[id] || 0;
+  return { archer: 1, mage: n('mage'), knight: n('knight'), bard: n('bard') }[k];
+}
+const slotOpen = s => L(SLOTS.find(x => x.id === s).node) > 0;
+
+let view = 'tree';
+export function initCompany(ctx) {
+  C = ctx;
+  const tabs = document.querySelector('#atelier .tabs');
+  const [tree, book] = tabs.querySelectorAll('.tab');
+  tree.dataset.view = 'tree';
+  const comp = h('button', 'tab', 'Compagnie'); comp.type = 'button'; comp.id = 'tabCompany'; comp.dataset.view = 'company';
+  comp.append(h('span', 'tabBang', '!'));
+  tree.after(comp);
+  book.id = 'tabBook'; book.dataset.view = 'album'; book.append(h('span', 'tabBang', '!'));
+  tree.onclick = () => show('tree');
+  comp.onclick = () => show('company');
+  book.onclick = () => show('album');
+  addEventListener('keydown', e => {
+    if ($('atelier').hidden || !open) return;
+    if (e.key === 'Escape') { recycleMode = false; picked = null; render(); }
+  });
+  companyRefresh();
+}
+function show(v) {
+  if (v !== 'tree' && !L('armory')) return;
+  view = v; open = v === 'company';
+  $('treeWrap').hidden = v !== 'tree'; $('company').hidden = v !== 'company'; $('album').hidden = v !== 'album';
+  document.querySelectorAll('#atelier .tabs .tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
+  $('atelier').querySelector('.hintTxt').innerHTML = v === 'company' ? 'Clique un objet pour l\'équiper<br>Survole pour comparer'
+    : v === 'album' ? 'Trouve des objets en expédition<br>pour remplir l\'album' : 'Clique une compétence pour l\'acheter<br>Glisse pour voir, molette pour zoomer';
+  const g = gearOf(C.save);
+  if (v === 'company') { g.news = 0; C.write(); }
+  if (v === 'album') { g.albumNews = 0; C.write(); renderAlbum(); }
+  companyRefresh();
+}
+
+export function companyRefresh() {
+  if (!C) return;
+  const t = $('tabCompany'), on = L('armory') > 0;
+  t.hidden = !on;
+  const g = C.save.gear;
+  t.classList.toggle('bang', on && !open && !!(g && (g.news > 0 || !g.visited)));
+  const bk = $('tabBook');
+  bk.disabled = !on; bk.title = on ? 'Album des objets' : 'Bientôt';
+  bk.classList.toggle('bang', on && view !== 'album' && !!(g && g.albumNews > 0));
+  if (!on && view !== 'tree') show('tree');
+  if (view === 'album') renderAlbum();
+  if (open) render();
+}
+
+// ---------- Rendu de l'écran ----------
+function render() {
+  const g = gearOf(C.save); g.visited = true;
+  const box = $('company'); box.innerHTML = '';
+  if (!owned().includes(line)) line = owned()[0];
+  box.append(renderLines(g), renderCenter(g), renderReserve(g));
+}
+
+function lineBonus(g, k) {
+  const b = gearBonus(g, C.save.level);
+  return b.dmg[k] || 0;
+}
+function renderLines(g) {
+  const col = h('div', 'cPanel cLines');
+  col.append(h('div', 'cTitle', 'Lignées'));
+  for (const k of owned()) {
+    const b = h('button', 'cLine' + (k === line ? ' on' : '')); b.type = 'button';
+    const ic = document.createElement('canvas'); ic.width = ic.height = 68; ic.getContext('2d').drawImage(C.heroIcon(k), 0, 0);
+    const txt = h('div', 'cLineTxt');
+    txt.append(h('div', 'nm', HEROES[k].plural), h('div', 'pc num', `+${pct(lineBonus(g, k))} % de dégâts`));
+    const slots = h('div', 'cMini');
+    for (const s of SLOTS) {
+      const cell = h('span', 'mini' + (slotOpen(s.id) ? '' : ' locked'));
+      const it = g.eq[k][s.id], rf = g.ref[k][s.id] || 0;
+      if (!slotOpen(s.id)) cell.textContent = '🔒';
+      else if (it) { cell.append(iconEl(itemIcon(it))); cell.style.setProperty('--r', RARITIES[it.rarity].color); cell.classList.add('full'); rarFx(cell, it.rarity); }
+      if (rf && slotOpen(s.id)) cell.append(h('b', 'rf', '+' + rf));
+      slots.append(cell);
+    }
+    b.append(ic, txt, slots);
+    b.onclick = () => { line = k; picked = null; render(); };
+    col.append(b);
+  }
+  const g2 = h('div', 'cFoot');
+  g2.append(h('span', '', `Collection : ${CATALOG_SIZE} objets à trouver`));
+  col.append(g2);
+  return col;
+}
+
+function renderCenter(g) {
+  const col = h('div', 'cPanel cCenter');
+  const sub = h('div', 'cSub');
+  for (const [id, label, need] of [['equip', 'Équiper', 'armory'], ['refine', 'Affiner', 'refine'], ['reroll', 'Relancer', 'refine']]) {
+    const b = h('button', 'cSubTab' + (tab === id ? ' on' : ''), label); b.type = 'button';
+    if (!L(need)) { b.disabled = true; b.title = 'Débloque « Forge : affinage » dans l\'arbre'; b.textContent = '🔒 ' + label; }
+    b.onclick = () => { tab = id; render(); };
+    sub.append(b);
+  }
+  col.append(sub);
+  if (tab === 'refine' && L('refine')) col.append(renderRefine(g));
+  else if (tab === 'reroll' && L('refine')) col.append(renderReroll(g));
+  else col.append(renderEquip(g));
+  return col;
+}
+
+function slotCard(g, s, big = true) {
+  const it = g.eq[line][s.id], rf = g.ref[line][s.id] || 0, op = slotOpen(s.id);
+  const card = h('div', 'cSlot' + (it ? ' full' : '') + (op ? '' : ' locked'));
+  if (it) card.style.setProperty('--r', RARITIES[it.rarity].color);
+  const frame = h('div', 'cSlotIco');
+  if (it) { frame.append(iconEl(itemIcon(it))); frame.style.setProperty('--r', RARITIES[it.rarity].color); rarFx(frame, it.rarity); }
+  else frame.append(h('span', 'ph', op ? (s.id === 'weapon' ? '⚔' : '✦') : '🔒'));
+  if (rf) frame.append(h('b', 'rf', '+' + rf));
+  const txt = h('div', 'cSlotTxt');
+  txt.append(h('div', 'k', s.name + (rf ? ` · emplacement +${rf}` : '')));
+  if (!op) txt.append(h('div', 'nm dim', s.id === 'weapon' ? 'Armurerie' : s.id === 'charm1' ? 'Débloque « Emplacement de charme »' : 'Débloque « Deuxième charme »'));
+  else if (it) {
+    const nm = h('div', 'nm', itemName(it)); nm.style.color = RARITIES[it.rarity].color;
+    txt.append(nm, h('div', 'eff', itemText(it, rf)));
+    if (it.myth) txt.append(h('div', 'myth', mythText(it)));
+  } else txt.append(h('div', 'nm dim', 'Vide'));
+  card.append(frame, txt);
+  if (it && big) {
+    card.title = 'Clique pour ranger dans la réserve';
+    card.onclick = () => {
+      if (g.inv.length >= reserveSize(C.save.level)) return;
+      g.inv.push(it); g.eq[line][s.id] = null; changed('click');
+    };
+  }
+  return card;
+}
+
+function renderEquip(g) {
+  const w = h('div', 'cEquip');
+  const head = h('div', 'cHead');
+  const ic = document.createElement('canvas'); ic.width = ic.height = 68; ic.getContext('2d').drawImage(C.heroIcon(line), 0, 0);
+  head.append(ic, h('div', 'cHeadTxt', HEROES[line].plural));
+  w.append(head);
+  for (const s of SLOTS) w.append(slotCard(g, s));
+  for (const [id, st] of Object.entries(SETS)) {
+    if (st.line !== line) continue;
+    const n = setCount(g, line, id, C.save.level);
+    const box = h('div', 'cSet' + (n >= 2 ? ' on' : ''));
+    box.append(h('div', 'k', `Ensemble ${st.name} · ${n}/3`));
+    const pieces = [WEAPONS[line][st.weapon].names[0].split(' ')[0], ...st.charms.map(c => KINDS[c].names[1])].join(', ');
+    box.append(h('div', 'pc', 'Pièces : ' + pieces + ' (toutes raretés)'));
+    box.append(h('div', 'b' + (n >= 2 ? ' ok' : ''), '2 pièces : ' + STAT_TEXT[st.b2[0]](st.b2[1])));
+    box.append(h('div', 'b' + (n >= 3 ? ' ok' : ''), '3 pièces : ' + STAT_TEXT[st.b3[0]](st.b3[1])));
+    w.append(box);
+  }
+  w.append(h('p', 'cHint', 'L\'équipement appartient à la lignée : il reste quand tes héros changent de classe.'));
+  return w;
+}
+
+function renderRefine(g) {
+  const w = h('div', 'cRefine');
+  const pick = h('div', 'cRefPick');
+  for (const s of SLOTS) {
+    const b = h('button', 'cRefSlot' + (refSlot === s.id ? ' on' : '')); b.type = 'button';
+    const it = g.eq[line][s.id], rf = g.ref[line][s.id] || 0;
+    if (!slotOpen(s.id)) { b.disabled = true; b.append(h('span', 'ph', '🔒')); }
+    else if (it) { b.append(iconEl(itemIcon(it))); b.style.setProperty('--r', RARITIES[it.rarity].color); rarFx(b, it.rarity); }
+    else b.append(h('span', 'ph', s.id === 'weapon' ? '⚔' : '✦'));
+    if (rf) b.append(h('b', 'rf', '+' + rf));
+    b.onclick = () => { refSlot = s.id; render(); };
+    pick.append(b);
+  }
+  if (!slotOpen(refSlot)) refSlot = 'weapon';
+  const s = SLOTS.find(x => x.id === refSlot), it = g.eq[line][s.id], lv = g.ref[line][s.id] || 0;
+  const key = line + '.' + s.id, pity = g.pity[key] || 0;
+  const title = h('div', 'cRefTitle', `+${lv} ${it ? itemName(it) : (s.id === 'weapon' ? 'Emplacement d\'arme' : 'Emplacement de charme')}`);
+  if (it) title.style.color = RARITIES[it.rarity].color;
+  const dots = h('div', 'cDots');
+  for (let i = 0; i < REFINE_MAX; i++) dots.append(h('i', i < lv ? 'on' : ''));
+  const anvil = h('div', 'cAnvil'); anvil.append(iconEl('anvil', 'anvil'));
+  w.append(pick, title, dots, anvil);
+  w.append(forgeTitleBox(g));
+  if (lv >= REFINE_MAX) { w.append(h('p', 'cOk', 'Emplacement au maximum !')); return w; }
+  const now = h('div', 'cNow', it ? itemText(it, lv) : `Bonus de l'objet ×${(1 + 0.1 * lv).toFixed(1).replace('.', ',')}`);
+  const next = h('div', 'cNext', '→ ' + (it ? itemText(it, lv + 1) : `Bonus de l'objet ×${(1 + 0.1 * (lv + 1)).toFixed(1).replace('.', ',')}`));
+  const ch = refineChance(lv, L('blessed'), pity);
+  const rate = h('div', 'cRate' + (ch >= 1 ? ' safe' : ''), ch >= 1 ? 'Sans risque : ne peut pas échouer' : `Réussite ${Math.round(ch * 100)} %`);
+  w.append(now, next, rate);
+  if (ch < 1) w.append(h('div', 'cFail', 'Échec : niveau gardé, +5 % de chance au suivant'));
+  const cost = refineCost(lv), money = C.save.coins, sh = g.shards;
+  const btn = h('button', 'cRefBtn'); btn.type = 'button';
+  btn.append(h('span', 'lbl', 'Affiner'), h('span', 'sep'));
+  const c1 = h('span', 'cost' + (money < cost.coins ? ' no' : '')); c1.append(h('span', 'coin-ico'), ' ' + C.fmt(cost.coins)); btn.append(c1);
+  if (cost.shards) { const c2 = h('span', 'cost' + (sh < cost.shards ? ' no' : '')); c2.append(iconEl('shard', 'mIco'), ' ' + cost.shards); btn.append(c2); }
+  btn.disabled = money < cost.coins || sh < cost.shards;
+  btn.onclick = () => {
+    if (money < cost.coins || sh < cost.shards) return;
+    C.unlockAudio();
+    C.save.coins -= cost.coins; g.shards -= cost.shards;
+    const ok = Math.random() < ch;
+    const had = forgeTitles(g).length;
+    if (ok) { g.ref[line][s.id] = lv + 1; g.pity[key] = 0; C.play('tier'); }
+    else { g.pity[key] = pity + 0.05; C.play('warn'); }
+    changed();
+    const res = h('div', 'cRefFx ' + (ok ? 'ok' : 'ko'), ok ? `+${lv + 1} !` : 'Échec…');
+    $('company').querySelector('.cAnvil')?.append(res);
+    $('company').querySelector('.cAnvil .anvil')?.classList.add('hit');
+    const ts = forgeTitles(g);
+    if (ts.length > had) titleBanner(ts[ts.length - 1]);
+  };
+  w.append(btn);
+  if (cost.shards && !L('recycle')) w.append(h('p', 'cHint', 'Il faut des éclats : débloque le Recyclage dans l\'arbre.'));
+  return w;
+}
+
+function forgeTitleBox(g) {
+  const box = h('div', 'cTitleBox');
+  const ts = forgeTitles(g), nx = FORGE_TITLES.find(t => !ts.includes(t));
+  const cur = ts[ts.length - 1];
+  box.append(h('div', 'tt', cur ? '⚒ ' + cur.name : '⚒ Aucun titre de forge'));
+  if (ts.length) box.append(h('div', 'tb', ts.map(forgeTitleText).join(' · ')));
+  if (nx) box.append(h('div', 'tn', `Défi : un emplacement à +${nx.lv} (meilleur : +${forgeBest(g)}) → « ${nx.name} », ${forgeTitleText(nx)}`));
+  return box;
+}
+function titleBanner(t) {
+  const b = h('div', 'cTitleBanner');
+  b.append(h('div', 'k', 'Nouveau titre !'), h('div', 'n', t.name), h('div', 'e', forgeTitleText(t)));
+  document.body.append(b); C.play('tier');
+  setTimeout(() => b.remove(), 3200);
+}
+
+// Relance : retire au sort l'effet secondaire de l'objet d'un emplacement, contre des éclats
+function renderReroll(g) {
+  const w = h('div', 'cRefine');
+  const pick = h('div', 'cRefPick');
+  for (const s of SLOTS) {
+    const b = h('button', 'cRefSlot' + (refSlot === s.id ? ' on' : '')); b.type = 'button';
+    const it = g.eq[line][s.id];
+    if (!slotOpen(s.id)) { b.disabled = true; b.append(h('span', 'ph', '🔒')); }
+    else if (it) { b.append(iconEl(itemIcon(it))); b.style.setProperty('--r', RARITIES[it.rarity].color); rarFx(b, it.rarity); }
+    else b.append(h('span', 'ph', s.id === 'weapon' ? '⚔' : '✦'));
+    b.onclick = () => { refSlot = s.id; render(); };
+    pick.append(b);
+  }
+  if (!slotOpen(refSlot)) refSlot = 'weapon';
+  const it = g.eq[line][refSlot];
+  w.append(pick);
+  if (!it) { w.append(h('p', 'cHint', 'Équipe un objet dans cet emplacement pour relancer son effet secondaire.')); return w; }
+  const title = h('div', 'cRefTitle', itemName(it)); title.style.color = RARITIES[it.rarity].color;
+  const ic = h('div', 'cAnvil'); ic.append(iconEl('rune', 'anvil'));
+  w.append(title, ic);
+  const rf = g.ref[line][refSlot] || 0, eff = itemEffects(it, rf);
+  const fmtE = ([st, v]) => STAT_TEXT[st](String(v).replace('.', ','));
+  w.append(h('div', 'cNow', 'Effet principal : ' + fmtE(eff[0])));
+  w.append(h('div', 'cNext', eff[1] ? 'Effet secondaire : ' + fmtE(eff[1]) : 'Pas encore d\'effet secondaire'));
+  w.append(h('div', 'cFail', 'La relance tire un nouvel effet secondaire au hasard (différent de l\'actuel).'));
+  const cost = rerollCost(it);
+  const btn = h('button', 'cRefBtn'); btn.type = 'button';
+  btn.append(h('span', 'lbl', eff[1] ? 'Relancer' : 'Enchanter'), h('span', 'sep'));
+  const c2 = h('span', 'cost' + (g.shards < cost ? ' no' : '')); c2.append(iconEl('shard', 'mIco'), ' ' + cost); btn.append(c2);
+  btn.disabled = g.shards < cost;
+  btn.onclick = () => {
+    if (g.shards < cost) return;
+    g.shards -= cost; rerollAlt(it);
+    changed('tier');
+    $('company').querySelector('.cAnvil')?.append(h('div', 'cRefFx ok', '✦'));
+  };
+  w.append(btn);
+  if (!L('recycle')) w.append(h('p', 'cHint', 'Il faut des éclats : débloque le Recyclage dans l\'arbre.'));
+  return w;
+}
+
+function renderReserve(g) {
+  const col = h('div', 'cPanel cReserve');
+  const top = h('div', 'cTitle');
+  top.append(h('span', '', `Réserve ${g.inv.length}/${reserveSize(C.save.level)}`));
+  const sh = h('span', 'shards num'); sh.append(iconEl('shard', 'mIco'), ' ' + C.fmt(g.shards)); sh.title = 'Éclats : obtenus en recyclant, servent à l\'affinage';
+  top.append(sh);
+  col.append(top);
+  // tri et filtres
+  const bar = h('div', 'cFilters');
+  const filters = [['all', 'Tout'], ...owned().map(k => [k, HEROES[k].plural]), ['charm', 'Charmes'], ['new', 'Nouveaux'], ['locked', '🔒']];
+  if (!filters.some(f => f[0] === resFilter)) resFilter = 'all';
+  for (const [id, label] of filters) {
+    const b = h('button', 'cChip' + (resFilter === id ? ' on' : ''), label); b.type = 'button';
+    b.onclick = () => { resFilter = id; render(); };
+    bar.append(b);
+  }
+  const SORTS = { rarity: 'Rareté', power: 'Puissance', recent: 'Récents' };
+  const sb = h('button', 'cChip sort', '⇅ ' + SORTS[resSort]); sb.type = 'button'; sb.title = 'Changer le tri';
+  sb.onclick = () => { const k = Object.keys(SORTS); resSort = k[(k.indexOf(resSort) + 1) % k.length]; render(); };
+  bar.append(sb);
+  col.append(bar);
+  const grid = h('div', 'cGrid');
+  const keep = it => resFilter === 'all' ? true : resFilter === 'charm' ? it.kind !== 'weapon' : resFilter === 'new' ? it.isNew : resFilter === 'locked' ? it.locked : it.kind === 'weapon' && it.line === resFilter;
+  const cmp = { rarity: (a, b) => b.rarity - a.rarity || b.power - a.power, power: (a, b) => b.power - a.power || b.rarity - a.rarity, recent: (a, b) => b.id - a.id }[resSort];
+  const sorted = g.inv.filter(keep).sort(cmp);
+  if (!sorted.length && resFilter !== 'all') grid.append(h('p', 'cHint wide', 'Aucun objet pour ce filtre.'));
+  for (const it of sorted) {
+    const cell = h('button', 'cItem' + (it.isNew ? ' new' : '') + (picked === it.id ? ' sel' : '') + (recycleMode ? ' rec' : '')); cell.type = 'button';
+    cell.style.setProperty('--r', RARITIES[it.rarity].color);
+    cell.append(iconEl(itemIcon(it)));
+    rarFx(cell, it.rarity);
+    if (it.kind === 'weapon') {
+      const cur = g.eq[it.line].weapon;
+      if (owned().includes(it.line) && (!cur || it.power > cur.power)) cell.append(h('b', 'up', '▲'));
+      cell.append(h('i', 'who', HEROES[it.line].name[0]));
+    }
+    if (it.isNew) cell.append(h('b', 'nw', '!'));
+    cell.onmouseenter = () => { detail(g, it); };
+    cell.onfocus = () => detail(g, it);
+    if (it.locked) cell.append(h('b', 'lk', '🔒'));
+    cell.title = it.locked ? 'Verrouillé (clic droit pour déverrouiller)' : 'Clic droit : verrouiller';
+    cell.oncontextmenu = e => { e.preventDefault(); it.locked = !it.locked; it.isNew = false; changed('click'); detail(g, it); };
+    cell.onclick = () => {
+      it.isNew = false;
+      if (recycleMode) { if (it.locked) { flashHint('Objet verrouillé : clic droit pour le déverrouiller.'); return; } recycle(g, [it]); return; }
+      equip(g, it);
+    };
+    grid.append(cell);
+  }
+  if (resFilter === 'all') for (let i = g.inv.length; i < reserveSize(C.save.level); i++) grid.append(h('span', 'cItem empty'));
+  col.append(grid);
+  col.append(h('div', 'cDetail', 'Survole un objet pour voir ses effets.'));
+  const foot = h('div', 'cRecycle');
+  if (L('recycle')) {
+    const rb = h('button', 'cBtn' + (recycleMode ? ' on' : ''), recycleMode ? 'Terminer' : 'Recycler'); rb.type = 'button';
+    rb.onclick = () => { recycleMode = !recycleMode; render(); };
+    foot.append(rb);
+    for (let r = 0; r < 2; r++) {
+      const list = g.inv.filter(x => x.rarity === r && !x.locked);
+      const b = h('button', 'cBtn small', `Recycler les ${RARITIES[r].name.toLowerCase()}s (${list.length})`); b.type = 'button';
+      b.style.color = RARITIES[r].color; b.disabled = !list.length;
+      b.onclick = () => recycle(g, list);
+      foot.append(b);
+    }
+    if (recycleMode) foot.append(h('p', 'cHint', 'Clique un objet pour le recycler en éclats.'));
+  } else foot.append(h('p', 'cHint', '🔒 Recyclage : débloque-le dans l\'arbre (branche Équipement).'));
+  col.append(foot);
+  return col;
+}
+
+function detail(g, it) {
+  const d = $('company').querySelector('.cDetail'); if (!d) return;
+  d.innerHTML = '';
+  const r = RARITIES[it.rarity];
+  const nm = h('div', 'nm', itemName(it)); nm.style.color = r.color;
+  const meta = h('div', 'meta', `${r.name} · ${it.kind === 'weapon' ? 'Arme des ' + HEROES[it.line].plural.toLowerCase() : 'Charme'} · Puissance ${it.power}`);
+  const eff = h('div', 'eff', itemText(it));
+  d.append(nm, meta, eff);
+  if (it.myth) d.append(h('div', 'myth', mythText(it)));
+  const sid = setOf(it);
+  if (sid) d.append(h('div', 'set', `Ensemble ${SETS[sid].name} (${HEROES[SETS[sid].line].plural.toLowerCase()})`));
+  // comparaison avec ce qui est équipé
+  const k = it.kind === 'weapon' ? it.line : line;
+  const cur = it.kind === 'weapon' ? g.eq[k].weapon : null;
+  if (it.kind === 'weapon' && owned().includes(k)) {
+    const diff = it.power - (cur ? cur.power : 0);
+    d.append(h('div', 'cmp ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : ''), cur ? `${diff > 0 ? '▲ +' : diff < 0 ? '▼ ' : '= '}${diff} de puissance par rapport à ${itemName(cur)}` : '▲ Emplacement vide'));
+  }
+  d.append(h('div', 'meta', it.locked ? '🔒 Verrouillé · clic droit pour déverrouiller' : 'Clic droit : verrouiller (protège du recyclage)'));
+  if (recycleMode) d.append(h('div', 'meta', `Recyclage : +${r.shards} éclat${r.shards > 1 ? 's' : ''}`));
+}
+
+function equip(g, it) {
+  let k = line, slot;
+  if (it.kind === 'weapon') {
+    k = it.line;
+    if (!owned().includes(k)) { picked = it.id; render(); return; }
+    slot = 'weapon';
+  } else {
+    const free = ['charm1', 'charm2'].filter(s => slotOpen(s));
+    if (!free.length) { picked = it.id; render(); flashHint('Débloque « Emplacement de charme » dans l\'arbre pour porter des charmes.'); return; }
+    slot = free.find(s => !g.eq[k][s]) || free.reduce((a, b) => (g.eq[k][a].power <= g.eq[k][b].power ? a : b));
+  }
+  const old = g.eq[k][slot];
+  g.inv = g.inv.filter(x => x !== it);
+  if (old) g.inv.push(old);
+  g.eq[k][slot] = it; line = k;
+  changed('buy');
+}
+function recycle(g, list) {
+  if (!list.length) return;
+  for (const it of list) g.shards += RARITIES[it.rarity].shards;
+  const set = new Set(list); g.inv = g.inv.filter(x => !set.has(x));
+  changed('coin');
+}
+function flashHint(msg) {
+  const d = $('company').querySelector('.cDetail'); if (d) { d.textContent = msg; d.classList.add('warn'); }
+}
+function changed(sound) {
+  C.write(); if (sound) { C.unlockAudio(); C.play(sound); }
+  C.onChange(); render();
+}
+
+// ---------- Album des objets (Livre d'aventure) ----------
+function renderAlbum() {
+  const g = gearOf(C.save), box = $('album'); box.innerHTML = '';
+  const found = g.found || {}, n = Object.keys(found).length;
+  const head = h('div', 'aHead');
+  head.append(h('h2', '', 'Album des objets'));
+  const prog = h('div', 'aProg');
+  const next = (Math.floor(n / ALBUM_STEP) + 1) * ALBUM_STEP;
+  prog.append(h('span', 'num', `Découverts : ${n} / ${CATALOG_SIZE}`));
+  const bar = h('div', 'aBar'); const fill = h('i'); fill.style.width = ((n % ALBUM_STEP) / ALBUM_STEP * 100) + '%'; bar.append(fill); prog.append(bar);
+  prog.append(h('span', 'aRew', `Bonus de l'album : +${albumBonus(n)} % de dégâts (compagnie) · prochain palier à ${next} : +${albumBonus(next)} %`));
+  head.append(prog);
+  box.append(head);
+  const cell = (it, key, label) => {
+    const has = !!found[key], c = h('div', 'aCell' + (has ? '' : ' miss'));
+    c.style.setProperty('--r', RARITIES[it.rarity].color);
+    c.append(iconEl(it.icon));
+    if (has) rarFx(c, it.rarity);
+    c.title = has ? `${label} (${RARITIES[it.rarity].name})` : `??? (${RARITIES[it.rarity].name})`;
+    return c;
+  };
+  const section = (title, rows) => {
+    const sec = h('section', 'aSec'); sec.append(h('h3', '', title));
+    const grid = h('div', 'aGrid');
+    for (const r of rows) {
+      const row = h('div', 'aRow');
+      const anyFound = RARITIES.some((_, i) => found[r.key(i)]);
+      row.append(h('div', 'aName', anyFound ? r.name : '???'));
+      RARITIES.forEach((_, i) => row.append(cell({ icon: r.icon, rarity: i }, r.key(i), r.names[Math.min(3, i)])));
+      grid.append(row);
+    }
+    sec.append(grid); box.append(sec);
+  };
+  for (const k of HERO_ORDER) section(`Armes des ${HEROES[k].plural.toLowerCase()}`, WEAPONS[k].map((m, mi) => ({ icon: m.icon, name: m.names[0], names: m.names, key: i => `w:${k}:${mi}:${i}` })));
+  section('Charmes', CHARM_KINDS.map(c => ({ icon: KINDS[c].icon, name: KINDS[c].names[1], names: KINDS[c].names, key: i => `c:${c}:${i}` })));
+  box.append(h('p', 'cHint', 'Bestiaire et événements : bientôt dans le Livre d\'aventure.'));
+}
+
+// ---------- « Sers-toi ! » : les objets trouvés sortent de la besace un par un ----------
+export function showLoot(items, done) {
+  const g = gearOf(C.save);
+  const ov = h('div', 'lootScreen'); ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Objets trouvés');
+  ov.append(h('h2', 'lootTitle', 'Sers-toi !'));
+  const row = h('div', 'lootRow');
+  items.forEach((it, i) => {
+    const r = RARITIES[it.rarity];
+    const card = h('div', 'lootCard r' + it.rarity + (it.rarity >= 4 ? ' r3' : '')); card.style.setProperty('--r', r.color); card.style.animationDelay = (0.25 + i * 0.28) + 's';
+    card.append(h('div', 'rar', r.name + (it.rarity >= 2 ? ' !' : '')));
+    const fr = h('div', 'fr'); fr.append(iconEl(itemIcon(it))); rarFx(fr, it.rarity); card.append(fr);
+    card.append(h('div', 'nm', itemName(it)));
+    const tag = it.recycled ? 'Réserve pleine : recyclé' : isBetter(g, it) && C.save.level[{ archer: 'root', mage: 'mage', knight: 'knight', bard: 'bard' }[it.line]] ? 'Meilleur !' : 'Nouveau';
+    card.append(h('div', 'tag' + (tag === 'Meilleur !' ? ' best' : ''), tag));
+    card.append(h('div', 'eff', itemText(it)));
+    if (it.myth) card.append(h('div', 'myth', mythText(it)));
+    if (it.albumNew) card.append(h('div', 'album', '+1 dans l\'album'));
+    row.append(card);
+    setTimeout(() => { C.play(it.rarity >= 2 ? 'tier' : 'gold'); }, (0.25 + i * 0.28) * 1000);
+  });
+  ov.append(row);
+  const ok = h('button', 'btn lootOk', 'Ranger dans la réserve'); ok.type = 'button';
+  ok.append(h('kbd', '', 'Entrée'));
+  const close = () => { ov.remove(); removeEventListener('keydown', key, true); done(); };
+  const key = e => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+  ok.onclick = close; addEventListener('keydown', key, true);
+  ov.append(ok);
+  $('app').append(ov); ok.focus();
+  companyRefresh();
+}

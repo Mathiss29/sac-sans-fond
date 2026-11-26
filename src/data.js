@@ -109,8 +109,11 @@ export function fmtNum(n) {
 }
 
 // Valeurs du moment, calculées à partir des niveaux achetés dans le grand arbre (voir tree.js).
-export function computeStats(level) {
+// gb : bonus de l'équipement (voir gearBonus dans gear.js), facultatif.
+export function computeStats(level, gb = null) {
   const L = id => level[id] || 0;
+  const G = (st, k) => 1 + ((gb && gb[st][k]) || 0) / 100;
+  const GG = st => (gb && gb[st]) || 0;   // bonus de toute la compagnie
   const all = 1 + 0.04 * L('training');
   const shooter = 1 + 0.06 * L('longbow');
   const bardBoost = HEROES.bard.auraBoost + 0.02 * L('bardAura');
@@ -125,43 +128,53 @@ export function computeStats(level) {
     bard: L('bard') + L('bard2') + L('bard3'),
   };
   return {
-    duration: BASE.duration + 5 * L('duration') + 3 * L('sandglass'),
+    duration: BASE.duration + 5 * L('duration') + 3 * L('sandglass') + Math.round(((gb && gb.time) || 0) * 10) / 10,
     spawnEvery: BASE.spawnEvery / (1 + 0.2 * L('horde')),
     maxEnemies: Math.round(BASE.maxEnemies * (1 + 0.2 * L('horde'))),
     heroes,
     archers: heroes.archer,
     damage: {
-      archer: HEROES.archer.damage * (1 + 0.05 * L('arrowDmg')) * all,
-      mage: HEROES.mage.damage * (1 + 0.05 * L('mageDmg')) * all,
-      knight: HEROES.knight.damage * (1 + 0.05 * L('knightDmg')) * all,
-      bard: HEROES.bard.damage * all,
+      archer: HEROES.archer.damage * (1 + 0.05 * L('arrowDmg')) * all * G('dmg', 'archer'),
+      mage: HEROES.mage.damage * (1 + 0.05 * L('mageDmg')) * all * G('dmg', 'mage'),
+      knight: HEROES.knight.damage * (1 + 0.05 * L('knightDmg')) * all * G('dmg', 'knight'),
+      bard: HEROES.bard.damage * all * G('dmg', 'bard'),
     },
+    // PV des créatures d'événement : suivent les dégâts de l'arbre, pas ceux de l'équipement
+    archerBase: HEROES.archer.damage * (1 + 0.05 * L('arrowDmg')) * all,
     cooldown: {
-      archer: HEROES.archer.cooldown * Math.pow(0.98, L('arrowRate')),
-      mage: HEROES.mage.cooldown, knight: HEROES.knight.cooldown, bard: HEROES.bard.cooldown,
+      archer: HEROES.archer.cooldown * Math.pow(0.98, L('arrowRate')) / G('rate', 'archer'),
+      mage: HEROES.mage.cooldown / G('rate', 'mage'), knight: HEROES.knight.cooldown / G('rate', 'knight'), bard: HEROES.bard.cooldown / G('rate', 'bard'),
     },
-    range: { archer: shooter + 0.08 * L('hawk'), mage: shooter, bard: shooter, knight: 1 },
-    cleave: 1 + 0.08 * L('whirl'),
+    critMultBy: { archer: G('critDmg', 'archer'), mage: G('critDmg', 'mage'), knight: G('critDmg', 'knight'), bard: G('critDmg', 'bard') },
+    dropMult: 1 + ((gb && gb.drop) || 0) / 100,
+    critBy: { archer: (G('crit', 'archer') - 1), mage: (G('crit', 'mage') - 1), knight: (G('crit', 'knight') - 1), bard: (G('crit', 'bard') - 1) },
+    bossBy: { archer: G('boss', 'archer'), mage: G('boss', 'mage'), knight: G('boss', 'knight'), bard: G('boss', 'bard') },
+    gearOn: L('armory') > 0,
+    myths: (gb && gb.myths) || {},
+    looks: (gb && gb.looks) || {},
+    range: { archer: (shooter + 0.08 * L('hawk')) * G('range', 'archer'), mage: shooter * G('range', 'mage'), bard: shooter * G('range', 'bard'), knight: G('range', 'knight') },
+    cleave: (1 + 0.08 * L('whirl')) * (1 + GG('aoe') / 100),
     slowTime: HEROES.mage.slowTime + 0.3 * L('deepFrost'),
     critChance: 0.12 + 0.03 * L('crit'),
     critMult: 2 + 0.2 * L('critDmg'),
-    mageAoe: HEROES.mage.aoe * (1 + 0.02 * L('mageDmg')),
-    bardAura: HEROES.bard.aura * (1 + 0.04 * L('bardAura') + 0.08 * L('choir')),
+    mageAoe: HEROES.mage.aoe * (1 + 0.02 * L('mageDmg')) * (1 + GG('aoe') / 100),
+    bardAura: HEROES.bard.aura * (1 + 0.04 * L('bardAura') + 0.08 * L('choir')) * (1 + GG('aoe') / 100),
     bardBoost,
     bossMult: (1 + 0.1 * L('bossDmg')) * (1 + 0.1 * L('veteran')),
-    goldChance: GOLD_WISP.chance * (1 + 0.6 * L('goldWisp')),
+    goldChance: GOLD_WISP.chance * (1 + 0.6 * L('goldWisp')) * (1 + GG('goldWisp') / 100),
     bagCapacity: BASE.bagCapacity * Math.pow(1.6, L('capacity')) * Math.pow(1.25, L('seams2')),
     tiers: 1 + L('tierCuir') + (L('tierCuir') ? L('tierSoie') : 0) + (L('tierCuir') && L('tierSoie') ? L('tierCeleste') : 0),
-    gloveRadius: BASE.gloveRadius * (1 + 0.18 * L('glove')),
-    attraction: BASE.attraction + 0.75 * L('attraction'),
-    coinLife: BASE.coinLife + 2 * L('coinLife'),
+    gloveRadius: BASE.gloveRadius * (1 + 0.18 * L('glove')) * (1 + ((gb && gb.glove) || 0) / 100),
+    attraction: BASE.attraction + 0.75 * L('attraction') + Math.round(GG('focus') * 10) / 10,
+    coinLife: BASE.coinLife + 2 * L('coinLife') + GG('coinLife'),
     bagMouth: BASE.bagMouth * (1 + 0.5 * L('mouth')),
     tearDuration: BASE.tearDuration + 2 * L('tearRain'),
-    tearMult: 1 + 0.1 * L('goldTear'),
+    tearMult: (1 + 0.1 * L('goldTear')) * (1 + GG('tear') / 100),
     tearWaves: 4 + L('wave'),
-    valueMult: 1 + 0.05 * L('heavyCoins'),
+    valueMult: (1 + 0.05 * L('heavyCoins')) * (1 + ((gb && gb.gold) || 0) / 100),
     events, eventCount: 1 + L('evTwo'),
-    eventMult: 1 + 0.15 * L('hunter'),
+    eventMult: (1 + 0.15 * L('hunter')) * (1 + GG('event') / 100),
+    stunMult: Math.max(0.2, 1 - GG('stun') / 100),
     veinMult: 1 + 0.2 * L('vein'),
     goblinSpeed: Math.max(0.4, 1 - 0.1 * L('goblin')),
     rainLife: 1 + 0.2 * L('goldRain'),

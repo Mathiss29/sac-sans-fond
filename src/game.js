@@ -1,5 +1,6 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
 import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, bagMax, tierOf } from './data.js';
+import { rollItem, RARITIES as GEAR_RARITIES, DROP } from './gear.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -96,7 +97,7 @@ function eventSpot(world) {
   }
   return { x: b.x + 260, y: b.y };
 }
-function foeHp(world, type) { return ENEMIES[type].hp * Math.max(1, world.stats.damage.archer / HEROES.archer.damage) * world.zone.hpMult; }
+function foeHp(world, type) { return ENEMIES[type].hp * Math.max(1, (world.stats.archerBase || world.stats.damage.archer) / HEROES.archer.damage) * world.zone.hpMult; }
 function startEvent(world, ev) {
   const def = EVENTS[ev.kind], p = eventSpot(world), r = world.run;
   ev.done = true;
@@ -201,8 +202,9 @@ export function enterArena(world) {
 
 function exitArena(world) {
   const r = world.run, a = r.arena;
-  // pièces restées au sol : perdues. Pièces en vol : comptées.
-  for (const c of world.coins) if (c.fly) credit(world, c.value);
+  // pièces restées au sol : perdues. Pièces en vol : comptées. Besaces : gardées.
+  keepPouches(world);
+  for (const c of world.coins) if (c.fly && !c.dead) credit(world, c.value);
   r.lair.done = true;
   if (r.lair.only) { world.coins = []; world.phase = 'done'; world.events.push({ kind: 'done' }); return; }
   const st = r.stash, p = portalPos(world);
@@ -265,7 +267,7 @@ function updateHazards(world, dt) {
     z.done = true;
     for (const u of world.heroes) {
       if (u.drop > 0 || (u.x - z.x) ** 2 + (u.y + 8 - z.y) ** 2 > z.r * z.r) continue;
-      u.stun = b.stun;
+      u.stun = b.stun * (world.stats.stunMult || 1);
       const dx = u.x - z.x, dy = u.y - z.y, d = Math.hypot(dx, dy) || 1;
       u.x += dx / d * 26; u.y += dy / d * 18;
       world.texts.push({ x: u.x, y: u.y - 40, text: 'étourdi', color: '#ffb347', size: 13, life: 0.9 });
@@ -382,10 +384,11 @@ function nearestEnemy(world, p, zone = null) {
 
 function damage(world, e, amount, slow, from, type) {
   if (e.dead) return;
-  if (e.boss) amount *= world.stats.bossMult;
+  const st = world.stats;
+  if (e.boss) amount *= st.bossMult * ((st.bossBy && st.bossBy[type]) || 1);
   if (slow) e.slow = Math.max(e.slow, slow);
-  const crit = Math.random() < (world.stats.critChance || 0.12);
-  if (crit) amount *= world.stats.critMult || 2;
+  const crit = Math.random() < (st.critChance || 0.12) + ((st.critBy && st.critBy[type]) || 0);
+  if (crit) amount *= (st.critMult || 2) * ((st.critMultBy && st.critMultBy[type]) || 1);
   if (e.def.dodge && Math.random() < e.def.dodge) {
     world.texts.push({ x: e.x, y: e.y - e.r - 6, text: 'esquive', color: '#d6f2ff', size: 12, life: 0.7 });
     return;
@@ -417,7 +420,59 @@ function damage(world, e, amount, slow, from, type) {
     e.kx = (e.kx || 0) + dx / d * k; e.ky = (e.ky || 0) + dy / d * k;
   }
   if (onScreen(world, e.x, e.y)) { sfx(world, 'hit', { crit }); if (crit || e.boss) shake(world, e.boss ? 3 : 2); }
-  if (e.hp <= 0) killEnemy(world, e);
+  if (e.hp <= 0) {
+    killEnemy(world, e);
+    // mythique Éclatement : l'ennemi tué par le givre explose et blesse ses voisins
+    if (type === 'mage' && st.myths && st.myths.shatter) {
+      for (const o of world.enemies) if (!o.dead && o !== e && d2(o, e) < 60 * 60) damage(world, o, amount * 0.5, 0, e, 'shard');
+      burst(world, e.x, e.y, 10, ['#aee6ff', '#ffffff', '#5a8cdc'], 160, 2, 0, 0.4);
+      world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: 6, r1: 60, t: 0.3, life: 0.3, color: '#aee6ff' });
+    }
+  }
+}
+
+// ---------- Besaces d'équipement ----------
+// Une fois l'Armurerie achetée, certains ennemis lâchent une besace : elle file seule vers le sac.
+function maybePouch(world, e) {
+  const s = world.stats, r = world.run, gc = world.gearCtx;
+  if (!s.gearOn || !gc || !r) return;
+  r.pouches = r.pouches || 0;
+  // besace en or : un feu follet doré sur quatre, une fois par expédition, épique ou mieux
+  if (e.gold && !r.goldPouch && Math.random() < 0.25) { r.goldPouch = true; dropPouch(world, e, rollItem(gc, 0, Math.random, 2), true); return; }
+  let ch = (e.boss ? 1 : e.event ? DROP.event : e.gold ? DROP.gold : DROP.chance) * (s.dropMult || 1);
+  if (gc.first && !r.pouches && r.kills >= 20) ch = 1;   // première expédition armée : une besace garantie
+  if (!e.boss && r.pouches >= DROP.perRun) return;
+  if (Math.random() >= ch) return;
+  r.pouches++;
+  dropPouch(world, e, rollItem(gc, 0), false);
+}
+function dropPouch(world, e, item, golden) {
+  const rar = item.rarity, big = rar >= 2;
+  world.coins.push({ x: e.x, y: e.y, vx: rnd(-40, 40), vy: rnd(-40, 40), kind: golden ? 'pouchGold' : 'pouch', item, golden, value: 0, life: 99, max: 99,
+    fly: false, sp: 0, z: 0, vz: 340, spin: 0, auto: big ? 2.2 : 1.3, beam: big ? 1.8 : 0 });
+  const name = GEAR_RARITIES[rar].name;
+  world.texts.push({ x: e.x, y: e.y - 34, text: golden ? 'Besace en or !' : big ? `Besace ${name.toLowerCase()} !` : 'Besace !',
+    color: golden ? '#ffd246' : GEAR_RARITIES[rar].color, size: big ? 22 : 18, life: big ? 2 : 1.4 });
+  // chute épique : l'écran tremble, un rayon tombe du ciel, un bandeau pour les légendaires et mythiques
+  if (big) {
+    shake(world, 4 + rar * 2); sfx(world, 'tier');
+    world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: 10, r1: 90 + rar * 20, t: 0.6, life: 0.6, color: GEAR_RARITIES[rar].color });
+    burst(world, e.x, e.y, 16 + rar * 8, [GEAR_RARITIES[rar].color, '#ffffff', '#fff3a8'], 260, 2, 0, 0.8);
+    if (rar >= 3) world.events.push({ kind: 'banner', title: `${name} !`, sub: 'Une besace rare vient de tomber' });
+  } else sfx(world, 'gold');
+}
+function gotItem(world, item) {
+  const r = world.run; r.items = r.items || [];
+  r.items.push(item);
+  // mythique Temps volé : chaque besace ramassée rallonge l'expédition
+  if (world.stats.myths && world.stats.myths.hourglass && world.phase === 'expedition' && world.mode === 'map') {
+    r.duration += 2;
+    const b = bagPos(world); world.texts.push({ x: b.x, y: b.y - 60, text: '+2 s', color: '#ff4a5a', size: 22, life: 1.2 });
+  }
+}
+// avant de vider le sol : les besaces ne se perdent jamais
+function keepPouches(world) {
+  for (const c of world.coins) if (c.item && !c.dead) { c.dead = true; gotItem(world, c.item); }
 }
 
 function killEnemy(world, e) {
@@ -442,6 +497,10 @@ function killEnemy(world, e) {
     world.texts.push({ x: e.x, y: e.y - 34, text: { vein: 'Filon épuisé !', goblin: 'Gobelin attrapé !', mimic: 'Trésor !' }[e.type], color: '#ffd246', size: 18, life: 1.4 });
     shake(world, 5);
   }
+  const my = world.stats.myths || {};
+  if (my.midas && !e.boss && !e.event && Math.random() < 0.05) {
+    e.value *= 5; world.texts.push({ x: e.x, y: e.y - 30, text: 'Midas !', color: '#ffd246', size: 18, life: 1 });
+  }
   const pieces = e.boss ? splitLoot(e.value, n, 3, 30) : e.event ? (e.value > 0.5 ? splitLoot(e.value, 14, 2, 14) : []) : e.gold ? splitLoot(e.value, n, 1, 8) : splitLoot(e.value, n, 3, 12);
   for (const pc of pieces) {
     const a = rnd(0, Math.PI * 2), s = e.boss ? rnd(50, 190) : rnd(30, 110);
@@ -449,6 +508,7 @@ function killEnemy(world, e) {
       value: pc.value, life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0, z: 0, vz: rnd(160, 300), spin: rnd(0, 6) });
   }
   world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 2.2, t: 0.35, life: 0.35, color: e.def.color });
+  maybePouch(world, e);
 }
 
 // Clic maintenu (ou Espace) : pendant l'expédition c'est le Focus (les héros ne visent que la zone
@@ -616,7 +676,7 @@ function moveEventFoe(world, e, dt) {
     if (d > 22) { e.x += (near.x - e.x) / d * sp * dt; e.y += (near.y - e.y) / d * sp * dt; }
     e.bite = (e.bite || 0) - dt;
     if (d < 30 && e.bite <= 0) {
-      e.bite = 1.4; near.stun = Math.max(near.stun || 0, 1.1);
+      e.bite = 1.4; near.stun = Math.max(near.stun || 0, 1.1 * (world.stats.stunMult || 1));
       world.texts.push({ x: near.x, y: near.y - 34, text: 'Croc !', color: '#ff6a5a', size: 16, life: 0.8 });
       sfx(world, 'hit', { crit: true }); shake(world, 3);
     }
@@ -695,10 +755,20 @@ function updateHeroes(world, dt) {
       if (def.shot === 'melee') {
         // coup circulaire : touche la cible et tout ce qui est autour
         for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave * (s.cleave || 1) + e.r) ** 2) damage(world, e, dmg, 0, u, u.type);
-        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: '#f0f4fa', face: u.face });
+        if (s.myths && s.myths.quake && Math.random() < 0.25) {   // mythique Séisme
+          for (const e of world.enemies) if (!e.dead && d2(e, u) < 100 * 100) damage(world, e, dmg * 1.5, 0, u, u.type);
+          world.fx.push({ kind: 'ring', x: u.x, y: u.y + 8, r0: 10, r1: 100, t: 0.4, life: 0.4, color: '#ffcf4a' }); shake(world, 3);
+        }
+        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: s.looks && s.looks[u.type] ? `rgb(${s.looks[u.type].col})` : '#f0f4fa', face: u.face });
       } else {
         world.arrows.push({ kind: def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target: t, damage: dmg, type: u.type, dx: 0, dy: 0, speed: def.speed,
           aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' ? s.slowTime || HEROES.mage.slowTime : 0 });
+        // mythique Écho : une note sur trois est rejouée vers une autre cible
+        if (u.type === 'bard' && s.myths && s.myths.echo && Math.random() < 1 / 3) {
+          let o = null, bd = reach * reach;
+          for (const e of world.enemies) { if (e.dead || e === t) continue; const dd = d2(e, u); if (dd < bd) { bd = dd; o = e; } }
+          if (o) world.arrows.push({ kind: 'note', x: u.x, y: u.y - 12, target: o, damage: dmg, type: u.type, dx: 0, dy: 0, speed: def.speed, aoe: 0, slow: 0 });
+        }
       }
     }
   }
@@ -720,7 +790,15 @@ function updateArrows(world, dt) {
         for (const e of world.enemies) if (!e.dead && d2(e, t) < (a.aoe + e.r) ** 2) damage(world, e, a.damage, a.slow, t, a.type);
         burst(world, t.x, t.y, 10, ['#aee6ff', '#f0fbff', '#5a8cdc'], 120, 2, 0, 0.4);
         world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 6, r1: a.aoe, t: 0.35, life: 0.35, color: '#aee6ff' });
-      } else damage(world, t, a.damage, 0, { x: t.x - a.dx, y: t.y - a.dy }, a.type);
+      } else {
+        damage(world, t, a.damage, 0, { x: t.x - a.dx, y: t.y - a.dy }, a.type);
+        // mythique Ricochet : la flèche repart vers l'ennemi le plus proche
+        if (a.kind === 'arrow' && !a.bounced && world.stats.myths && world.stats.myths.bounce) {
+          let best = null, bd = 200 * 200;
+          for (const e of world.enemies) { if (e.dead || e === t) continue; const dd = d2(e, t); if (dd < bd) { bd = dd; best = e; } }
+          if (best) world.arrows.push({ ...a, x: t.x, y: t.y, target: best, bounced: true, done: false });
+        }
+      }
     }
   }
   world.arrows = world.arrows.filter(a => !a.done);
@@ -739,9 +817,11 @@ function updateCoins(world, dt) {
       const dx = target.x - c.x, dy = target.y - c.y, d = Math.hypot(dx, dy) || 1;
       c.sp += 1400 * dt;
       c.x += dx / d * c.sp * dt; c.y += dy / d * c.sp * dt;
-      if (d < 14) { c.dead = true; credit(world, c.value); }
+      if (d < 14) { c.dead = true; if (c.item) gotItem(world, c.item); else credit(world, c.value); }
       continue;
     }
+    if (c.beam > 0) c.beam = Math.max(0, c.beam - dt);
+    if (c.item) { c.auto -= dt; if (c.auto <= 0 && c.z <= 0) { c.fly = true; c.sp = 80; } }
     c.x += c.vx * dt; c.y += c.vy * dt;
     const fr = Math.pow(0.04, dt); c.vx *= fr; c.vy *= fr;
     if (c.vz !== undefined) { c.vz -= 900 * dt; c.z += c.vz * dt; if (c.z <= 0) { c.z = 0; c.vz = Math.abs(c.vz) > 60 ? -c.vz * 0.45 : 0; } }
@@ -779,7 +859,8 @@ function startTear(world) {
   world.phase = 'tear';
   for (const e of world.enemies) world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 1.6, t: 0.4, life: 0.4, color: e.def.color });
   world.enemies = []; world.arrows = [];
-  for (const c of world.coins) if (c.fly) addToBag(world, c.value);
+  keepPouches(world);
+  for (const c of world.coins) if (c.fly && !c.dead) addToBag(world, c.value);
   world.coins = [];
   r.tier = tierOf(r.bag, world.stats);
   r.mult = TIERS[r.tier].mult * (r.full ? FULL_BONUS : 1);
@@ -887,7 +968,9 @@ function tearWave(world) {
 function endTear(world) {
   const r = world.run;
   let left = 0;
+  keepPouches(world);
   for (const c of world.coins) {
+    if (c.dead) continue;
     if (c.fly) { r.tearGot += c.value; world.events.push({ kind: 'coins', value: c.value }); } else left += c.value;
   }
   world.coins = [];

@@ -1,4 +1,5 @@
 // Tout le dessin sur le canvas, en pixel art (sprites dans sprites.js).
+import { RARITIES as GEAR_RARITIES } from './gear.js';
 import { TIERS, bagMax, tierOf } from './data.js';
 const UI_FONT = "'Silkscreen', 'Pixelify Sans', monospace";
 import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos, RARITIES } from './game.js';
@@ -272,7 +273,7 @@ export function render(g, world, dpr) {
     const blink = !c.fly && c.life < 1.5 ? (Math.sin(t * 20) > 0 ? 1 : 0.4) : 1;
     g.globalAlpha = a * blink;
     const im = SPR.loot[c.kind || 'coin'] || SPR.coin;
-    const k = c.kind && c.kind !== 'coin' ? px : (c.big ? px + 1 : px);
+    const k = c.item ? px + 1 : c.kind && c.kind !== 'coin' ? px : (c.big ? px + 1 : px);
     const nk = c.near ? 1.3 : 1;
     const s = im.width * k * nk, sh2 = im.height * k * nk;
     const z = c.z || 0;
@@ -284,7 +285,21 @@ export function render(g, world, dpr) {
       const sw = Math.max(px, Math.round(s * Math.abs(Math.cos(t * 6 + (c.spin || 0))) / px) * px);
       g.drawImage(im, Math.round(c.x - sw / 2), Math.round(c.y - sh2 / 2 - z), sw, sh2);
     } else {
-      if (c.kind !== 'bar') { // halo des gemmes et couronnes
+      if (c.item) { // besace : halo et rayon de la couleur de sa rareté
+        const col = c.golden ? '#ffd246' : GEAR_RARITIES[c.item.rarity].color;
+        g.save();
+        if (c.beam > 0) { // chute épique : un grand rayon tombe du ciel sur la besace
+          const k2 = c.beam / 1.8, bw = Math.round(px * (4 + 10 * k2));
+          g.globalAlpha = 0.25 + 0.5 * k2; g.fillStyle = col;
+          g.fillRect(Math.round(c.x - bw / 2), Math.round(c.y - z - 900), bw, 900);
+          g.globalAlpha = 0.6 * k2; g.fillStyle = '#ffffff';
+          g.fillRect(Math.round(c.x - bw / 6), Math.round(c.y - z - 900), Math.max(px, Math.round(bw / 3)), 900);
+        }
+        g.globalAlpha = (0.35 + 0.15 * Math.sin(t * 6)) * (c.golden || c.item.rarity >= 3 ? 1.4 : 1); g.fillStyle = col;
+        g.beginPath(); g.arc(c.x, c.y - z, s * (c.item.rarity >= 2 ? 1.5 : 1.2), 0, 7); g.fill();
+        if (!c.fly) g.fillRect(Math.round(c.x - px), Math.round(c.y - z - s * 3), px * 2, Math.round(s * 2.4));
+        g.restore();
+      } else if (c.kind !== 'bar') { // halo des gemmes et couronnes
         g.fillStyle = c.kind === 'gem' ? 'rgba(120,230,255,.25)' : 'rgba(255,220,100,.25)';
         g.beginPath(); g.arc(c.x, c.y - z, s * 0.9, 0, 7); g.fill();
       }
@@ -309,6 +324,19 @@ export function render(g, world, dpr) {
     g.strokeStyle = 'rgba(255,230,140,.25)'; g.setLineDash([2, 8]); g.lineWidth = 2; g.lineDashOffset = -t * 10;
     g.beginPath(); g.arc(u.x, u.y + 8, world.stats.bardAura, 0, 7); g.stroke(); g.setLineDash([]);
   }
+  // lueur de l'arme équipée (épique et plus) sous les héros
+  const looks = world.stats.looks || {};
+  for (const u of world.heroes) {
+    const lk = looks[u.type]; if (!lk || !lk.glow || u.drop > 0) continue;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 4 + u.x * 0.05);
+    const gr = g.createRadialGradient(u.x, u.y + 9, 2, u.x, u.y + 9, 24);
+    gr.addColorStop(0, `rgba(${lk.col},${0.28 + 0.18 * pulse})`); gr.addColorStop(1, `rgba(${lk.col},0)`);
+    g.fillStyle = gr; g.beginPath(); g.ellipse(u.x, u.y + 9, 24, 9, 0, 0, 7); g.fill();
+    if (lk.myth) for (let i = 0; i < 2; i++) {
+      const an = t * 3 + i * Math.PI, sx = u.x + Math.cos(an) * 16, sy = u.y - 6 + Math.sin(an) * 5;
+      g.fillStyle = `rgba(${lk.col},.9)`; g.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 3, 3);
+    }
+  }
   const heroes = [...world.heroes].sort((a, b) => a.y - b.y);
   for (const u of heroes) {
     const pose = heroPose(world, u, t);
@@ -328,10 +356,12 @@ export function render(g, world, dpr) {
   // traînées lumineuses derrière les projectiles (flèches blanches, givre bleu, notes dorées)
   g.lineCap = 'round';
   for (const a of world.arrows) {
-    const len = a.kind === 'arrow' ? 46 : 26, col = a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
+    const lk = looks[a.type];
+    const len = (a.kind === 'arrow' ? 46 : 26) * (lk ? 1 + 0.15 * lk.r : 1);
+    const col = lk ? lk.col : a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
     const tr = g.createLinearGradient(a.x, a.y, a.x - a.dx * len, a.y - a.dy * len);
-    tr.addColorStop(0, `rgba(${col},.75)`); tr.addColorStop(1, `rgba(${col},0)`);
-    g.strokeStyle = tr; g.lineWidth = a.kind === 'arrow' ? 2.5 : 4;
+    tr.addColorStop(0, `rgba(${col},${lk ? 0.9 : 0.75})`); tr.addColorStop(1, `rgba(${col},0)`);
+    g.strokeStyle = tr; g.lineWidth = (a.kind === 'arrow' ? 2.5 : 4) + (lk ? 0.5 * lk.r : 0);
     g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * len, a.y - a.dy * len); g.stroke();
   }
   g.lineCap = 'butt';
@@ -345,7 +375,8 @@ export function render(g, world, dpr) {
     } else {
       g.strokeStyle = '#5a3a1a'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * 12, a.y - a.dy * 12); g.stroke();
-      g.fillStyle = '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, 1.6, 0, 7); g.fill();
+      const lk = looks[a.type];
+      g.fillStyle = lk ? `rgb(${lk.col})` : '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, lk ? 2.2 : 1.6, 0, 7); g.fill();
     }
   }
 
