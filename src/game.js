@@ -80,9 +80,12 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
 // Les types possibles se débloquent dans l'arbre (la pluie de pièces est là dès le début).
 function planEvents(stats) {
   const pool = (stats.events || Object.keys(EVENTS)).slice().sort(() => Math.random() - 0.5);
-  const n = Math.min(stats.eventCount || EVENT_WINDOWS.length, EVENT_WINDOWS.length);
-  const windows = n === 1 ? [[0.3, 0.65]] : EVENT_WINDOWS;
-  return windows.map(([a, b], i) => ({ kind: pool[i % pool.length], at: stats.duration * rnd(a, b), done: false }));
+  const n = Math.min(stats.eventCount || 1, EVENT_WINDOWS.length);
+  const windows = n === 1 ? [[0.3, 0.65]] : n === 2 ? [[0.18, 0.42], [0.55, 0.78]] : EVENT_WINDOWS;
+  const out = windows.map(([a, b], i) => ({ kind: pool[i % pool.length], at: stats.duration * rnd(a, b), done: false }));
+  // Averse : des pluies de pièces en plus
+  for (let i = 0; i < (stats.downpour || 0); i++) out.push({ kind: 'rain', at: stats.duration * rnd(0.1, 0.9), done: false, extra: true });
+  return out;
 }
 // Valeur d'un événement : une part de la capacité du sac, pour rester intéressant à tout moment du jeu.
 function eventValue(world, kind) {
@@ -108,13 +111,44 @@ function startEvent(world, ev) {
   const value = eventValue(world, ev.kind);
   if (ev.kind === 'rain') {
     const life = def.life * (world.stats.rainLife || 1);
-    r.rain = { t: life, left: value, rate: value / life };
+    r.rain = { t: life, left: (r.rain ? r.rain.left : 0) + value, rate: value / life };
+    return;
+  }
+  if (ev.kind === 'buried') { r.mounds = r.mounds || []; r.mounds.push({ x: p.x, y: p.y, dig: 0, life: def.life, value }); return; }
+  if (ev.kind === 'lucky') { r.lucky = def.life; r.luckyValue = value / 120; return; }
+  if (ev.kind === 'mirage') { r.mirage = def.life; return; }
+  if (ev.kind === 'skyfall') {
+    // une horde tombe du ciel près d'un héros (ou au centre de l'écran)
+    const u = world.heroes.length ? world.heroes[Math.floor(Math.random() * world.heroes.length)] : { x: p.x, y: p.y };
+    const type = pickEnemyType(world.zone);
+    for (let i = 0; i < 22; i++) {
+      const a = rnd(0, Math.PI * 2), d = rnd(60, 190);
+      const e = spawnEnemy(world, false, type, u.x + Math.cos(a) * d, u.y + Math.sin(a) * d);
+      e.value *= 2.5; e.fall = rnd(0.4, 1.2);
+    }
+    shake(world, 8);
+    return;
+  }
+  if (ev.kind === 'rush') {
+    // une file de feux follets dorés traverse l'écran
+    const y0 = world.cam.y + world.h * rnd(0.3, 0.7), left = Math.random() < 0.5, n = 18;
+    for (let i = 0; i < n; i++) {
+      const e = spawnEnemy(world, false, 'wisp', left ? world.cam.x - 40 - i * 46 : world.cam.x + world.w + 40 + i * 46, y0 + Math.sin(i * 0.8) * 50);
+      e.gold = true; e.value = value / n; e.rush = { vx: left ? 230 : -230 }; e.hp = e.max = foeHp(world, 'wisp');
+    }
+    return;
+  }
+  if (ev.kind === 'wanted') {
+    const e = spawnAt(world, 'golem', p.x, p.y);
+    e.hp = e.max = foeHp(world, 'golem') * 6; e.wanted = true; e.prize = value; e.value = value; e.life = def.life; e.lifeMax = def.life; e.event = true; e.r *= 1.3;
+    world.fx.push({ kind: 'ring', x: p.x, y: p.y, r0: 10, r1: 90, t: 0.7, life: 0.7, color: '#ff5a5a' });
     return;
   }
   const e = spawnAt(world, ev.kind, p.x, p.y);
   e.hp = e.max = foeHp(world, ev.kind);
   e.value = value; e.total = value; e.life = def.life; e.event = true;
-  if (ev.kind === 'goblin') { e.a = rnd(0, Math.PI * 2); e.value *= 1; }
+  if (ev.kind === 'goblin' || ev.kind === 'treasure') { e.a = rnd(0, Math.PI * 2); }
+  if (ev.kind === 'mimic' && world.stats.mimicTame) { e.value *= 1.5; e.total = e.value; }
   world.fx.push({ kind: 'ring', x: p.x, y: p.y, r0: 10, r1: 90, t: 0.7, life: 0.7, color: '#ffd246' });
 }
 // Pièces qui tombent du ciel autour de l'écran.
@@ -136,13 +170,33 @@ function updateEvents(world, dt) {
     }
     if (rain.t <= 0 || rain.left <= 0) r.rain = null;
   }
+  if (r.lucky > 0) r.lucky -= dt;
+  if (r.mirage > 0) r.mirage -= dt;
+  if (r.mounds) {
+    const p = pointerWorld(world);
+    for (const m of r.mounds) {
+      m.life -= dt;
+      const on = world.pointer.inside && (m.x - p.x) ** 2 + (m.y - p.y) ** 2 < 44 * 44;
+      m.dig = on ? m.dig + dt : Math.max(0, m.dig - dt * 0.5);
+      if (on && Math.random() < dt * 12) burst(world, m.x, m.y, 2, ['#8a6a3a', '#c9a06a'], 80, 2, 0, 0.4);
+      if (m.dig >= 1) {
+        m.done = true; r.eventsGot++;
+        for (const pc of splitLoot(m.value, 16, 2, 16)) { const a = rnd(0, Math.PI * 2), sp = rnd(40, 140); world.coins.push({ x: m.x, y: m.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, kind: pc.kind, value: pc.value, life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0, z: 0, vz: rnd(220, 360), spin: rnd(0, 6) }); }
+        world.texts.push({ x: m.x, y: m.y - 30, text: 'Trésor !', color: '#ffd246', size: 20, life: 1.4 }); shake(world, 6); sfx(world, 'gold');
+        burst(world, m.x, m.y, 30, ['#ffd246', '#8a6a3a', '#fff3a8'], 200, 2, 0, 0.7);
+      } else if (m.life <= 0) { m.done = true; world.texts.push({ x: m.x, y: m.y - 24, text: 'Le trésor s\'est enfoncé…', color: '#e8e0d0', size: 14, life: 1.4 }); }
+    }
+    r.mounds = r.mounds.filter(m => !m.done);
+  }
   for (const e of world.enemies) {
+    if (e.rush && !e.dead) { if ((e.rush.vx > 0 && e.x > world.mapW - 50) || (e.rush.vx < 0 && e.x < 50)) e.dead = true; }
     if (!e.event || e.dead) continue;
     e.life -= dt;
+    if (e.wanted) e.value = e.prize * Math.max(0.15, e.life / e.lifeMax);
     if (e.life <= 0) {
       e.dead = true;
       burst(world, e.x, e.y, 18, ['#e8e0d0', '#b8b0a0', '#ffffff'], 140, 2, 0, 0.6);
-      const msg = e.type === 'goblin' ? 'Le gobelin s\'est enfui…' : e.type === 'vein' ? 'Le filon s\'est tari' : 'La mimique s\'est enfuie…';
+      const msg = e.type === 'goblin' || e.type === 'treasure' ? 'Le gobelin s\'est enfui…' : e.type === 'vein' ? 'Le filon s\'est tari' : e.wanted ? 'La cible s\'est échappée…' : 'La mimique s\'est enfuie…';
       world.texts.push({ x: e.x, y: e.y - 30, text: msg, color: '#e8e0d0', size: 15, life: 1.6 });
     }
   }
@@ -332,6 +386,12 @@ function spawnPack(world, anywhere = false) {
     const e = spawnEnemy(world, false, type, x + Math.cos(a) * d * 1.3, y + Math.sin(a) * d);
     e.pack = pack;
   }
+  // Horde dorée : des feux follets dorés se glissent dans chaque paquet
+  for (let i = 0; i < ((world.stats && world.stats.goldHorde) || 0) && world.phase === 'expedition'; i++) {
+    const e = spawnEnemy(world, false, 'wisp', x + rnd(-30, 30), y + rnd(-30, 30));
+    if (!e.gold) { e.gold = true; e.value *= GOLD_WISP.value; e.hp *= GOLD_WISP.hp; e.max = e.hp; }
+    e.pack = pack;
+  }
   world.fx.push({ kind: 'ring', x, y, r0: 10, r1: 40 + n * 5, t: 0.5, life: 0.5, color: ENEMIES[type].color });
 }
 
@@ -411,7 +471,8 @@ function damage(world, e, amount, slow, from, type) {
   const r = world.run;
   if (type && r) { r.dmg = r.dmg || {}; r.dmg[type] = (r.dmg[type] || 0) + Math.max(0, Math.min(amount, e.hp)); }
   e.hp -= amount; e.hit = 0.12;
-  if (e.type === 'vein') {
+  if (r && r.lucky > 0 && !e.event && Math.random() < 0.7) dropCoin(world, e.x, e.y, 'coin', Math.max(0.5, r.luckyValue || 1), 30);
+  if (e.type === 'vein' || e.type === 'treasure') {
     // chaque coup fait jaillir une part de l'or, proportionnelle aux dégâts
     const v = Math.min(e.value, e.total * Math.min(amount, e.hp + amount) / e.max);
     e.value -= v;
@@ -519,8 +580,14 @@ function killEnemy(world, e) {
     world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 5, t: 0.8, life: 0.8, color: '#ffd246' });
   }
   if (e.event && e.value > 0) {
-    world.texts.push({ x: e.x, y: e.y - 34, text: { vein: 'Filon épuisé !', goblin: 'Gobelin attrapé !', mimic: 'Trésor !' }[e.type], color: '#ffd246', size: 18, life: 1.4 });
+    world.texts.push({ x: e.x, y: e.y - 34, text: e.wanted ? 'Prime : +' + Math.round(e.value) : { vein: 'Filon épuisé !', goblin: 'Gobelin attrapé !', mimic: 'Trésor !', treasure: 'Gobelin vidé !' }[e.type] || 'Trésor !', color: '#ffd246', size: 18, life: 1.4 }); 
     shake(world, 5);
+  }
+  const rr = world.run;
+  if (rr && rr.mirage > 0 && !e.event && world.pointer.inside) { const pw = pointerWorld(world); if (d2(pw, e) < 150 * 150) { e.value *= 3; world.texts.push({ x: e.x, y: e.y - 26, text: '×3', color: '#ffe14a', size: 16, life: 0.8 }); } }
+  if (world.stats.crownChance && !e.event && !e.boss && Math.random() < world.stats.crownChance) {
+    const v = Math.max(100, e.value * 25); world.coins.push({ x: e.x, y: e.y, vx: rnd(-30, 30), vy: rnd(-30, 30), kind: 'crown', value: v, life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0, z: 0, vz: 300, spin: 0 });
+    world.texts.push({ x: e.x, y: e.y - 30, text: 'Couronne !', color: '#ffd246', size: 17, life: 1.2 });
   }
   const my = world.stats.myths || {};
   if (my.midas && !e.boss && !e.event && Math.random() < 0.05) {
@@ -574,10 +641,12 @@ function addToBag(world, value) {
   const before = tierOf(r.bag, s);
   const into = Math.min(Math.max(0, max - r.bag), value);
   r.bag += into;
-  if (value - into > 0) { const v = (value - into) * OVERFLOW_RATE; r.overflow += v; world.events.push({ kind: 'coins', value: v }); }
+  if (value - into > 0) { const rate = s.overflowRate || OVERFLOW_RATE, v = (value - into) * rate; r.overflow += v; r.lost = (r.lost || 0) + (value - into) * (1 - rate); world.events.push({ kind: 'coins', value: v }); }
   const after = tierOf(r.bag, s);
   if (after > before) { shake(world, 6); sfx(world, 'tier'); burst(world, world.mapW / 2, world.mapH / 2 - 30, 40, [TIERS[after].glow, TIERS[after].color, '#ffffff'], 220, 2, 0, 0.9); }
   if (after > before) world.events.push({ kind: 'banner', title: TIERS[after].name + ' !', sub: `Déchirure ×${String(TIERS[after].mult).replace('.', ',')}` });
+  // Vague aspirante : à chaque palier, tout le butin à l'écran file vers le sac
+  if (after > before && s.suction) for (const c of world.coins) if (!c.fly && !c.item && onScreen(world, c.x, c.y, 0)) { c.fly = true; c.sp = 200; }
   if (r.bag >= max && !r.full) {
     r.full = true;
     world.events.push({ kind: 'banner', title: 'Sac plein !', sub: 'Bonus +25 % à la Déchirure. Le surplus déborde : seule 1 pièce sur 10 est sauvée.' });
@@ -623,6 +692,7 @@ export function update(world, dt) {
       spawnPack(world);
     }
     updateEvents(world, dt);
+    updateHelpers(world, dt);
     updateHeroes(world, dt);
     updateArrows(world, dt);
     if (r.t >= r.duration) { r.t = r.duration; startTear(world); }
@@ -677,6 +747,8 @@ function updateEnemies(world, dt) {
       if (e.burnT <= 0) { e.burnT = 0.5; damage(world, e, (e.burnDps || 1) * 0.5, 0, null, 'mage'); if (Math.random() < 0.5) burst(world, e.x, e.y - 6, 2, ['#ff7a3c', '#ffd246'], 40, 1, 0, 0.3); }
       if (e.dead) continue;
     }
+    if (e.fall > 0) { e.fall -= dt; if (e.fall <= 0) { burst(world, e.x, e.y, 8, ['#e8d8b0', '#ffffff'], 100, 2, 0, 0.4); world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: 4, r1: 30, t: 0.3, life: 0.3, color: '#fff6dc' }); } continue; }
+    if (e.rush) { e.x += e.rush.vx * dt * (e.slow > 0 ? 0.5 : 1); e.y += Math.sin(e.age * 4) * 20 * dt; continue; }
     if (e.frozen > 0) { e.frozen -= dt; continue; }
     if (e.event && moveEventFoe(world, e, dt)) continue;
     if (taunts.length && !e.boss) { for (const k of taunts) if (d2(k, e) < 170 * 170) { e.a = Math.atan2(k.y - e.y, k.x - e.x) + rnd(-0.3, 0.3); break; } }
@@ -698,11 +770,12 @@ function updateEnemies(world, dt) {
 
 // Créatures d'événement : le filon ne bouge pas, le gobelin fuit les héros, la mimique réveillée les poursuit et mord.
 function moveEventFoe(world, e, dt) {
+  if (e.wanted) return false;
   if (e.type === 'vein' || (e.type === 'mimic' && !e.awake)) { e.kx = e.ky = 0; return true; }
   let near = null, nd = Infinity;
   for (const u of world.heroes) { if (u.drop > 0) continue; const d = d2(u, e); if (d < nd) { nd = d; near = u; } }
   const slow = e.slow > 0 ? 1 - HEROES.mage.slow : 1;
-  if (e.type === 'goblin') {
+  if (e.type === 'goblin' || e.type === 'treasure') {
     if (near && nd < 260 * 260) e.a = Math.atan2(e.y - near.y, e.x - near.x) + Math.sin(e.age * 3) * 0.6;
     else e.a += rnd(-1, 1) * dt * 2;
     const sp = e.def.speed * slow * (world.stats.goblinSpeed || 1);
@@ -712,7 +785,7 @@ function moveEventFoe(world, e, dt) {
     if (d > 22) { e.x += (near.x - e.x) / d * sp * dt; e.y += (near.y - e.y) / d * sp * dt; }
     e.bite = (e.bite || 0) - dt;
     if (d < 30 && e.bite <= 0) {
-      e.bite = 1.4; stunHero(world, near, 1.1);
+      e.bite = world.stats.mimicTame ? 2.8 : 1.4; stunHero(world, near, 1.1);
       world.texts.push({ x: near.x, y: near.y - 34, text: 'Croc !', color: '#ff6a5a', size: 16, life: 0.8 });
       sfx(world, 'hit', { crit: true }); shake(world, 3);
     }
@@ -796,13 +869,14 @@ function updateHeroes(world, dt) {
     } else t = nearestEnemy(world, u);
     if (!t) { u.aiming = false; continue; }
     const reach = def.range * ((s.range && s.range[u.type]) || 1) + (def.shot === 'melee' ? t.r : 0);
+    const walk = def.walkSpeed * (world.stage && world.stage.id === 'neige' && !s.furBoots ? 0.8 : 1);
     // Maître archer / Chasseur de primes : vise l'ennemi le plus riche à portée
     if (u.type === 'archer' && s.master && !focus) { const rich = richestInRange(world, u, reach); if (rich) t = rich; }
     const dist = Math.sqrt(d2(u, t));
     u.face = t.x >= u.x ? 1 : -1;
     if (dist > reach) {
-      u.x += (t.x - u.x) / dist * def.walkSpeed * dt;
-      u.y += (t.y - u.y) / dist * def.walkSpeed * dt;
+      u.x += (t.x - u.x) / dist * walk * dt;
+      u.y += (t.y - u.y) / dist * walk * dt;
       u.moving = true; u.aiming = false;
     } else {
       u.moving = false; u.aiming = true;
@@ -842,6 +916,51 @@ function updateHeroes(world, dt) {
   }
   if (r && r.cnt && boosted >= 3) r.cnt.auraT += dt;
   updateStrikes(world, dt);
+}
+
+// ---------- Assistants ----------
+// Lutin : file vers la pièce au sol la plus proche (même hors de l'écran) et l'envoie au sac.
+// Pie : survole les hordes et chipe des pièces aux élémentaires.
+function updateHelpers(world, dt) {
+  const s = world.stats, r = world.run;
+  if (world.mode !== 'map') return;
+  r.helpers = r.helpers || [];
+  const b = bagPos(world);
+  if (s.sprite && !r.helpers.some(h => h.kind === 'sprite')) r.helpers.push({ kind: 'sprite', x: b.x, y: b.y - 30, t: 0 });
+  if (s.magpie && !r.helpers.some(h => h.kind === 'magpie')) r.helpers.push({ kind: 'magpie', x: b.x + 40, y: b.y - 60, t: 0, a: 0, steal: 0 });
+  for (const h of r.helpers) {
+    h.t += dt;
+    if (h.kind === 'sprite') {
+      if (!h.target || h.target.dead || h.target.fly) {
+        let best = null, bd = Infinity;
+        for (const c of world.coins) { if (c.fly || c.air || c.item) continue; const d = d2(c, h); if (d < bd) { bd = d; best = c; } }
+        h.target = best;
+      }
+      const tg = h.target || { x: b.x, y: b.y - 40 }, dx = tg.x - h.x, dy = tg.y - h.y, d = Math.hypot(dx, dy) || 1, sp = 240 * (s.spriteSpeed || 1);
+      if (d > 4) { h.x += dx / d * Math.min(d, sp * dt); h.y += dy / d * Math.min(d, sp * dt); h.face = dx >= 0 ? 1 : -1; }
+      if (h.target && d < 16) { h.target.fly = true; h.target.sp = 160; h.target = null; }
+    } else if (h.kind === 'magpie') {
+      // vole d'une horde à l'autre
+      if (!h.goal || h.t > 4 || d2(h, h.goal) < 30 * 30) {
+        h.t = 0;
+        const l = world.enemies.filter(e => !e.dead && !e.event && !e.boss);
+        const e = l[Math.floor(Math.random() * l.length)];
+        h.goal = e ? { x: e.x, y: e.y } : { x: b.x + rnd(-300, 300), y: b.y + rnd(-200, 200) };
+      }
+      const dx = h.goal.x - h.x, dy = h.goal.y - h.y, d = Math.hypot(dx, dy) || 1;
+      h.x += dx / d * 200 * dt; h.y += dy / d * 200 * dt; h.face = dx >= 0 ? 1 : -1;
+      h.steal -= dt;
+      if (h.steal <= 0) {
+        const e = world.enemies.find(o => !o.dead && !o.event && !o.boss && d2(o, h) < 40 * 40);
+        if (e) {
+          h.steal = 0.7;
+          const n = 1 + (s.magpieBold || 0), v = Math.max(0.5, e.value * 0.25);
+          for (let i = 0; i < n; i++) world.coins.push({ x: h.x, y: h.y, vx: 0, vy: 0, kind: 'coin', value: v, life: 3, max: 3, fly: true, sp: 120, z: 0, spin: 0 });
+          world.texts.push({ x: h.x, y: h.y - 16, text: 'chip !', color: '#e8eef8', size: 12, life: 0.6 });
+        }
+      }
+    }
+  }
 }
 
 function richestInRange(world, u, reach) {
@@ -1064,7 +1183,7 @@ function updateCoins(world, dt) {
       const dx = target.x - c.x, dy = target.y - c.y, d = Math.hypot(dx, dy) || 1;
       c.sp += 1400 * dt;
       c.x += dx / d * c.sp * dt; c.y += dy / d * c.sp * dt;
-      if (d < 14) { c.dead = true; if (c.item) gotItem(world, c.item); else credit(world, c.value); }
+      if (d < 14) { c.dead = true; if (c.item) gotItem(world, c.item); else credit(world, c.value * (c.kind === 'gem' ? world.stats.gemMult || 1 : 1)); }
       continue;
     }
     if (c.beam > 0) c.beam = Math.max(0, c.beam - dt);
@@ -1079,8 +1198,9 @@ function updateCoins(world, dt) {
     const fresh = c.life < c.max - 0.15 && !c.air;
     c.near = false;
     if (fresh && inside) {
-      const dd = (c.x - p.x) ** 2 + (c.y - p.y) ** 2, nr = gr * 1.7;
-      if (dd < nr * nr) { c.near = true; const d = Math.sqrt(dd) || 1; c.x += (p.x - c.x) / d * 70 * dt; c.y += (p.y - c.y) / d * 70 * dt; }
+      const dd = (c.x - p.x) ** 2 + (c.y - p.y) ** 2, nr = gr * 1.7, pull = world.stats.pull || 70;
+      if (dd < nr * nr) { c.near = true; const d = Math.sqrt(dd) || 1; c.x += (p.x - c.x) / d * pull * dt; c.y += (p.y - c.y) / d * pull * dt; }
+      else if (world.stats.magnet && dd < (gr * 4) ** 2) { const d = Math.sqrt(dd) || 1; c.x += (p.x - c.x) / d * world.stats.magnet * dt; c.y += (p.y - c.y) / d * world.stats.magnet * dt; }
     }
     if (fresh && inside && (c.x - p.x) ** 2 + (c.y - p.y) ** 2 < gr * gr) {
       c.fly = true; c.sp = 120;
@@ -1090,14 +1210,14 @@ function updateCoins(world, dt) {
       sfx(world, 'coin', { n: cb.n });
       burst(world, c.x, c.y, 3, ['#fff5b4', '#ffcd3c'], 60, 1, 0, 0.3);
     }
-    else if (fresh && mouth && d2(c, bag) < mouth * mouth) { c.fly = true; c.sp = 60; }
+    else if (fresh && mouth && d2(c, bag) < mouth * mouth && (world.stats.deepMouth || (c.kind !== 'gem' && c.kind !== 'crown'))) { c.fly = true; c.sp = 60; }
   }
   world.coins = world.coins.filter(c => !c.dead);
 }
 
 function credit(world, value) {
   if (world.mode === 'arena') { world.run.lair.got += value; world.events.push({ kind: 'coins', value }); }
-  else if (world.phase === 'tear') { world.run.tearGot += value; world.events.push({ kind: 'coins', value }); }
+  else if (world.phase === 'tear') { if (world.stats.fairy) value *= 2; world.run.tearGot += value; world.events.push({ kind: 'coins', value }); }
   else addToBag(world, value);
 }
 
@@ -1111,7 +1231,7 @@ function startTear(world) {
   world.coins = [];
   r.tier = tierOf(r.bag, world.stats);
   r.mult = TIERS[r.tier].mult * (r.full ? FULL_BONUS : 1);
-  r.tearTotal = r.bag * r.mult * (world.stats.tearMult || 1);
+  r.tearTotal = r.bag * r.mult * (world.stats.tearMult || 1) + (world.stats.tripleBottom ? (r.lost || 0) * 0.5 : 0);
   // Le sac « monte » de palier en palier sous les yeux du joueur avant de céder.
   r.climb = 0; r.climbT = 0.75; r.climbAge = 0;
   r.shake = 1.1 + 0.6 * r.tier;
@@ -1133,6 +1253,8 @@ function climbTier(world, dt) {
 
 function burstBag(world) {
   const r = world.run, s = world.stats;
+  // secret « Doigts de fée » : le gant posé sur le sac à l'instant où il se déchire
+  if (!s.fairy && world.pointer.inside) { const p = pointerWorld(world), b0 = bagPos(world); if ((p.x - b0.x) ** 2 + (p.y - b0.y) ** 2 < 50 * 50) world.events.push({ kind: 'secret', id: 'fairyFingers' }); }
   r.tearDur = s.tearDuration;
   r.tearT = s.tearDuration;
   r.attraction = s.attraction;

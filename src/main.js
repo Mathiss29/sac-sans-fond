@@ -338,6 +338,13 @@ const EVENT_HELP = {
   vein: ['Filon d\'or !', 'Un rocher veiné d\'or. Chaque coup de tes héros en fait jaillir des pièces : largue-les près de lui !', 'vein'],
   goblin: ['Gobelin voleur !', 'Il file avec un sac d\'or. Rattrape-le avec tes héros avant qu\'il ne s\'échappe : il lâche tout son butin.', 'goblin'],
   mimic: ['Un coffre ?', 'Méfie-toi, c\'est une mimique. Frappe-la pour la réveiller, puis abats-la pour son trésor. Attention, elle mord !', 'mimic'],
+  buried: ['Trésor enterré !', 'Une bosse est apparue dans l\'herbe. Garde le gant posé dessus une seconde pour déterrer le trésor.', 'coin'],
+  wanted: ['Avis de recherche !', 'Un élémentaire marqué d\'une cible porte une prime. Elle fond chaque seconde : abats-le vite !', 'golem'],
+  lucky: ['Sac chanceux !', 'Pendant quelques secondes, chaque coup de tes héros fait tomber de l\'or. Frappe tout ce qui bouge !', 'coin'],
+  skyfall: ['Pluie d\'élémentaires !', 'Une horde tombe du ciel près de tes héros. Ils valent deux fois et demie plus que d\'habitude.', 'wisp'],
+  rush: ['Ruée dorée !', 'Une file de feux follets dorés traverse la carte sans s\'arrêter. Place tes héros sur leur chemin !', 'gold'],
+  mirage: ['Mirage doré !', 'Pendant 8 s, les ennemis vaincus près du gant valent le triple. Promène-le au milieu des combats.', 'coin'],
+  treasure: ['Gobelin des trésors !', 'Il est chargé d\'or : chaque coup lui fait perdre des pièces. Frappe-le le plus possible avant qu\'il ne file.', 'goblin'],
 };
 function eventIntro(kind) {
   save.eventsSeen = save.eventsSeen || {};
@@ -372,6 +379,11 @@ function drainEvents() {
     else if (ev.kind === 'boss') { save.bosses = save.bosses || {}; save.bosses[world.zone.id] = (save.bosses[world.zone.id] || 0) + 1; writeSave(save); }
     else if (ev.kind === 'arena') { arenaUi(); buildDropBar(); }
     else if (ev.kind === 'reinforce') buildDropBar();
+    else if (ev.kind === 'secret' && !L(ev.id)) {
+      save.level[ev.id] = 1; writeSave(save); stats = calcStats();
+      bannerQ.push({ kind: 'banner', big: true, title: 'Secret découvert !', sub: NODE[ev.id].name + ' : ' + NODE[ev.id].desc });
+      play('gold');
+    }
     else if (ev.kind === 'flash') flash();
     else if (ev.kind === 'tierUp') { phaseFill(world.run, ev.tier, 0.5); }
     else if (ev.kind === 'burst') { flash(); phaseShow(ev.title, ev.sub, false); }
@@ -815,6 +827,13 @@ function drawMinimap() {
   const dot = (x, y, r, col) => { mg.fillStyle = col; mg.fillRect(Math.round(x * k - r / 2), Math.round(y * k - r / 2), r, r); };
   for (const c of world.coins) dot(c.x, c.y, 2, '#ffd34d');
   for (const e of world.enemies) if (!e.boss) dot(e.x, e.y, e.gold ? 4 : 3, e.gold ? '#ffe14a' : '#ff6b4a');
+  // Longue-vue : feux follets dorés, créatures d'événement et butin rare mis en évidence
+  if (stats.spyglass) {
+    const pulse = 5 + 2 * Math.sin(performance.now() / 200);
+    for (const e of world.enemies) if (e.gold || e.event) { mg.strokeStyle = e.event ? '#ff5a5a' : '#ffe14a'; mg.lineWidth = 1.5; mg.strokeRect(e.x * k - pulse / 2, e.y * k - pulse / 2, pulse, pulse); }
+    for (const m of (world.run && world.run.mounds) || []) dot(m.x, m.y, 5, '#c9a06a');
+  }
+  for (const h of (world.run && world.run.helpers) || []) dot(h.x, h.y, 3, h.kind === 'sprite' ? '#9bf06b' : '#e8eef8');
   const b = bagPos(world); dot(b.x, b.y, 6, '#fff2c8');
   for (const u of world.heroes) dot(u.x, u.y, 4, '#7ee06b');
   const lr = world.run && world.run.lair, pp = portalPos(world);

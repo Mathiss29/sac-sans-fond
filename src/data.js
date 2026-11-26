@@ -39,6 +39,7 @@ export const EVENT_FOES = {
   vein: { name: 'Filon d\'or', hp: 30, value: 0, radius: 22, speed: 0, color: '#ffd246', core: '#8c8f86', still: true },
   goblin: { name: 'Gobelin voleur', hp: 10, value: 0, radius: 12, speed: 150, color: '#6fae4c', core: '#4a7d34' },
   mimic: { name: 'Mimique', hp: 22, value: 0, radius: 18, speed: 0, color: '#c9a06a', core: '#5a3418', still: true },
+  treasure: { name: 'Gobelin des trésors', hp: 40, value: 0, radius: 14, speed: 120, color: '#ffd246', core: '#4a7d34', look: 'goblin', tint: '#ffd246' },
 };
 Object.assign(ENEMIES, EVENT_FOES);
 
@@ -55,12 +56,19 @@ export function stageFor(expeditions) { return STAGES[expeditions % STAGES.lengt
 // Événements : deux par expédition, à des moments tirés au hasard.
 // share : part de la capacité du sac que l'événement peut rapporter.
 export const EVENTS = {
+  buried: { title: 'Trésor enterré !', sub: 'Garde le gant 1 s sur la bosse pour le déterrer', share: 0.18, life: 15 },
+  wanted: { title: 'Avis de recherche !', sub: 'Un élémentaire marqué : sa prime fond chaque seconde', share: 0.22, life: 16 },
+  lucky: { title: 'Sac chanceux !', sub: 'Chaque coup fait tomber de l\'or', share: 0.14, life: 6 },
+  skyfall: { title: 'Pluie d\'élémentaires !', sub: 'Ils tombent du ciel… et valent ×2,5', share: 0, life: 0 },
+  rush: { title: 'Ruée dorée !', sub: 'Des feux follets dorés traversent la carte : attrape-les', share: 0.2, life: 9 },
+  mirage: { title: 'Mirage doré !', sub: 'Les ennemis vaincus sous le gant valent ×3', share: 0, life: 8 },
+  treasure: { title: 'Gobelin des trésors !', sub: 'Chaque coup lui fait perdre des pièces', share: 0.26, life: 14 },
   vein: { title: 'Filon d\'or !', sub: 'Frappe-le : chaque coup fait jaillir de l\'or', share: 0.16, life: 14 },
   rain: { title: 'Pluie de pièces !', sub: 'Passe le gant dessus, vite', share: 0.12, life: 5 },
   goblin: { title: 'Gobelin voleur !', sub: 'Il file avec un sac d\'or : attrape-le', share: 0.2, life: 11 },
   mimic: { title: 'Un coffre ?', sub: 'Ouvre-le à coups d\'épée…', share: 0.24, life: 18 },
 };
-export const EVENT_WINDOWS = [[0.18, 0.42], [0.55, 0.78]];
+export const EVENT_WINDOWS = [[0.15, 0.35], [0.42, 0.6], [0.66, 0.84]];
 
 // Feu follet doré : version rare d'un feu follet, qui file vite et rapporte gros.
 export const GOLD_WISP = { chance: 0.025, value: 15, hp: 1.5, speed: 1.7, color: '#ffd246' };
@@ -138,9 +146,8 @@ export function computeStats(level, gb = null) {
   const shooter = 1 + 0.06 * L('longbow');
   const bardBoost = HEROES.bard.auraBoost + 0.02 * L('bardAura');
   const events = ['rain'];
-  if (L('evVein')) events.push('vein');
-  if (L('evGoblin')) events.push('goblin');
-  if (L('evMimic')) events.push('mimic');
+  for (const [node, ev] of [['evVein', 'vein'], ['evGoblin', 'goblin'], ['evMimic', 'mimic'], ['evBuried', 'buried'], ['evWanted', 'wanted'], ['evLucky', 'lucky'],
+    ['evSkyfall', 'skyfall'], ['evRush', 'rush'], ['evMirage', 'mirage'], ['evTreasure', 'treasure']]) if (L(node)) events.push(ev);
   const base = {
     archer: BASE.archers * (1 + L('archers2') + L('archers3')),
     mage: L('mage') + L('mage2') + L('mage3'),
@@ -207,15 +214,20 @@ export function computeStats(level, gb = null) {
     goldChance: GOLD_WISP.chance * (1 + 0.6 * L('goldWisp')) * (1 + GG('goldWisp') / 100),
     bagCapacity: BASE.bagCapacity * Math.pow(1.6, L('capacity')) * Math.pow(1.25, L('seams2')),
     tiers: 1 + L('tierCuir') + (L('tierCuir') ? L('tierSoie') : 0) + (L('tierCuir') && L('tierSoie') ? L('tierCeleste') : 0),
-    gloveRadius: BASE.gloveRadius * (1 + 0.18 * L('glove')) * (1 + ((gb && gb.glove) || 0) / 100),
+    gloveRadius: BASE.gloveRadius * (1 + 0.18 * L('glove')) * (1 + ((gb && gb.glove) || 0) / 100) * (has('goldHand') ? 1.25 : 1),
     attraction: BASE.attraction + 0.75 * L('attraction') + Math.round(GG('focus') * 10) / 10,
     coinLife: BASE.coinLife + 2 * L('coinLife') + GG('coinLife'),
     bagMouth: BASE.bagMouth * (1 + 0.5 * L('mouth')),
-    tearDuration: BASE.tearDuration + 2 * L('tearRain'),
+    tearDuration: (BASE.tearDuration + 2 * L('tearRain')) * (has('frozenTime') ? 1.5 : 1),
     tearMult: (1 + 0.1 * L('goldTear')) * (1 + GG('tear') / 100),
     tearWaves: 4 + L('wave'),
     valueMult: (1 + 0.05 * L('heavyCoins')) * (1 + ((gb && gb.gold) || 0) / 100),
-    events, eventCount: 1 + L('evTwo'),
+    events, eventCount: 1 + L('evTwo') + L('evThree'), downpour: L('downpour'),
+    sprite: has('sprite'), spriteSpeed: 1 + 0.15 * L('spriteFast'), magpie: has('magpie'), magpieBold: L('magpieBold'),
+    magnet: 25 * L('magnet'), pull: 70 * (1 + 0.15 * L('quickHand')) * (has('goldHand') ? 2 : 1), mimicTame: has('mimic'), fairy: has('fairyFingers'),
+    overflowRate: OVERFLOW_RATE + 0.04 * L('falseBottom'), tripleBottom: has('tripleBottom'), deepMouth: has('deepMouth'),
+    gemMult: 1 + 0.15 * L('gems'), crownChance: 0.01 * L('crown'), suction: has('suctionWave'),
+    goldHorde: L('goldHorde'), lantern: 1 + 0.3 * L('lantern'), furBoots: has('furBoots'), spyglass: has('spyglass'),
     eventMult: (1 + 0.15 * L('hunter')) * (1 + GG('event') / 100),
     stunMult: Math.max(0.2, 1 - GG('stun') / 100) * (1 - 0.25 * L('shield')),
     veinMult: 1 + 0.2 * L('vein'),
