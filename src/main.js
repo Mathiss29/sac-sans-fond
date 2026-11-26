@@ -1,9 +1,9 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, stageFor, TIERS, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { ZONES, stageFor, TIERS, HEROES, HERO_ORDER, ARENA, ULTS, TRIALS, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
-import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
+import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
 import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
@@ -193,6 +193,7 @@ function finishExpedition() {
   if (unlocked) save.lairOpen = true;
   // objets trouvés : rangés dans la réserve (ceux qui ne rentrent pas sont recyclés en éclats)
   const found = storeItems(r.items || []);
+  const trialsDone = checkTrials(r);
   writeSave(save);
   const rows = [['Élémentaires vaincus', fmt(r.kills), '#c4c8b2']];
   if (!r.lair.only) {
@@ -250,8 +251,9 @@ function finishExpedition() {
   if (sum > 0) { save.lastDmg = sum; writeSave(save); }
   $('resRecord').hidden = !record;
   const can = NODES.filter(n => visible(n) && !n.soon && !lockedNow(n) && L(n.id) < capOf(n) && save.coins >= costOf(n, L(n.id))).length;
-  $('resNews').textContent = can ? `${can} compétence${can > 1 ? 's' : ''} à acheter !` : '';
-  $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true; $('attrBox').hidden = true;
+  $('resNews').textContent = (trialsDone.length ? `Épreuve réussie : ${trialsDone.map(id => NODE[id].name).join(', ')} débloqué ! ` : '') + (can ? `${can} compétence${can > 1 ? 's' : ''} à acheter !` : '');
+  $('resNews').classList.toggle('trialWin', trialsDone.length > 0);
+  $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true; $('attrBox').hidden = true; $('ultBar').hidden = true;
   $('phase').hidden = true;
   // la scène s'assombrit d'abord sur le sac, puis le bilan glisse depuis la droite et le total compte
   const showResult = () => {
@@ -269,6 +271,19 @@ function finishExpedition() {
   };
   // écran « Sers-toi ! » d'abord s'il y a des objets, puis le bilan
   setTimeout(() => { if (world.phase !== 'done') return; if (found.length) showLoot(found, showResult); else showResult(); }, world.mode === 'arena' ? 200 : 750);
+}
+// Épreuves d'ultime : on garde le meilleur essai ; réussie = l'ultime est débloqué.
+function checkTrials(r) {
+  const done = [];
+  if (!save.trials || !r.cnt) return done;
+  for (const id of Object.keys(save.trials)) {
+    if (L(id)) continue;
+    const tr = TRIALS[id], v = r.cnt[tr.stat] || 0;
+    save.trials[id] = Math.max(save.trials[id] || 0, Math.min(tr.goal, v));
+    if (v >= tr.goal) { save.level[id] = 1; done.push(id); }
+  }
+  if (done.length) stats = calcStats();
+  return done;
 }
 function storeItems(items) {
   if (!items.length || !(save.level.armory > 0)) return [];
@@ -356,6 +371,7 @@ function drainEvents() {
     else if (ev.kind === 'eventIntro') eventIntro(ev.ev);
     else if (ev.kind === 'boss') { save.bosses = save.bosses || {}; save.bosses[world.zone.id] = (save.bosses[world.zone.id] || 0) + 1; writeSave(save); }
     else if (ev.kind === 'arena') { arenaUi(); buildDropBar(); }
+    else if (ev.kind === 'reinforce') buildDropBar();
     else if (ev.kind === 'flash') flash();
     else if (ev.kind === 'tierUp') { phaseFill(world.run, ev.tier, 0.5); }
     else if (ev.kind === 'burst') { flash(); phaseShow(ev.title, ev.sub, false); }
@@ -419,9 +435,44 @@ function hud() {
   $('attrTxt').textContent = r.focusLock ? 'recharge…' : r.attraction.toFixed(1).replace('.', ',') + ' s';
   screenCount();
   $('attrFill').style.width = (r.attraction / stats.attraction * 100) + '%';
+  ultHud(r);
   const boss = r.boss;
   $('bossBar').hidden = !(boss && ar && world.phase === 'expedition' && !boss.dead);
   if (boss && !boss.dead) { $('bossName').textContent = boss.def.name; $('bossFill').style.width = Math.max(0, boss.hp / boss.max * 100) + '%'; }
+}
+
+// Ultimes : un bouton par lignée qui en a un, avec sa jauge ; épreuve en cours affichée dessous.
+let ultSig = '';
+function ultHud(r) {
+  const box = $('ultBar');
+  const types = HERO_ORDER.filter(k => stats.ults && stats.ults[k]);
+  const trials = Object.keys(save.trials || {}).filter(id => !L(id));
+  box.hidden = world.phase !== 'expedition' || (!types.length && !trials.length);
+  if (box.hidden) return;
+  const sig = types.join() + '|' + trials.join();
+  if (sig !== ultSig) {
+    ultSig = sig; box.innerHTML = '';
+    for (const k of types) {
+      const b = document.createElement('button'); b.className = 'ult'; b.dataset.k = k; b.type = 'button';
+      b.title = `${ULTS[k].name} (touche ${ULTS[k].label}) : vise le gant, sinon le groupe le plus dense`;
+      const c = document.createElement('canvas'); c.width = c.height = 68; c.getContext('2d').drawImage(heroIcon(k), 0, 0);
+      b.append(c, Object.assign(document.createElement('span'), { className: 'nm', textContent: ULTS[k].name }),
+        Object.assign(document.createElement('span'), { className: 'key', textContent: ULTS[k].label }), Object.assign(document.createElement('i'), { className: 'fill' }));
+      b.onpointerdown = e => { e.stopPropagation(); useUlt(world, k); };
+      box.append(b);
+    }
+    for (const id of trials) box.append(Object.assign(document.createElement('div'), { className: 'trial', id: 'tr_' + id }));
+  }
+  for (const b of box.querySelectorAll('.ult')) {
+    const k = b.dataset.k, v = r.ult ? r.ult[k] : 0;
+    b.querySelector('.fill').style.height = (v * 100) + '%';
+    b.classList.toggle('ready', ultReady(world, k));
+  }
+  for (const id of trials) {
+    const el = $('tr_' + id); if (!el) continue;
+    const tr = TRIALS[id], v = Math.min(tr.goal, Math.floor((r.cnt && r.cnt[tr.stat]) || 0));
+    el.textContent = `Épreuve ${NODE[id].name} : ${v}/${tr.goal}`; el.classList.toggle('ok', v >= tr.goal);
+  }
 }
 
 // Compteur « À l'écran » : élémentaires visibles par famille, avec leurs PV.
@@ -459,7 +510,9 @@ const visible = n => !n.parent || L(n.parent) > 0 || L(n.id) > 0;
 const teaser = () => false; // pas de « ? » : on ne voit que les nœuds révélés
 const colorOf = n => (BRANCHES[n.branch] || BRANCHES.depart)[1];
 const branchName = n => (BRANCHES[n.branch] || BRANCHES.depart)[0];
-const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: (save.bosses || {})[ZONES[0].id] || 0 });
+const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: (save.bosses || {})[ZONES[0].id] || 0, L });
+// épreuves d'ultime : acceptée (meilleur score enregistré) mais pas encore réussie
+const trialOn = n => n.type === 'ult' && !L(n.id) && save.trials && save.trials[n.id] !== undefined;
 // niveau maximum achetable pour l'instant (certains nœuds se débloquent par étapes)
 const capOf = n => n.cap ? Math.min(n.max, n.cap(L)) : n.max;
 const lockedNow = n => n.soon || (n.need && !n.need(ctx()) && !L(n.id));
@@ -542,7 +595,7 @@ function renderTree() {
     const shown = visible(n), tz = !shown && teaser(n);
     if (!shown && !tz) continue;
     const p = pos(n), lv = L(n.id), isMax = lv >= n.max, capped = !isMax && lv >= capOf(n), locked = shown && lockedNow(n);
-    const afford = !tz && !isMax && !locked && !capped && save.coins >= costOf(n, lv);
+    const afford = !tz && !isMax && !locked && !capped && !trialOn(n) && save.coins >= costOf(n, lv);
     const b = document.createElement('button');
     b.className = 'node t-' + n.type + (tz ? ' teaser' : '') + (lv ? ' owned' : '') + (n.soon && shown ? ' soon' : '') + (locked && !n.soon ? ' locked' : '')
       + (isMax ? ' max' : '') + (afford ? ' afford' : '') + (selected === n.id ? ' sel' : '') + (n.id === 'root' ? ' root' : '');
@@ -558,6 +611,7 @@ function renderTree() {
       if (afford) b.append(Object.assign(document.createElement('span'), { className: 'dot' }));
       if (!seen.has(n.id) && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'newTag', textContent: 'Nouveau' }));
       if (lv && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'ok', textContent: '✓' }));
+      if (trialOn(n)) b.append(Object.assign(document.createElement('span'), { className: 'trialTag', textContent: `${Math.floor(save.trials[n.id])}/${TRIALS[n.id].goal}` }));
     }
     // un clic achète (comme une caisse enregistreuse) ; survol ou clic montrent la fiche
     b.onclick = () => { selected = n.id; if (!tz && afford) buy(n); else renderTree(); };
@@ -592,6 +646,18 @@ function renderInfo() {
   const eff = add('div', 'eff', isMax ? n.effect(lv) : lv ? n.effect(lv) + '  →  ' : '');
   if (!isMax) eff.append(Object.assign(document.createElement('b'), { textContent: n.effect(lv + 1) }));
   if (lockedNow(n)) { add('p', 'locked', '🔒 ' + n.cond); return; }
+  if (n.type === 'ult' && !lv) {
+    const tr = TRIALS[n.id];
+    add('p', 'cond', 'Épreuve : ' + tr.text + '.');
+    if (trialOn(n)) {
+      add('p', '', `Meilleur essai : ${Math.floor(save.trials[n.id])} / ${tr.goal}. L'épreuve compte pendant tes expéditions.`);
+    } else {
+      const pr = document.createElement('div'); pr.className = 'price';
+      pr.append(Object.assign(document.createElement('span'), { textContent: 'Gratuit' }), Object.assign(document.createElement('span'), { className: 'go', textContent: 'Clique pour accepter l\'épreuve' }));
+      box.append(pr);
+    }
+    return;
+  }
   if (!isMax && lv >= capOf(n)) { add('p', 'locked', '🔒 ' + (n.capMsg || 'Pas encore disponible.')); return; }
   if (isMax) return;
   const c = costOf(n, lv), pr = document.createElement('div'); pr.className = 'price';
@@ -617,6 +683,13 @@ function placeInfo(n) {
 function buy(n) {
   const lv = L(n.id);
   if (n.soon || lockedNow(n) || !visible(n) || lv >= capOf(n)) return;
+  if (n.type === 'ult') {
+    if (trialOn(n) || lv) return;
+    save.trials = save.trials || {}; save.trials[n.id] = 0;
+    unlockAudio(); play('buy'); writeSave(save); renderTree();
+    buyFx(n, 0, []);
+    return;
+  }
   const c = costOf(n, lv);
   if (save.coins < c) return;
   const hidden = new Set(NODES.filter(m => !visible(m)).map(m => m.id));
@@ -626,6 +699,31 @@ function buy(n) {
   stats = calcStats();
   renderTree(); companyRefresh();
   buyFx(n, c, NODES.filter(m => hidden.has(m.id) && visible(m)));
+  if (n.type === 'cls' || /Fork$/.test(n.id)) classChange(n);
+}
+
+// Écran « Changement de classe ! » : les exemplaires tournent en cercle puis fusionnent.
+function classChange(n) {
+  const line = { archer: 'archer', mage: 'mage', knight: 'knight', bard: 'bard' }[n.branch] || 'archer';
+  const fork = /Fork$/.test(n.id);
+  const ov = document.createElement('div'); ov.className = 'classOv';
+  const ring = document.createElement('div'); ring.className = 'ring';
+  for (let i = 0; i < 3; i++) {
+    const c = document.createElement('canvas'); c.width = c.height = 68; c.className = 'mini';
+    c.getContext('2d').drawImage(heroIcon(line), 0, 0); c.style.setProperty('--i', i); ring.append(c);
+  }
+  const big = document.createElement('canvas'); big.width = big.height = 68; big.className = 'big';
+  big.getContext('2d').drawImage(heroIcon(line), 0, 0);
+  const rk = fork ? 2 : n.id.length === 4 ? 3 : 2;
+  const t = document.createElement('h2'); t.textContent = 'Changement de classe !';
+  const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = (fork ? HEROES[line].plural + ' fusionnés' : n.name) + '  ' + '★'.repeat(rk);
+  const d = document.createElement('p'); d.textContent = fork ? 'Les exemplaires fusionnent en un seul héros plus fort, qui garde toutes les améliorations. Choisis maintenant sa voie dans l\'arbre.' : n.desc;
+  const ok = document.createElement('button'); ok.className = 'btn'; ok.textContent = 'Super !';
+  ov.append(ring, big, t, nm, d, ok); $('app').append(ov);
+  play('tier'); setTimeout(() => play('gold'), 1200);
+  const close = () => { ov.remove(); removeEventListener('keydown', key, true); };
+  const key = e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); close(); } };
+  ok.onclick = close; addEventListener('keydown', key, true);
 }
 
 // Effets d'achat : le nœud rebondit, des étincelles jaillissent, le prix s'envole, les nœuds révélés éclosent.
@@ -677,6 +775,7 @@ const held = new Set();
 const playing = () => world.phase === 'expedition' || world.phase === 'tear';
 window.addEventListener('keydown', e => {
   if (CAM_KEYS[e.code] && playing()) { held.add(e.code); e.preventDefault(); }
+  for (const k of HERO_ORDER) if (e.code === ULTS[k].key && world.phase === 'expedition') useUlt(world, k);
   const m = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
   if (m && world.phase === 'expedition') {
     const type = HERO_ORDER.filter(k => stats.heroes[k] > 0)[+m[1] - 1];
@@ -838,6 +937,6 @@ initCompany({ get save() { return save; }, write: () => writeSave(save), fmt, he
 gearSheetReady.then(() => renderTree());
 
 // Accès pour les tests automatisés
-window.__game = { world, get save() { return save; }, go, goLair, toAtelier, lairOpen,
+window.__game = { world, get save() { return save; }, go, goLair, toAtelier, lairOpen, useUlt: k => useUlt(world, k),
   buyable: () => NODES.filter(n => visible(n) && !lockedNow(n) && L(n.id) < capOf(n)).map(n => ({ id: n.id, cost: costOf(n, L(n.id)) })),
   buy: id => buy(NODE[id]) };

@@ -277,7 +277,51 @@ const SPEC = {
   chest: [4000, 2.5, l => `Réserve : ${30 + 10 * l} places`],
   charm1: [6000, 1, () => '1 charme par lignée'],
   charm2: [20000, 1, () => '2 charmes par lignée'],
+
+  // Lignées (lot A)
+  steel: [1200, 2, l => `+${l} dégât de base par flèche`],
+  pierce: [2500, 2.5, l => `Chaque flèche traverse ${s_(l, 'ennemi', 'ennemis')}`],
+  double: [3000, 2, l => `${6 * l} % de chance de tir double`],
+  master: [15000, 1, () => 'Les archers visent l\'ennemi le plus riche'],
+  deluge: [8000, 2, l => `${16 + 4 * l} flèches par Pluie`],
+  bounce: [6000, 2.2, l => `Rebondit sur ${s_(l, 'ennemi', 'ennemis')}`],
+  shards: [2500, 2, l => `${s_(l, 'éclat secondaire', 'éclats secondaires')} par explosion`],
+  archmage: [20000, 1, () => 'Un givre sur trois est doublé'],
+  winter: [10000, 2, l => `Le rayon retire ${10 * l} % des PV restants`],
+  frostNova: [6000, 1, () => 'Nova de givre au contact'],
+  frostLand: [9000, 1, () => 'Le sol gèle à l\'atterrissage des mages'],
+  reinforce: [5000, 2.5, l => `+${s_(l, 'héros', 'héros')} à mi-expédition`],
+  drop: [8000, 1, () => 'Dégâts ×2 pendant 3 s après l\'atterrissage'],
+  ost: [60000, 1, () => '+1 héros de chaque lignée'],
+  shockwave: [12000, 1, () => 'Onde de choc à l\'atterrissage'],
+  shield: [1500, 2, l => `Étourdissements −${25 * l} %`],
+  heavy: [2500, 2, l => `Recul des coups +${30 * l} %`],
+  furious: [6000, 2, l => `Charge +${20 * l} % plus longue`],
+  taunt: [5000, 1, () => 'Les élémentaires proches foncent sur le chevalier'],
+  lament: [3000, 2, l => `Ennemis dans l'aura −${5 * l} % de vitesse`],
+  recall: [8000, 2, l => `Hymne : ${3 + l} s`],
+  encore: [10000, 2.5, l => `Recharge des ultimes −${Math.round((1 - Math.pow(0.9, l)) * 100)} %`],
+  opening: [5000, 1, () => 'Cadence ×2 pendant 3 s au départ'],
+  // Ultimes : l'épreuve est gratuite à accepter (voir TRIALS)
+  rainArrows: [0, 1, () => 'Ultime débloqué (touche E)'],
+  iceRay: [0, 1, () => 'Ultime débloqué (touche R)'],
+  charge: [0, 1, () => 'Ultime débloqué (touche T)'],
+  hymn: [0, 1, () => 'Ultime débloqué (touche Y)'],
+  // Changements de classe
+  archerFork: [30000, 1, () => 'Les archers fusionnent (puissance ×1,5)', { need: c => c.bossWins >= 2, cond: 'Bats le Brasier primordial 2 fois' }],
+  mageFork: [60000, 1, () => 'Les mages fusionnent (puissance ×1,5)', { need: c => c.bossWins >= 3 && c.L('mage3') > 0, cond: 'Bats le Brasier primordial 3 fois et recrute 3 mages' }],
+  knightFork: [40000, 1, () => 'Les chevaliers fusionnent (puissance ×1,5)', { need: c => c.maxTier >= 2 && c.L('knight3') > 0, cond: 'Remplis le sac jusqu\'au palier Soie et recrute 3 chevaliers' }],
+  bardFork: [80000, 1, () => 'Les bardes fusionnent (puissance ×1,5)', { need: c => c.maxTier >= 3 && c.L('bard3') > 0, cond: 'Remplis le sac jusqu\'au palier Céleste et recrute 3 bardes' }],
 };
+// Voies de classe : on n'en prend qu'une par fourche.
+const PAIRS = [['arA', 'arB'], ['arA1', 'arA2'], ['arB1', 'arB2'], ['maA', 'maB'], ['maA1', 'maA2'], ['maB1', 'maB2'],
+  ['knA', 'knB'], ['knA1', 'knA2'], ['knB1', 'knB2'], ['baA', 'baB'], ['baA1', 'baA2'], ['baB1', 'baB2']];
+for (const [a, b] of PAIRS) for (const [me, other] of [[a, b], [b, a]]) {
+  const r3 = me.length === 4;
+  SPEC[me] = [r3 ? 250000 : 50000, 1, () => (r3 ? 'Rang 3 · ' : 'Rang 2 · ') + 'puissance ×' + (r3 ? '2,2' : '1,5'),
+    { need: c => !c.L(other), cond: 'Tu as déjà choisi l\'autre voie à cette fourche' }];
+}
+export const CLASS_PAIRS = PAIRS;
 // Descriptions réécrites pour coller à l'effet réel.
 const DESC = {
   archers2: 'Deux fois plus d\'archers largués à chaque expédition.',
@@ -285,7 +329,15 @@ const DESC = {
   hunter: 'Les événements (pluie, filon, gobelin, mimique) rapportent davantage.',
   sandglass: 'Chaque expédition dure un peu plus longtemps.',
   heavyCoins: 'Tout le butin des élémentaires vaut un peu plus.',
-  steel: 'Les flèches font plus mal (à venir).',
+  steel: '+1 dégât de base à chaque flèche, par niveau (multiplié par tous les bonus).',
+  drop: 'Les héros arrivent prêts au combat : ils frappent deux fois plus fort pendant 3 s après l\'atterrissage.',
+  knA1: 'Rang 3 : toutes les 3 s, un coup de bouclier repousse et blesse tout ce qui l\'entoure.',
+  knA: 'Rang 2 : les héros proches du paladin ne peuvent plus être étourdis.',
+  taunt: 'Les élémentaires proches foncent sur le chevalier : ils se groupent sous ses coups.',
+  rainArrows: 'Ultime : une volée de flèches s\'abat sur le groupe visé.',
+  iceRay: 'Ultime : un rayon gèle et blesse toute une ligne d\'ennemis.',
+  charge: 'Ultime : les chevaliers foncent et renversent tout sur leur passage.',
+  hymn: 'Ultime : tous les héros tirent deux fois plus vite pendant 3 s.',
   armory: 'Débloque la Compagnie : chaque lignée de héros reçoit un emplacement d\'arme, et les ennemis lâchent parfois des besaces d\'équipement.',
   refine: 'À la forge, affine l\'emplacement d\'une lignée : son objet devient plus fort. Le bonus reste si tu changes d\'objet.',
   recycle: 'Recycle les objets en trop contre des éclats, nécessaires aux affinages avancés.',

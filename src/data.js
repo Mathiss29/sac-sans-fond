@@ -79,6 +79,26 @@ export const HEROES = {
 };
 export const HERO_ORDER = ['archer', 'mage', 'knight', 'bard'];
 
+// Ultimes : un par lignée, débloqué en réussissant une épreuve pendant une expédition.
+export const ULTS = {
+  archer: { id: 'rainArrows', name: 'Pluie de flèches', key: 'KeyE', label: 'E' },
+  mage: { id: 'iceRay', name: 'Rayon de glace', key: 'KeyR', label: 'R' },
+  knight: { id: 'charge', name: 'Charge', key: 'KeyT', label: 'T' },
+  bard: { id: 'hymn', name: 'Hymne héroïque', key: 'KeyY', label: 'Y' },
+};
+// Épreuves : stat comptée pendant une expédition (voir run.cnt dans game.js) et objectif.
+export const TRIALS = {
+  rainArrows: { stat: 'kills', goal: 300, text: 'Tue 300 élémentaires en une seule expédition' },
+  iceRay: { stat: 'slowed', goal: 150, text: 'Ralentis 150 ennemis avec tes mages en une seule expédition' },
+  charge: { stat: 'knocked', goal: 100, text: 'Repousse 100 ennemis avec tes chevaliers en une seule expédition' },
+  hymn: { stat: 'auraT', goal: 20, text: 'Garde 3 héros dans l\'aura d\'un barde pendant 20 s en une seule expédition' },
+};
+export const ULT_CD = 30;   // s de recharge d'un ultime
+// Changement de classe : le nœud de fourche fusionne les exemplaires d'une lignée.
+export const FORKS = { archer: 'archerFork', mage: 'mageFork', knight: 'knightFork', bard: 'bardFork' };
+export const CLASS_LINE = { ar: 'archer', ma: 'mage', kn: 'knight', ba: 'bard' };
+export const MERGE_MULT = [1, 1, 1.5, 2.2];   // multiplicateur de puissance par rang (×nombre d'exemplaires fusionnés)
+
 // Taille d'une région, en pixels d'écran (environ 3 × 3 écrans d'ordinateur).
 export const MAP = { w: 2700, h: 1800 };
 
@@ -121,45 +141,68 @@ export function computeStats(level, gb = null) {
   if (L('evVein')) events.push('vein');
   if (L('evGoblin')) events.push('goblin');
   if (L('evMimic')) events.push('mimic');
-  const heroes = {
+  const base = {
     archer: BASE.archers * (1 + L('archers2') + L('archers3')),
     mage: L('mage') + L('mage2') + L('mage3'),
     knight: L('knight') + L('knight2') + L('knight3'),
     bard: L('bard') + L('bard2') + L('bard3'),
   };
+  // classes : rang 1 (exemplaires), 2 (fusionnés + voie A/B), 3 (spécialité)
+  const pre = { archer: 'ar', mage: 'ma', knight: 'kn', bard: 'ba' };
+  const rank = {}, cls = {}, merge = {}, heroes = {};
+  const has = id => L(id) > 0;
+  for (const k of HERO_ORDER) {
+    const p = pre[k];
+    const r3 = [p + 'A1', p + 'A2', p + 'B1', p + 'B2'].find(has);
+    rank[k] = has(FORKS[k]) && base[k] > 0 ? (r3 ? 3 : 2) : 1;
+    cls[k] = r3 || [p + 'A', p + 'B'].find(has) || null;
+    merge[k] = rank[k] >= 2 ? base[k] * MERGE_MULT[rank[k]] : 1;
+    heroes[k] = (rank[k] >= 2 ? 1 : base[k]) + (has('ost') && base[k] > 0 ? 1 : 0);
+  }
+  const C = id => has(id);   // une classe précise est-elle prise ?
+  if (C('baB2')) { if (heroes.knight) heroes.knight++; else heroes.archer++; }
+  const conductor = C('baA2') ? 1.3 : 1;
   return {
+    rank, cls, has: Object.fromEntries(['arA', 'arB', 'arA1', 'arA2', 'arB1', 'arB2', 'maA', 'maB', 'maA1', 'maA2', 'maB1', 'maB2', 'knA', 'knB', 'knA1', 'knA2', 'knB1', 'knB2', 'baA', 'baB', 'baA1', 'baA2', 'baB1', 'baB2'].map(id => [id, C(id)])),
+    ults: Object.fromEntries(HERO_ORDER.map(k => [k, has(ULTS[k].id) && base[k] > 0])),
+    ultCd: ULT_CD * Math.pow(0.9, L('encore')),
+    rainN: 16 + 4 * L('deluge'), winter: 0.1 * L('winter'), chargeLen: 260 * (1 + 0.2 * L('furious')), hymnTime: 3 + L('recall'),
+    pierce: L('pierce') + (C('arA2') ? 99 : 0), doubleShot: 0.06 * L('double'), master: has('master') || C('arB2'),
+    bounce: L('bounce') + (C('arB1') ? 3 : 0), shards: L('shards'), archmage: has('archmage'), frostNova: has('frostNova'), frostLand: has('frostLand'),
+    knock: 1 + 0.3 * L('heavy'), taunt: has('taunt'), lament: 0.05 * L('lament') + (C('baB') ? 0.2 : 0),
+    opening: has('opening'), reinforce: L('reinforce'), dropFury: has('drop'), shockwave: has('shockwave'),
     duration: BASE.duration + 5 * L('duration') + 3 * L('sandglass') + Math.round(((gb && gb.time) || 0) * 10) / 10,
     spawnEvery: BASE.spawnEvery / (1 + 0.2 * L('horde')),
     maxEnemies: Math.round(BASE.maxEnemies * (1 + 0.2 * L('horde'))),
     heroes,
     archers: heroes.archer,
     damage: {
-      archer: HEROES.archer.damage * (1 + 0.05 * L('arrowDmg')) * all * G('dmg', 'archer'),
-      mage: HEROES.mage.damage * (1 + 0.05 * L('mageDmg')) * all * G('dmg', 'mage'),
-      knight: HEROES.knight.damage * (1 + 0.05 * L('knightDmg')) * all * G('dmg', 'knight'),
-      bard: HEROES.bard.damage * all * G('dmg', 'bard'),
+      archer: (HEROES.archer.damage + L('steel')) * (1 + 0.05 * L('arrowDmg')) * all * G('dmg', 'archer') * merge.archer,
+      mage: HEROES.mage.damage * (1 + 0.05 * L('mageDmg')) * all * G('dmg', 'mage') * merge.mage,
+      knight: HEROES.knight.damage * (1 + 0.05 * L('knightDmg')) * all * G('dmg', 'knight') * merge.knight,
+      bard: HEROES.bard.damage * all * G('dmg', 'bard') * merge.bard,
     },
     // PV des créatures d'événement : suivent les dégâts de l'arbre, pas ceux de l'équipement
     archerBase: HEROES.archer.damage * (1 + 0.05 * L('arrowDmg')) * all,
     cooldown: {
-      archer: HEROES.archer.cooldown * Math.pow(0.98, L('arrowRate')) / G('rate', 'archer'),
-      mage: HEROES.mage.cooldown / G('rate', 'mage'), knight: HEROES.knight.cooldown / G('rate', 'knight'), bard: HEROES.bard.cooldown / G('rate', 'bard'),
+      archer: HEROES.archer.cooldown * Math.pow(0.98, L('arrowRate')) / G('rate', 'archer') / conductor,
+      mage: HEROES.mage.cooldown / G('rate', 'mage') / conductor, knight: HEROES.knight.cooldown / G('rate', 'knight') / conductor, bard: HEROES.bard.cooldown / G('rate', 'bard') / conductor,
     },
     critMultBy: { archer: G('critDmg', 'archer'), mage: G('critDmg', 'mage'), knight: G('critDmg', 'knight'), bard: G('critDmg', 'bard') },
     dropMult: 1 + ((gb && gb.drop) || 0) / 100,
-    critBy: { archer: (G('crit', 'archer') - 1), mage: (G('crit', 'mage') - 1), knight: (G('crit', 'knight') - 1), bard: (G('crit', 'bard') - 1) },
-    bossBy: { archer: G('boss', 'archer'), mage: G('boss', 'mage'), knight: G('boss', 'knight'), bard: G('boss', 'bard') },
+    critBy: { archer: (G('crit', 'archer') - 1) + (C('arA1') ? 0.15 : 0), mage: (G('crit', 'mage') - 1), knight: (G('crit', 'knight') - 1), bard: (G('crit', 'bard') - 1) },
+    bossBy: { archer: G('boss', 'archer'), mage: G('boss', 'mage'), knight: G('boss', 'knight') * (C('knB2') ? 2 : 1), bard: G('boss', 'bard') },
     gearOn: L('armory') > 0,
     myths: (gb && gb.myths) || {},
     looks: (gb && gb.looks) || {},
     range: { archer: (shooter + 0.08 * L('hawk')) * G('range', 'archer'), mage: shooter * G('range', 'mage'), bard: shooter * G('range', 'bard'), knight: G('range', 'knight') },
-    cleave: (1 + 0.08 * L('whirl')) * (1 + GG('aoe') / 100),
+    cleave: (1 + 0.08 * L('whirl')) * (1 + GG('aoe') / 100) * (C('knB1') ? 1.8 : 1),
     slowTime: HEROES.mage.slowTime + 0.3 * L('deepFrost'),
     critChance: 0.12 + 0.03 * L('crit'),
     critMult: 2 + 0.2 * L('critDmg'),
     mageAoe: HEROES.mage.aoe * (1 + 0.02 * L('mageDmg')) * (1 + GG('aoe') / 100),
-    bardAura: HEROES.bard.aura * (1 + 0.04 * L('bardAura') + 0.08 * L('choir')) * (1 + GG('aoe') / 100),
-    bardBoost,
+    bardAura: C('baA') ? 2000 : HEROES.bard.aura * (1 + 0.04 * L('bardAura') + 0.08 * L('choir')) * (1 + GG('aoe') / 100),
+    bardBoost: bardBoost + (rank.bard >= 2 ? 0.1 : 0),
     bossMult: (1 + 0.1 * L('bossDmg')) * (1 + 0.1 * L('veteran')),
     goldChance: GOLD_WISP.chance * (1 + 0.6 * L('goldWisp')) * (1 + GG('goldWisp') / 100),
     bagCapacity: BASE.bagCapacity * Math.pow(1.6, L('capacity')) * Math.pow(1.25, L('seams2')),
@@ -174,7 +217,7 @@ export function computeStats(level, gb = null) {
     valueMult: (1 + 0.05 * L('heavyCoins')) * (1 + ((gb && gb.gold) || 0) / 100),
     events, eventCount: 1 + L('evTwo'),
     eventMult: (1 + 0.15 * L('hunter')) * (1 + GG('event') / 100),
-    stunMult: Math.max(0.2, 1 - GG('stun') / 100),
+    stunMult: Math.max(0.2, 1 - GG('stun') / 100) * (1 - 0.25 * L('shield')),
     veinMult: 1 + 0.2 * L('vein'),
     goblinSpeed: Math.max(0.4, 1 - 0.1 * L('goblin')),
     rainLife: 1 + 0.2 * L('goldRain'),

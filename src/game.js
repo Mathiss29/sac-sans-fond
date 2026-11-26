@@ -1,5 +1,5 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
-import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, bagMax, tierOf } from './data.js';
+import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, ULTS, bagMax, tierOf } from './data.js';
 import { rollItem, RARITIES as GEAR_RARITIES, DROP } from './gear.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -26,7 +26,7 @@ export function createWorld(w, h) {
     w, h, mapW: MAP.w, mapH: MAP.h, cam: { x: (MAP.w - w) / 2, y: (MAP.h - h) / 2 },
     phase: 'idle',      // idle | expedition | tear | done
     mode: 'map',        // map (la région) | arena (l'antre du boss)
-    enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], hazards: [],
+    enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], hazards: [], strikes: [], zones: [],
     shake: 0, sfx: [], combo: { n: 0, t: 0 },
     pointer: { x: -999, y: -999, inside: false, down: false, usedForDrop: false },
     holdKey: false,
@@ -59,7 +59,7 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
   world.stage = stage;
   Object.assign(world, {
     phase: 'expedition', mode: 'map', mapW: MAP.w, mapH: MAP.h,
-    enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], hazards: [], shake: 0,
+    enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], hazards: [], strikes: [], zones: [], shake: 0,
     stats, zone,
     run: {
       t: 0, duration: stats.duration, spawnT: 0, bag: 0, full: false, overflow: 0,
@@ -67,6 +67,7 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
       lair: { open: !!lair.open, first: !!lair.first, done: false, got: 0, only: false }, arena: null,
       happenings: planEvents(stats), eventsGot: 0,
+      cnt: { kills: 0, slowed: 0, knocked: 0, auraT: 0 }, ult: { archer: 0.5, mage: 0.5, knight: 0.5, bard: 0.5 }, hymnT: 0, reinforced: false,
     },
   });
   const b = bagPos(world);
@@ -176,7 +177,7 @@ export function enterArena(world) {
   const heroes = world.heroes;
   // la salle s'adapte à l'écran (sans dépasser la taille prévue) pour qu'on voie tout le combat
   const aw = Math.min(ARENA.w, Math.max(world.w, 640)), ah = Math.min(ARENA.h, Math.max(world.h, 560));
-  Object.assign(world, { mode: 'arena', mapW: aw, mapH: ah, enemies: [], coins: [], arrows: [], hazards: [] });
+  Object.assign(world, { mode: 'arena', mapW: aw, mapH: ah, enemies: [], coins: [], arrows: [], hazards: [], strikes: [], zones: [] });
   // les héros déjà largués entrent par le bas de la salle
   heroes.forEach((u, i) => {
     const a = Math.PI * (0.15 + 0.7 * (i + 0.5) / heroes.length);
@@ -208,7 +209,7 @@ function exitArena(world) {
   r.lair.done = true;
   if (r.lair.only) { world.coins = []; world.phase = 'done'; world.events.push({ kind: 'done' }); return; }
   const st = r.stash, p = portalPos(world);
-  Object.assign(world, { mode: 'map', mapW: MAP.w, mapH: MAP.h, enemies: st.enemies, coins: st.coins, arrows: [], hazards: [] });
+  Object.assign(world, { mode: 'map', mapW: MAP.w, mapH: MAP.h, enemies: st.enemies, coins: st.coins, arrows: [], hazards: [], strikes: [], zones: [] });
   r.stash = null;
   world.heroes.forEach((u, i) => {
     const an = i / Math.max(1, world.heroes.length) * Math.PI * 2;
@@ -267,7 +268,7 @@ function updateHazards(world, dt) {
     z.done = true;
     for (const u of world.heroes) {
       if (u.drop > 0 || (u.x - z.x) ** 2 + (u.y + 8 - z.y) ** 2 > z.r * z.r) continue;
-      u.stun = b.stun * (world.stats.stunMult || 1);
+      stunHero(world, u, b.stun);
       const dx = u.x - z.x, dy = u.y - z.y, d = Math.hypot(dx, dy) || 1;
       u.x += dx / d * 26; u.y += dy / d * 18;
       world.texts.push({ x: u.x, y: u.y - 40, text: 'étourdi', color: '#ffb347', size: 13, life: 0.9 });
@@ -277,6 +278,15 @@ function updateHazards(world, dt) {
     shake(world, 5); sfx(world, 'fire');
   }
   world.hazards = world.hazards.filter(z => !z.done);
+}
+
+// Étourdissement d'un héros (le Paladin protège ceux qui l'entourent).
+function stunHero(world, u, dur) {
+  if (world.stats.has && world.stats.has.knA && world.heroes.some(k => k.type === 'knight' && k.drop <= 0 && d2(k, u) < 130 * 130)) {
+    world.texts.push({ x: u.x, y: u.y - 40, text: 'protégé', color: '#fff3a8', size: 13, life: 0.8 });
+    return;
+  }
+  u.stun = Math.max(u.stun || 0, dur * (world.stats.stunMult || 1));
 }
 
 function spawnAt(world, type, x, y) {
@@ -365,7 +375,7 @@ export function selectHero(world, type) {
 export function dropHero(world, x, y) {
   if (!canDrop(world)) return false;
   const r = world.run, type = r.sel;
-  world.heroes.push({ type, x, y, cd: rnd(0, 0.3), drop: 1, face: 1, bob: rnd(0, 6), boost: 0 });
+  world.heroes.push({ type, x, y, cd: rnd(0, 0.3), drop: 1, face: 1, bob: rnd(0, 6), boost: 0, rank: (world.stats.rank && world.stats.rank[type]) || 1, rage: 0, timer: rnd(0, 1) });
   r.toDrop[type]--;
   if (r.toDrop[type] <= 0) { const next = HERO_ORDER.find(k => r.toDrop[k] > 0); if (next) r.sel = next; }
   return true;
@@ -386,9 +396,14 @@ function damage(world, e, amount, slow, from, type) {
   if (e.dead) return;
   const st = world.stats;
   if (e.boss) amount *= st.bossMult * ((st.bossBy && st.bossBy[type]) || 1);
-  if (slow) e.slow = Math.max(e.slow, slow);
+  const r0 = world.run;
+  if (slow) { if (type === 'mage' && e.slow <= 0 && r0 && r0.cnt) r0.cnt.slowed++; e.slow = Math.max(e.slow, slow); }
+  if (type === 'mage' && st.has && st.has.maA2 && (e.type === 'golem' || e.elite) && !e.boss) e.frozen = Math.max(e.frozen || 0, 2);
+  if (type === 'archer' && st.has && st.has.arB2) e.bounty = true;
   const crit = Math.random() < (st.critChance || 0.12) + ((st.critBy && st.critBy[type]) || 0);
   if (crit) amount *= (st.critMult || 2) * ((st.critMultBy && st.critMultBy[type]) || 1);
+  // Œil-de-faucon : critiques énormes de loin
+  if (crit && type === 'archer' && st.has && st.has.arA1 && from && d2(from, e) > 140 * 140) amount *= 2;
   if (e.def.dodge && Math.random() < e.def.dodge) {
     world.texts.push({ x: e.x, y: e.y - e.r - 6, text: 'esquive', color: '#d6f2ff', size: 12, life: 0.7 });
     return;
@@ -416,7 +431,8 @@ function damage(world, e, amount, slow, from, type) {
   world.texts.push({ x: e.x + rnd(-8, 8), y: e.y - e.r - 4, text: (shown >= 10 ? Math.round(shown) : String(shown).replace('.', ',')) + (crit ? ' !' : ''),
     color: crit ? '#fff4d0' : '#ffffff', size: crit ? 24 : e.boss ? 18 : 15, life: crit ? 1 : 0.65, dmg: true, vy: crit ? -90 : -70, pop: 0, box: crit ? '#c8402a' : null });
   if (from && !e.boss && !e.def.still) {
-    const dx = e.x - from.x, dy = e.y - from.y, d = Math.hypot(dx, dy) || 1, k = (e.type === 'golem' ? 60 : 140) * (crit ? 1.6 : 1);
+    const dx = e.x - from.x, dy = e.y - from.y, d = Math.hypot(dx, dy) || 1, k = (e.type === 'golem' ? 60 : 140) * (crit ? 1.6 : 1) * (type === 'knight' ? st.knock || 1 : 1);
+    if (type === 'knight' && r && r.cnt) r.cnt.knocked++;
     e.kx = (e.kx || 0) + dx / d * k; e.ky = (e.ky || 0) + dy / d * k;
   }
   if (onScreen(world, e.x, e.y)) { sfx(world, 'hit', { crit }); if (crit || e.boss) shake(world, e.boss ? 3 : 2); }
@@ -478,6 +494,15 @@ function keepPouches(world) {
 function killEnemy(world, e) {
   e.dead = true;
   world.run.kills++;
+  if (world.run.cnt) world.run.cnt.kills++;
+  if (e.bounty && !e.boss && !e.event) e.value *= 1.5;
+  // Cœur de braise : un ennemi brûlé explose
+  if (e.burn > 0 && world.stats.has && world.stats.has.maB1) {
+    world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: 6, r1: 70, t: 0.3, life: 0.3, color: '#ff7a3c' });
+    burst(world, e.x, e.y, 12, ['#ff5a2a', '#ffb040', '#fff0b0'], 180, 2, 0, 0.4);
+    const dmg = (world.stats.damage.mage || 2) * 0.8;
+    for (const o of world.enemies) if (!o.dead && o !== e && d2(o, e) < 70 * 70) { o.burn = Math.max(o.burn || 0, 1.5); o.burnDps = dmg; damage(world, o, dmg, 0, e, 'mage'); }
+  }
   if (e.event) world.run.eventsGot++;
   const pal = { vein: ['#ffd246', '#8c8f86', '#fff3a8'], goblin: ['#6fae4c', '#ffd246', '#4a7d34'], mimic: ['#9a6238', '#ffd246', '#8a1e2a'], wisp: ['#ff9a3c', '#ffe682', '#e65032'], golem: ['#be7850', '#8c5238', '#6a3a24'], wind: ['#e6f7fb', '#8ed2e6', '#ffffff'] }[e.type] || ['#ff5a2a', '#ffb040', '#fff0b0'];
   burst(world, e.x, e.y, e.boss ? 70 : e.gold ? 30 : 14, e.gold ? ['#ffd246', '#fff096', '#ffffff'] : pal, e.boss ? 320 : 150, 2, 0, e.boss ? 1.1 : 0.55);
@@ -635,6 +660,9 @@ function updateEnemies(world, dt) {
     if (p.y < 160) p.a = Math.PI / 2 + rnd(-0.6, 0.6); else if (p.y > h - 160) p.a = -Math.PI / 2 + rnd(-0.6, 0.6);
   }
   separate(world);
+  const st = world.stats || {};
+  const taunts = st.taunt ? world.heroes.filter(u => u.type === 'knight' && u.drop <= 0) : [];
+  const lament = st.lament || 0, auraBards = lament ? world.heroes.filter(u => u.type === 'bard' && u.drop <= 0) : [], aura2 = (st.bardAura || 0) ** 2;
   for (const e of world.enemies) {
     e.ph += dt * 3; e.age += dt; e.hit -= dt; e.slow = Math.max(0, e.slow - dt);
     if (e.atk > 0) e.atk -= dt;
@@ -644,10 +672,18 @@ function updateEnemies(world, dt) {
       const tx = Math.cos(p.a) + dx / d * pull * 1.5, ty = Math.sin(p.a) + dy / d * pull * 1.5;
       e.a = Math.atan2(ty, tx) + rnd(-0.4, 0.4);
     } else e.a += rnd(-1, 1) * dt * 1.2;
+    if (e.burn > 0) {
+      e.burn -= dt; e.burnT = (e.burnT || 0) - dt;
+      if (e.burnT <= 0) { e.burnT = 0.5; damage(world, e, (e.burnDps || 1) * 0.5, 0, null, 'mage'); if (Math.random() < 0.5) burst(world, e.x, e.y - 6, 2, ['#ff7a3c', '#ffd246'], 40, 1, 0, 0.3); }
+      if (e.dead) continue;
+    }
+    if (e.frozen > 0) { e.frozen -= dt; continue; }
     if (e.event && moveEventFoe(world, e, dt)) continue;
+    if (taunts.length && !e.boss) { for (const k of taunts) if (d2(k, e) < 170 * 170) { e.a = Math.atan2(k.y - e.y, k.x - e.x) + rnd(-0.3, 0.3); break; } }
     let sp = e.def.speed * (0.55 + 0.45 * Math.max(0, Math.sin(e.ph))) * ((world.stage && world.stage.mods.speed) || 1);
     if (e.gold) sp *= GOLD_WISP.speed;
     if (e.slow > 0) sp *= 1 - HEROES.mage.slow;
+    if (lament && auraBards.some(b => d2(b, e) < aura2)) sp *= 1 - lament;
     if (e.home && (e.x - e.home.x) ** 2 + (e.y - e.home.y) ** 2 > e.home.r * e.home.r) e.a = Math.atan2(e.home.y - e.y, e.home.x - e.x) + rnd(-0.5, 0.5);
     e.x += Math.cos(e.a) * sp * dt; e.y += Math.sin(e.a) * sp * dt;
     if (e.kx || e.ky) { e.x += e.kx * dt; e.y += e.ky * dt; const f = Math.pow(0.002, dt); e.kx *= f; e.ky *= f; }
@@ -676,7 +712,7 @@ function moveEventFoe(world, e, dt) {
     if (d > 22) { e.x += (near.x - e.x) / d * sp * dt; e.y += (near.y - e.y) / d * sp * dt; }
     e.bite = (e.bite || 0) - dt;
     if (d < 30 && e.bite <= 0) {
-      e.bite = 1.4; near.stun = Math.max(near.stun || 0, 1.1 * (world.stats.stunMult || 1));
+      e.bite = 1.4; stunHero(world, near, 1.1);
       world.texts.push({ x: near.x, y: near.y - 34, text: 'Croc !', color: '#ff6a5a', size: 16, life: 0.8 });
       sfx(world, 'hit', { crit: true }); shake(world, 3);
     }
@@ -707,9 +743,21 @@ function separate(world) {
 }
 
 function updateHeroes(world, dt) {
-  const s = world.stats;
+  const s = world.stats, r = world.run, has = s.has || {};
   const bards = world.heroes.filter(u => u.type === 'bard' && u.drop <= 0);
   const focus = focusActive(world), fp = focus ? pointerWorld(world) : null;
+  // ultimes : la jauge se remplit pendant l'expédition
+  if (r && r.ult && world.phase === 'expedition') for (const k of HERO_ORDER) if (s.ults && s.ults[k]) r.ult[k] = Math.min(1, r.ult[k] + dt / (s.ultCd || 30));
+  if (r && r.hymnT > 0) r.hymnT -= dt;
+  // renforts à mi-expédition
+  if (r && s.reinforce && !r.reinforced && world.mode === 'map' && r.t >= r.duration / 2) {
+    r.reinforced = true;
+    const k = HERO_ORDER.find(t => s.heroes[t] > 0) || 'archer';
+    r.toDrop[r.sel && s.heroes[r.sel] > 0 ? r.sel : k] += s.reinforce;
+    world.events.push({ kind: 'banner', title: 'Renforts !', sub: `+${s.reinforce} héros à larguer` });
+    world.events.push({ kind: 'reinforce' });
+  }
+  let boosted = 0;
   for (const u of world.heroes) {
     if (u.drop > 0) {
       u.drop -= dt * 3;
@@ -717,16 +765,25 @@ function updateHeroes(world, dt) {
         u.drop = 0; world.fx.push({ kind: 'ring', x: u.x, y: u.y + 10, r0: 6, r1: 34, t: 0.4, life: 0.4, color: '#fff6dc' });
         burst(world, u.x, u.y + 10, 12, ['#e8d8b0', '#c9b48e', '#ffffff'], 110, 2, 0, 0.45);
         shake(world, 3); sfx(world, 'land');
+        landing(world, u);
       }
       continue;
     }
+    if (u.dash) { dashStep(world, u, dt); continue; }
     if (u.stun > 0) { u.stun -= dt; u.moving = false; u.recoil = 0; continue; }
     const def = HEROES[u.type];
+    if (u.fury > 0) u.fury -= dt;
     // chanson du barde : les autres héros à portée agissent plus vite
     u.boost = bards.some(b => b !== u && d2(b, u) < s.bardAura * s.bardAura) ? s.bardBoost : 0;
-    u.bob += dt * 3; u.cd -= dt * (1 + u.boost);
+    if (u.boost > 0) boosted++;
+    let speed = 1 + u.boost;
+    if (s.opening && r && r.t < 3) speed *= 2;
+    if (r && r.hymnT > 0) speed *= 2;
+    if (u.type === 'knight' && has.knB) { u.rage = Math.max(0, (u.rage || 0) - dt * 0.15); speed *= 1 + u.rage; }
+    u.bob += dt * 3; u.cd -= dt * speed;
     u.recoil = Math.max(0, (u.recoil || 0) - dt * 6);
     if (u.boost > 0 && Math.random() < dt * 0.8) world.texts.push({ x: u.x + rnd(-8, 8), y: u.y - 34, text: '♪', color: '#ffe68a', size: 14, life: 0.7 });
+    classTick(world, u, dt);
     let t;
     if (focus) {
       t = nearestEnemy(world, u, fp);
@@ -738,9 +795,11 @@ function updateHeroes(world, dt) {
       }
     } else t = nearestEnemy(world, u);
     if (!t) { u.aiming = false; continue; }
+    const reach = def.range * ((s.range && s.range[u.type]) || 1) + (def.shot === 'melee' ? t.r : 0);
+    // Maître archer / Chasseur de primes : vise l'ennemi le plus riche à portée
+    if (u.type === 'archer' && s.master && !focus) { const rich = richestInRange(world, u, reach); if (rich) t = rich; }
     const dist = Math.sqrt(d2(u, t));
     u.face = t.x >= u.x ? 1 : -1;
-    const reach = def.range * ((s.range && s.range[u.type]) || 1) + (def.shot === 'melee' ? t.r : 0);
     if (dist > reach) {
       u.x += (t.x - u.x) / dist * def.walkSpeed * dt;
       u.y += (t.y - u.y) / dist * def.walkSpeed * dt;
@@ -750,19 +809,28 @@ function updateHeroes(world, dt) {
       if (u.cd > 0) continue;
       u.cd = s.cooldown[u.type];
       u.recoil = 1;
-      const dmg = s.damage[u.type];
+      const dmg = s.damage[u.type] * (u.fury > 0 ? 2 : 1);
       if (onScreen(world, u.x, u.y)) sfx(world, def.shot === 'melee' ? 'slash' : def.shot);
       if (def.shot === 'melee') {
         // coup circulaire : touche la cible et tout ce qui est autour
         for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave * (s.cleave || 1) + e.r) ** 2) damage(world, e, dmg, 0, u, u.type);
+        if (has.knB) u.rage = Math.min(1, (u.rage || 0) + 0.06);
         if (s.myths && s.myths.quake && Math.random() < 0.25) {   // mythique Séisme
           for (const e of world.enemies) if (!e.dead && d2(e, u) < 100 * 100) damage(world, e, dmg * 1.5, 0, u, u.type);
           world.fx.push({ kind: 'ring', x: u.x, y: u.y + 8, r0: 10, r1: 100, t: 0.4, life: 0.4, color: '#ffcf4a' }); shake(world, 3);
         }
-        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: s.looks && s.looks[u.type] ? `rgb(${s.looks[u.type].col})` : '#f0f4fa', face: u.face });
+        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: s.looks && s.looks[u.type] ? `rgb(${s.looks[u.type].col})` : has.knB1 ? '#ffcf4a' : '#f0f4fa', face: u.face });
+        if (has.knB1) world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 16, t: 0.3, life: 0.3, color: '#ffcf4a' });
       } else {
-        world.arrows.push({ kind: def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target: t, damage: dmg, type: u.type, dx: 0, dy: 0, speed: def.speed,
-          aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' ? s.slowTime || HEROES.mage.slowTime : 0 });
+        const fire = u.type === 'mage' && has.maB;
+        const shot = (target, k = 1) => world.arrows.push({ kind: fire ? 'fire' : def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target, damage: dmg * k, type: u.type, dx: 0, dy: 0, speed: def.speed,
+          aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' && !fire ? s.slowTime || HEROES.mage.slowTime : 0,
+          pierce: u.type === 'archer' ? s.pierce || 0 : 0, bounces: u.type === 'archer' ? s.bounce || 0 : 0, hit: null });
+        shot(t);
+        const others = n => { const l = []; for (const e of world.enemies) if (!e.dead && e !== t && d2(e, u) < reach * reach) l.push(e); return l.sort((a, b) => d2(a, t) - d2(b, t)).slice(0, n); };
+        if (u.type === 'archer' && has.arA) for (const o of others(2)) shot(o);          // Tireur d'élite : éventail
+        if (u.type === 'archer' && s.doubleShot && Math.random() < s.doubleShot) { const o = others(1)[0]; shot(o || t); }
+        if (u.type === 'mage' && s.archmage && Math.random() < 1 / 3) { const o = others(1)[0]; shot(o || t); }
         // mythique Écho : une note sur trois est rejouée vers une autre cible
         if (u.type === 'bard' && s.myths && s.myths.echo && Math.random() < 1 / 3) {
           let o = null, bd = reach * reach;
@@ -772,12 +840,168 @@ function updateHeroes(world, dt) {
       }
     }
   }
+  if (r && r.cnt && boosted >= 3) r.cnt.auraT += dt;
+  updateStrikes(world, dt);
+}
+
+function richestInRange(world, u, reach) {
+  let best = null, bv = -1;
+  for (const e of world.enemies) { if (e.dead || d2(e, u) > reach * reach) continue; const v = e.value / Math.max(1, e.hp); if (v > bv) { bv = v; best = e; } }
+  return best;
+}
+
+// Atterrissage : onde de choc, sol gelé, fureur.
+function landing(world, u) {
+  const s = world.stats, dmg = s.damage[u.type] || 1;
+  if (s.dropFury) u.fury = 3;
+  if (s.shockwave) {
+    for (const e of world.enemies) if (!e.dead && d2(e, u) < 100 * 100) damage(world, e, dmg * 2, 0, u, u.type);
+    world.fx.push({ kind: 'ring', x: u.x, y: u.y + 10, r0: 10, r1: 100, t: 0.4, life: 0.4, color: '#5fd6c0' }); shake(world, 4);
+  }
+  if (u.type === 'mage' && s.frostLand) world.zones.push({ x: u.x, y: u.y + 10, r: 90, t: 3, max: 3, dps: 0, slow: 2, type: 'mage', color: '#aee6ff' });
+}
+
+// Effets propres aux classes, à chaque instant.
+function classTick(world, u, dt) {
+  const s = world.stats, has = s.has || {}, dmg = s.damage[u.type] || 1;
+  u.timer = (u.timer || 0) + dt;
+  if (u.type === 'archer' && has.arB && u.timer >= 4) {        // Rôdeur : piège qui immobilise
+    const t = nearestEnemy(world, u);
+    if (t && d2(t, u) < 260 * 260) { u.timer = 0; world.zones.push({ x: t.x, y: t.y, r: 55, t: 2.5, max: 2.5, dps: dmg * 0.3, root: true, type: 'archer', color: '#86d873' }); }
+  }
+  if (u.type === 'mage') {
+    if (s.frostNova && (u.nova = (u.nova || 0) - dt) <= 0 && world.enemies.some(e => !e.dead && d2(e, u) < 40 * 40)) {
+      u.nova = 4;
+      for (const e of world.enemies) if (!e.dead && d2(e, u) < 95 * 95) { e.frozen = Math.max(e.frozen || 0, 1.2); damage(world, e, dmg, 2, u, 'mage'); }
+      world.fx.push({ kind: 'ring', x: u.x, y: u.y, r0: 10, r1: 95, t: 0.4, life: 0.4, color: '#aee6ff' });
+    }
+    if (has.maB2 && u.timer >= 6) {                               // Phénix : traverse l'écran
+      const t = nearestEnemy(world, u);
+      if (t) { u.timer = 0; const a = Math.atan2(t.y - u.y, t.x - u.x); world.strikes.push({ kind: 'phoenix', x: u.x, y: u.y - 10, vx: Math.cos(a) * 520, vy: Math.sin(a) * 520, t: 1.6, dmg: dmg * 4, hit: new Set(), type: 'mage' }); sfx(world, 'fire'); }
+    }
+  }
+  if (u.type === 'knight') {
+    if (has.knA1 && u.timer >= 3) {                              // Champion du sac
+      u.timer = 0;
+      for (const e of world.enemies) if (!e.dead && d2(e, u) < 115 * 115) damage(world, e, dmg * 2, 0, u, 'knight');
+      world.fx.push({ kind: 'ring', x: u.x, y: u.y + 6, r0: 10, r1: 115, t: 0.35, life: 0.35, color: '#fff3a8' });
+    }
+    if (has.knA2 && u.timer >= 0.5) {                            // Templier : aura de lumière
+      u.timer = 0;
+      for (const e of world.enemies) if (!e.dead && d2(e, u) < 90 * 90) damage(world, e, dmg * 0.3, 0, null, 'knight');
+    }
+  }
+  if (u.type === 'bard' && has.baB1 && u.timer >= 1.5) {           // Héraut des tempêtes : éclairs
+    u.timer = 0;
+    const l = world.enemies.filter(e => !e.dead && d2(e, u) < (s.bardAura || 150) ** 2 && onScreen(world, e.x, e.y));
+    const e = l[Math.floor(Math.random() * l.length)];
+    if (e) { world.fx.push({ kind: 'bolt', x: e.x, y: e.y, t: 0.25, life: 0.25, color: '#fff3a8' }); damage(world, e, dmg * 15, 0, null, 'bard'); sfx(world, 'hit', { crit: true }); }
+  }
+}
+
+// ---------- Ultimes ----------
+export function ultReady(world, k) { const r = world.run; return !!(r && r.ult && world.stats.ults && world.stats.ults[k] && r.ult[k] >= 1 && world.phase === 'expedition' && world.heroes.some(u => u.type === k && u.drop <= 0)); }
+function ultTarget(world) {
+  if (world.pointer.inside) return pointerWorld(world);
+  // groupe le plus dense à l'écran
+  let best = null, bn = -1;
+  const vis = world.enemies.filter(e => !e.dead && onScreen(world, e.x, e.y, 0));
+  for (let i = 0; i < Math.min(30, vis.length); i++) {
+    const e = vis[Math.floor(Math.random() * vis.length)];
+    let n = 0; for (const o of vis) if (d2(o, e) < 110 * 110) n++;
+    if (n > bn) { bn = n; best = e; }
+  }
+  return best ? { x: best.x, y: best.y } : { x: world.cam.x + world.w / 2, y: world.cam.y + world.h / 2 };
+}
+export function useUlt(world, k) {
+  if (!ultReady(world, k)) return false;
+  const r = world.run, s = world.stats, tg = ultTarget(world), dmg = s.damage[k] || 1;
+  r.ult[k] = 0;
+  const name = ULTS[k].name;
+  world.events.push({ kind: 'banner', title: name + ' !', sub: '' });
+  sfx(world, 'tier'); shake(world, 6);
+  if (k === 'archer') {
+    for (let i = 0; i < (s.rainN || 16); i++) {
+      const a = rnd(0, Math.PI * 2), d = Math.sqrt(Math.random()) * 120;
+      world.strikes.push({ kind: 'arrowRain', x: tg.x + Math.cos(a) * d, y: tg.y + Math.sin(a) * d * 0.8, t: 0.35 + i * 0.05, max: 0.35 + i * 0.05, r: 34, dmg: dmg * 2.5, type: 'archer' });
+    }
+  } else if (k === 'mage') {
+    const m = world.heroes.find(u => u.type === 'mage' && u.drop <= 0);
+    const a = Math.atan2(tg.y - m.y, tg.x - m.x), L = 950, ex = m.x + Math.cos(a) * L, ey = m.y + Math.sin(a) * L;
+    world.fx.push({ kind: 'ray', x: m.x, y: m.y - 12, x2: ex, y2: ey, t: 0.6, life: 0.6, color: '#aee6ff' });
+    for (const e of world.enemies) {
+      if (e.dead) continue;
+      const px = e.x - m.x, py = e.y - m.y, along = px * Math.cos(a) + py * Math.sin(a), off = Math.abs(-px * Math.sin(a) + py * Math.cos(a));
+      if (along < 0 || along > L || off > 36 + e.r) continue;
+      if (!e.boss) e.frozen = Math.max(e.frozen || 0, 2.5);
+      damage(world, e, dmg * 10 + (s.winter && !e.boss ? e.hp * s.winter : 0), 3, m, 'mage');
+    }
+  } else if (k === 'knight') {
+    for (const u of world.heroes) {
+      if (u.type !== 'knight' || u.drop > 0) continue;
+      const a = Math.atan2(tg.y - u.y, tg.x - u.x), T = 0.45;
+      u.dash = { vx: Math.cos(a) * (s.chargeLen || 260) / T, vy: Math.sin(a) * (s.chargeLen || 260) / T, t: T, hit: new Set() };
+      u.face = Math.cos(a) >= 0 ? 1 : -1; u.stun = 0;
+    }
+  } else if (k === 'bard') {
+    r.hymnT = s.hymnTime || 3;
+    for (const u of world.heroes) if (u.drop <= 0) world.fx.push({ kind: 'ring', x: u.x, y: u.y, r0: 6, r1: 50, t: 0.5, life: 0.5, color: '#ffe68a' });
+    if (s.has && s.has.baA1) { const v = Math.max(20, bagMax(s) * 0.06 * world.zone.valueMult); r.rain = { t: r.hymnT, left: v, rate: v / r.hymnT }; }
+  }
+  return true;
+}
+function dashStep(world, u, dt) {
+  const d = u.dash, s = world.stats, dmg = (s.damage.knight || 6) * 6;
+  u.x += d.vx * dt; u.y += d.vy * dt; d.t -= dt; u.moving = true; u.recoil = 0;
+  u.x = Math.max(20, Math.min(world.mapW - 20, u.x)); u.y = Math.max(20, Math.min(world.mapH - 20, u.y));
+  if (Math.random() < 0.6) burst(world, u.x, u.y + 8, 2, ['#e8d8b0', '#ffffff'], 60, 2, 0, 0.3);
+  for (const e of world.enemies) {
+    if (e.dead || d.hit.has(e) || d2(e, u) > (44 + e.r) ** 2) continue;
+    d.hit.add(e);
+    damage(world, e, dmg, 0, u, 'knight');
+    if (!e.boss && !e.def.still) { e.kx = (e.kx || 0) + d.vx * 0.6; e.ky = (e.ky || 0) + d.vy * 0.6; }
+  }
+  if (d.t <= 0) { u.dash = null; shake(world, 4); world.fx.push({ kind: 'ring', x: u.x, y: u.y + 8, r0: 8, r1: 70, t: 0.35, life: 0.35, color: '#c3cede' }); }
+}
+
+// Frappes différées (pluie de flèches, phénix) et zones alliées (pièges, givre, flammes).
+function updateStrikes(world, dt) {
+  for (const k of world.strikes) {
+    if (k.kind === 'phoenix') {
+      k.x += k.vx * dt; k.y += k.vy * dt; k.t -= dt;
+      burst(world, k.x, k.y, 2, ['#ff7a3c', '#ffd246', '#ff5a2a'], 60, 2, 0, 0.4);
+      for (const e of world.enemies) if (!e.dead && !k.hit.has(e) && d2(e, k) < (30 + e.r) ** 2) { k.hit.add(e); e.burn = 2; e.burnDps = k.dmg * 0.25; damage(world, e, k.dmg, 0, k, 'mage'); }
+      if (k.t <= 0) k.done = true;
+      continue;
+    }
+    k.t -= dt;
+    if (k.t > 0) continue;
+    k.done = true;
+    for (const e of world.enemies) if (!e.dead && d2(e, k) < (k.r + e.r) ** 2) damage(world, e, k.dmg, 0, k, k.type);
+    burst(world, k.x, k.y, 6, ['#e8d8b0', '#ffffff', '#ef6f52'], 90, 2, 0, 0.35);
+    if (Math.random() < 0.3) sfx(world, 'hit');
+  }
+  world.strikes = world.strikes.filter(k => !k.done);
+  for (const z of world.zones) {
+    z.t -= dt; z.tick = (z.tick || 0) - dt;
+    const tick = z.tick <= 0; if (tick) z.tick = 0.5;
+    for (const e of world.enemies) {
+      if (e.dead || d2(e, z) > (z.r + e.r) ** 2) continue;
+      if (z.slow) e.slow = Math.max(e.slow, 0.3);
+      if (z.root && !e.boss) e.frozen = Math.max(e.frozen || 0, 0.3);
+      if (z.burn) { e.burn = Math.max(e.burn || 0, 1.5); e.burnDps = z.dps; }
+      else if (tick && z.dps) damage(world, e, z.dps * 0.5, 0, null, z.type);
+    }
+  }
+  world.zones = world.zones.filter(z => z.t > 0);
 }
 
 // D'où part le tir sur le dessin (décalage vers l'avant, hauteur) : arc, pointe du bâton, luth.
 const SHOT_FROM = { archer: [14, 6], mage: [22, 8], bard: [10, 4] };
 
 function updateArrows(world, dt) {
+  const s = world.stats, has = s.has || {};
+  const extra = [];
   for (const a of world.arrows) {
     const t = a.target;
     const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy) || 1;
@@ -787,21 +1011,44 @@ function updateArrows(world, dt) {
     else if (d < t.r) {
       a.done = true;
       if (a.aoe) {
-        for (const e of world.enemies) if (!e.dead && d2(e, t) < (a.aoe + e.r) ** 2) damage(world, e, a.damage, a.slow, t, a.type);
-        burst(world, t.x, t.y, 10, ['#aee6ff', '#f0fbff', '#5a8cdc'], 120, 2, 0, 0.4);
-        world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 6, r1: a.aoe, t: 0.35, life: 0.35, color: '#aee6ff' });
+        const fire = a.kind === 'fire';
+        for (const e of world.enemies) if (!e.dead && d2(e, t) < (a.aoe + e.r) ** 2) {
+          if (fire) { e.burn = Math.max(e.burn || 0, 2); e.burnDps = a.damage * 0.5; }
+          damage(world, e, a.damage, a.slow, t, a.type);
+        }
+        const col = fire ? ['#ff7a3c', '#ffd246', '#ff5a2a'] : ['#aee6ff', '#f0fbff', '#5a8cdc'];
+        burst(world, t.x, t.y, 10, col, 120, 2, 0, 0.4);
+        world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 6, r1: a.aoe, t: 0.35, life: 0.35, color: col[0] });
+        if (a.small) continue;
+        if (fire) world.zones.push({ x: t.x, y: t.y, r: a.aoe * 0.9, t: 2, max: 2, dps: a.damage * 0.5, burn: true, type: 'mage', color: '#ff7a3c' });
+        if (has.maA) world.zones.push({ x: t.x, y: t.y, r: a.aoe * 1.1, t: 2, max: 2, dps: a.damage * 0.4, slow: 1, type: 'mage', color: '#d8f4ff' });
+        if (has.maA1) world.zones.push({ x: t.x, y: t.y, r: a.aoe * 1.6, t: 3, max: 3, dps: 0, slow: 2, type: 'mage', color: '#aee6ff' });
+        // Éclats multiples : de petits éclats repartent vers les voisins
+        if (s.shards) {
+          const near = world.enemies.filter(e => !e.dead && e !== t && d2(e, t) < 160 * 160).sort(() => Math.random() - 0.5).slice(0, s.shards);
+          for (const e of near) extra.push({ kind: a.kind, small: true, x: t.x, y: t.y, target: e, damage: a.damage * 0.4, type: a.type, dx: 0, dy: 0, speed: 380, aoe: a.aoe * 0.45, slow: a.slow });
+        }
       } else {
         damage(world, t, a.damage, 0, { x: t.x - a.dx, y: t.y - a.dy }, a.type);
-        // mythique Ricochet : la flèche repart vers l'ennemi le plus proche
-        if (a.kind === 'arrow' && !a.bounced && world.stats.myths && world.stats.myths.bounce) {
-          let best = null, bd = 200 * 200;
-          for (const e of world.enemies) { if (e.dead || e === t) continue; const dd = d2(e, t); if (dd < bd) { bd = dd; best = e; } }
-          if (best) world.arrows.push({ ...a, x: t.x, y: t.y, target: best, bounced: true, done: false });
+        if (a.kind !== 'arrow') continue;
+        // perçante : la flèche continue droit devant ; rebondissante (ou mythique Ricochet) : elle repart vers un voisin
+        const hit = a.hit || new Set(); hit.add(t);
+        let next = null;
+        if (a.pierce > 0) {
+          let bd = 240 * 240;
+          for (const e of world.enemies) { if (e.dead || hit.has(e)) continue; const ex = e.x - t.x, ey = e.y - t.y, dd = ex * ex + ey * ey; if (dd < bd && (ex * a.dx + ey * a.dy) / (Math.sqrt(dd) || 1) > 0.6) { bd = dd; next = e; } }
+          if (next) extra.push({ ...a, x: t.x, y: t.y, target: next, pierce: a.pierce - 1, hit, done: false });
+        }
+        const myth = !a.bounced && s.myths && s.myths.bounce;
+        if (!next && (a.bounces > 0 || myth)) {
+          let bd = 200 * 200;
+          for (const e of world.enemies) { if (e.dead || hit.has(e)) continue; const dd = d2(e, t); if (dd < bd) { bd = dd; next = e; } }
+          if (next) extra.push({ ...a, x: t.x, y: t.y, target: next, bounces: a.bounces > 0 ? a.bounces - 1 : 0, bounced: true, hit, done: false });
         }
       }
     }
   }
-  world.arrows = world.arrows.filter(a => !a.done);
+  world.arrows = world.arrows.filter(a => !a.done).concat(extra);
 }
 
 function updateCoins(world, dt) {
