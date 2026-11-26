@@ -146,7 +146,19 @@ export const SLOTS = [
   { id: 'charm1', name: 'Charme', node: 'charm1' },
   { id: 'charm2', name: 'Charme', node: 'charm2' },
 ];
-export const RESERVE = 30;          // places dans la réserve
+export const RESERVE = 30;          // places dans la réserve (+10 par niveau du Coffre de l'armurier)
+export const reserveSize = level => RESERVE + 10 * ((level && level.chest) || 0);
+// Relance de l'effet secondaire : effets possibles, coût en éclats
+export const ALT_STATS = { weapon: ['rate', 'crit', 'critDmg', 'range', 'boss', 'aoe', 'gold', 'drop'],
+  charm: ['dmg', 'rate', 'crit', 'critDmg', 'range', 'boss', 'gold', 'drop', 'goldWisp', 'tear', 'event', 'aoe'] };
+export const rerollCost = it => Math.ceil(4 * (it.rarity + 1) * (1 + 0.5 * (it.rerolls || 0)));
+export function rerollAlt(it, rnd = Math.random) {
+  const main = KINDS[it.kind].stat, cur = it.alt ? it.alt[0] : null;
+  const pool = ALT_STATS[it.kind === 'weapon' ? 'weapon' : 'charm'].filter(st => st !== main && st !== cur);
+  it.alt = [pool[Math.floor(rnd() * pool.length)], Math.round((0.3 + 0.5 * rnd()) * 100) / 100];
+  it.rerolls = (it.rerolls || 0) + 1;
+  return it;
+}
 export const REFINE_MAX = 15;
 export const DROP = { chance: 0.005, gold: 0.08, event: 0.6, perRun: 4 };
 
@@ -179,7 +191,7 @@ const round = v => v >= 10 ? Math.round(v) : Math.round(v * 10) / 10;
 export function itemEffects(it, refine = 0) {
   const k = KINDS[it.kind], m = it.power / 10 * (1 + 0.1 * refine);
   const out = [[k.stat, round(k.per * m)]];
-  const bo = it.kind === 'weapon' ? model(it).bonus : k.bonus;
+  const bo = it.alt || (it.kind === 'weapon' ? model(it).bonus : k.bonus);
   if (bo) out.push([bo[0], round(STAT_PER[bo[0]] * bo[1] * m)]);
   return out;
 }

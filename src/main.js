@@ -7,7 +7,7 @@ import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, po
 import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
-import { gearOf, gearBonus, RESERVE, albumKey } from './gear.js';
+import { gearOf, gearBonus, reserveSize, albumKey } from './gear.js';
 import { initCompany, gearIconCanvas, showLoot, companyRefresh, gearSheetReady } from './company.js';
 let iconSheet = null;
 treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
@@ -279,7 +279,7 @@ function storeItems(items) {
     it.isNew = true;
     const key = albumKey(it);
     if (!g.found[key]) { g.found[key] = 1; it.albumNew = true; g.albumNews = (g.albumNews || 0) + 1; }
-    if (g.inv.length < RESERVE) { g.inv.push(it); g.news++; } else { it.recycled = true; g.shards += [1, 3, 8, 20, 50][it.rarity]; }
+    if (g.inv.length < reserveSize(save.level)) { g.inv.push(it); g.news++; } else { it.recycled = true; g.shards += [1, 3, 8, 20, 50][it.rarity]; }
     out.push(it);
   }
   g.firstDone = true;

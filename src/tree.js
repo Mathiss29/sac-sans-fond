@@ -148,6 +148,7 @@ const RAW = [
  ['charm1','refine',-4,3,'Emplacement de charme','equip','g_ring','unlock',1,'Chaque lignée peut porter un charme',1],
  ['charm2','charm1',-4,4,'Deuxième charme','equip','g_moon','unlock',1,'Un deuxième emplacement de charme par lignée',1],
  ['looks','charm2',-5,4,'Garde-robe','equip','helmet','unlock',1,'Change l\'apparence de tes héros',0],
+ ['chest','armory',-5,1,'Coffre de l\'armurier','equip','g_satchel','up',3,'+10 places dans la réserve d\'équipement par niveau',1],
  ['recycle','refine',-5,2,'Recyclage','equip','g_shard','unlock',1,'Recycle les objets en trop contre du minerai pour l\'affinage',1],
  ['blessed','recycle',-5,3,'Affinage béni','equip','g_shard','up',5,'+4 % de chance de réussite de l\'affinage par niveau',1],
 
@@ -273,6 +274,7 @@ const SPEC = {
   refine: [3500, 1, () => 'Affinage des emplacements'],
   recycle: [2500, 1, () => 'Objets recyclés en éclats'],
   blessed: [3000, 2, l => `Affinage : +${4 * l} % de réussite`],
+  chest: [4000, 2.5, l => `Réserve : ${30 + 10 * l} places`],
   charm1: [6000, 1, () => '1 charme par lignée'],
   charm2: [20000, 1, () => '2 charmes par lignée'],
 };

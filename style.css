@@ -686,3 +686,4 @@ button[disabled] { cursor: var(--cur) !important; }
 .aCell { width: 40px; height: 40px; padding: 2px; background: #1a1f17; border: 2px solid var(--r); }
 .aCell.miss { border-color: #2f362a; }
 .aCell.miss canvas { filter: brightness(0) opacity(.35); }
+.cItem .lk { position: absolute; left: 1px; top: 0; font-size: 10px; z-index: 3; filter: drop-shadow(0 1px 0 #000); }

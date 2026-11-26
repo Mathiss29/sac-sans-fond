@@ -1,7 +1,7 @@
 // Onglet Compagnie : équipement des lignées, forge (affinage), réserve et recyclage ; écran « Sers-toi ! ».
 import { HEROES, HERO_ORDER } from './data.js';
 import { TREE_ICONS, treeIcons } from './sprites.js';
-import { RARITIES, GEAR_ICONS, ICON_FALLBACK, WEAPONS, KINDS, CHARM_KINDS, SETS, MYTHS, setOf, setCount, mythText, albumKey, albumBonus, ALBUM_STEP, STAT_TEXT, SLOTS, RESERVE, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText,
+import { RARITIES, GEAR_ICONS, ICON_FALLBACK, WEAPONS, KINDS, CHARM_KINDS, SETS, MYTHS, setOf, setCount, mythText, albumKey, albumBonus, ALBUM_STEP, STAT_TEXT, SLOTS, reserveSize, rerollCost, rerollAlt, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText, itemEffects,
   isBetter, refineCost, refineChance, gearBonus } from './gear.js';
 
 const $ = id => document.getElementById(id);
@@ -153,14 +153,16 @@ function renderLines(g) {
 function renderCenter(g) {
   const col = h('div', 'cPanel cCenter');
   const sub = h('div', 'cSub');
-  for (const [id, label, need] of [['equip', 'Équiper', 'armory'], ['refine', 'Affiner', 'refine']]) {
+  for (const [id, label, need] of [['equip', 'Équiper', 'armory'], ['refine', 'Affiner', 'refine'], ['reroll', 'Relancer', 'refine']]) {
     const b = h('button', 'cSubTab' + (tab === id ? ' on' : ''), label); b.type = 'button';
     if (!L(need)) { b.disabled = true; b.title = 'Débloque « Forge : affinage » dans l\'arbre'; b.textContent = '🔒 ' + label; }
     b.onclick = () => { tab = id; render(); };
     sub.append(b);
   }
   col.append(sub);
-  if (tab === 'refine' && L('refine')) col.append(renderRefine(g)); else col.append(renderEquip(g));
+  if (tab === 'refine' && L('refine')) col.append(renderRefine(g));
+  else if (tab === 'reroll' && L('refine')) col.append(renderReroll(g));
+  else col.append(renderEquip(g));
   return col;
 }
 
@@ -184,7 +186,7 @@ function slotCard(g, s, big = true) {
   if (it && big) {
     card.title = 'Clique pour ranger dans la réserve';
     card.onclick = () => {
-      if (g.inv.length >= RESERVE) return;
+      if (g.inv.length >= reserveSize(C.save.level)) return;
       g.inv.push(it); g.eq[line][s.id] = null; changed('click');
     };
   }
@@ -265,10 +267,51 @@ function renderRefine(g) {
   return w;
 }
 
+// Relance : retire au sort l'effet secondaire de l'objet d'un emplacement, contre des éclats
+function renderReroll(g) {
+  const w = h('div', 'cRefine');
+  const pick = h('div', 'cRefPick');
+  for (const s of SLOTS) {
+    const b = h('button', 'cRefSlot' + (refSlot === s.id ? ' on' : '')); b.type = 'button';
+    const it = g.eq[line][s.id];
+    if (!slotOpen(s.id)) { b.disabled = true; b.append(h('span', 'ph', '🔒')); }
+    else if (it) { b.append(iconEl(itemIcon(it))); b.style.setProperty('--r', RARITIES[it.rarity].color); rarFx(b, it.rarity); }
+    else b.append(h('span', 'ph', s.id === 'weapon' ? '⚔' : '✦'));
+    b.onclick = () => { refSlot = s.id; render(); };
+    pick.append(b);
+  }
+  if (!slotOpen(refSlot)) refSlot = 'weapon';
+  const it = g.eq[line][refSlot];
+  w.append(pick);
+  if (!it) { w.append(h('p', 'cHint', 'Équipe un objet dans cet emplacement pour relancer son effet secondaire.')); return w; }
+  const title = h('div', 'cRefTitle', itemName(it)); title.style.color = RARITIES[it.rarity].color;
+  const ic = h('div', 'cAnvil'); ic.append(iconEl('rune', 'anvil'));
+  w.append(title, ic);
+  const rf = g.ref[line][refSlot] || 0, eff = itemEffects(it, rf);
+  const fmtE = ([st, v]) => STAT_TEXT[st](String(v).replace('.', ','));
+  w.append(h('div', 'cNow', 'Effet principal : ' + fmtE(eff[0])));
+  w.append(h('div', 'cNext', eff[1] ? 'Effet secondaire : ' + fmtE(eff[1]) : 'Pas encore d\'effet secondaire'));
+  w.append(h('div', 'cFail', 'La relance tire un nouvel effet secondaire au hasard (différent de l\'actuel).'));
+  const cost = rerollCost(it);
+  const btn = h('button', 'cRefBtn'); btn.type = 'button';
+  btn.append(h('span', 'lbl', eff[1] ? 'Relancer' : 'Enchanter'), h('span', 'sep'));
+  const c2 = h('span', 'cost' + (g.shards < cost ? ' no' : '')); c2.append(iconEl('shard', 'mIco'), ' ' + cost); btn.append(c2);
+  btn.disabled = g.shards < cost;
+  btn.onclick = () => {
+    if (g.shards < cost) return;
+    g.shards -= cost; rerollAlt(it);
+    changed('tier');
+    $('company').querySelector('.cAnvil')?.append(h('div', 'cRefFx ok', '✦'));
+  };
+  w.append(btn);
+  if (!L('recycle')) w.append(h('p', 'cHint', 'Il faut des éclats : débloque le Recyclage dans l\'arbre.'));
+  return w;
+}
+
 function renderReserve(g) {
   const col = h('div', 'cPanel cReserve');
   const top = h('div', 'cTitle');
-  top.append(h('span', '', `Réserve ${g.inv.length}/${RESERVE}`));
+  top.append(h('span', '', `Réserve ${g.inv.length}/${reserveSize(C.save.level)}`));
   const sh = h('span', 'shards num'); sh.append(iconEl('shard', 'mIco'), ' ' + C.fmt(g.shards)); sh.title = 'Éclats : obtenus en recyclant, servent à l\'affinage';
   top.append(sh);
   col.append(top);
@@ -287,14 +330,17 @@ function renderReserve(g) {
     if (it.isNew) cell.append(h('b', 'nw', '!'));
     cell.onmouseenter = () => { detail(g, it); };
     cell.onfocus = () => detail(g, it);
+    if (it.locked) cell.append(h('b', 'lk', '🔒'));
+    cell.title = it.locked ? 'Verrouillé (clic droit pour déverrouiller)' : 'Clic droit : verrouiller';
+    cell.oncontextmenu = e => { e.preventDefault(); it.locked = !it.locked; it.isNew = false; changed('click'); detail(g, it); };
     cell.onclick = () => {
       it.isNew = false;
-      if (recycleMode) { recycle(g, [it]); return; }
+      if (recycleMode) { if (it.locked) { flashHint('Objet verrouillé : clic droit pour le déverrouiller.'); return; } recycle(g, [it]); return; }
       equip(g, it);
     };
     grid.append(cell);
   }
-  for (let i = g.inv.length; i < RESERVE; i++) grid.append(h('span', 'cItem empty'));
+  for (let i = g.inv.length; i < reserveSize(C.save.level); i++) grid.append(h('span', 'cItem empty'));
   col.append(grid);
   col.append(h('div', 'cDetail', 'Survole un objet pour voir ses effets.'));
   const foot = h('div', 'cRecycle');
@@ -303,7 +349,7 @@ function renderReserve(g) {
     rb.onclick = () => { recycleMode = !recycleMode; render(); };
     foot.append(rb);
     for (let r = 0; r < 2; r++) {
-      const list = g.inv.filter(x => x.rarity === r);
+      const list = g.inv.filter(x => x.rarity === r && !x.locked);
       const b = h('button', 'cBtn small', `Recycler les ${RARITIES[r].name.toLowerCase()}s (${list.length})`); b.type = 'button';
       b.style.color = RARITIES[r].color; b.disabled = !list.length;
       b.onclick = () => recycle(g, list);
@@ -333,6 +379,7 @@ function detail(g, it) {
     const diff = it.power - (cur ? cur.power : 0);
     d.append(h('div', 'cmp ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : ''), cur ? `${diff > 0 ? '▲ +' : diff < 0 ? '▼ ' : '= '}${diff} de puissance par rapport à ${itemName(cur)}` : '▲ Emplacement vide'));
   }
+  d.append(h('div', 'meta', it.locked ? '🔒 Verrouillé · clic droit pour déverrouiller' : 'Clic droit : verrouiller (protège du recyclage)'));
   if (recycleMode) d.append(h('div', 'meta', `Recyclage : +${r.shards} éclat${r.shards > 1 ? 's' : ''}`));
 }
 
