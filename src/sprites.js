@@ -224,6 +224,19 @@ const CROWN = [
   'OYYYYYYYYYO',
   '.OOOOOOOOO.',
 ];
+const POUCH = [
+  '...OOOOO...',
+  '..OppppPO..',
+  '.OOOOOOOOO.',
+  'OllyyyyyYYO',
+  'OlyyOOOyyYO',
+  'OyyyOlOyyYO',
+  'OyyyyOyyYYO',
+  'OYyyyyyyYYO',
+  '.OYYYYYYYO.',
+  '..OOOOOOO..',
+];
+const POUCH_PAL = { O: '#2a1a14', y: '#9a6238', l: '#c99a62', Y: '#5a341c', p: '#9a5a86', P: '#6a3a5a' };
 const LOOT_PAL = { O: '#5a2e10', y: '#ffcd3c', l: '#fff5b4', Y: '#d28c1e', w: '#ffffff', b: '#5fd6f0', B: '#1d6f8a', r: '#ff5a5a', R: '#a8201e' };
 const GEM_PAL = { ...LOOT_PAL, O: '#123a52', l: '#b8f2ff' };
 
@@ -419,7 +432,7 @@ export function buildSprites() {
     mimic: mk(MIMIC, MIMIC_PAL),
   };
   SPR.coin = toCanvas(COIN, COIN_PAL);
-  SPR.loot = { coin: SPR.coin, bar: toCanvas(BAR, LOOT_PAL), gem: toCanvas(GEM, GEM_PAL), crown: toCanvas(CROWN, LOOT_PAL) };
+  SPR.loot = { coin: SPR.coin, bar: toCanvas(BAR, LOOT_PAL), gem: toCanvas(GEM, GEM_PAL), crown: toCanvas(CROWN, LOOT_PAL), pouch: toCanvas(POUCH, POUCH_PAL) };
   SPR.ready = true;
   return SPR;
 }

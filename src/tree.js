@@ -143,13 +143,13 @@ const RAW = [
  ['bard3','bard2',-8,0,'Bardes ×3','bard','bard','major',1,'Trois bardes par expédition',0,'','×3'],
 
  // Équipement : débloqué par l'arbre, sous la lignée des chevaliers
- ['armory','knight3',-4,1,'Armurerie','equip','sword','major',1,'Débloque l\'équipement : chaque lignée de héros reçoit un emplacement d\'arme et les ennemis lâchent des besaces',0],
- ['refine','armory',-4,2,'Forge : affinage','equip','sword','unlock',1,'Affine l\'emplacement d\'arme d\'une lignée (le bonus reste si tu changes d\'arme)',0],
- ['charm1','refine',-4,3,'Emplacement de charme','equip','crystal','unlock',1,'Chaque lignée peut porter un charme',0],
- ['charm2','charm1',-4,4,'Deuxième charme','equip','crystal','unlock',1,'Un deuxième emplacement de charme par lignée',0],
+ ['armory','knight3',-4,1,'Armurerie','equip','g_satchel','major',1,'Débloque l\'équipement : chaque lignée de héros reçoit un emplacement d\'arme et les ennemis lâchent des besaces',1],
+ ['refine','armory',-4,2,'Forge : affinage','equip','g_anvil','unlock',1,'Affine l\'emplacement d\'arme d\'une lignée (le bonus reste si tu changes d\'arme)',1],
+ ['charm1','refine',-4,3,'Emplacement de charme','equip','g_ring','unlock',1,'Chaque lignée peut porter un charme',1],
+ ['charm2','charm1',-4,4,'Deuxième charme','equip','g_moon','unlock',1,'Un deuxième emplacement de charme par lignée',1],
  ['looks','charm2',-5,4,'Garde-robe','equip','helmet','unlock',1,'Change l\'apparence de tes héros',0],
- ['recycle','refine',-5,2,'Recyclage','equip','needlebag','unlock',1,'Recycle les objets en trop contre du minerai pour l\'affinage',0],
- ['blessed','recycle',-5,3,'Affinage béni','equip','crystal','up',5,'+4 % de chance de réussite de l\'affinage par niveau',0],
+ ['recycle','refine',-5,2,'Recyclage','equip','g_shard','unlock',1,'Recycle les objets en trop contre du minerai pour l\'affinage',1],
+ ['blessed','recycle',-5,3,'Affinage béni','equip','g_shard','up',5,'+4 % de chance de réussite de l\'affinage par niveau',1],
 
  // Événements : chaque type entre dans le tirage par un nœud
  ['evVein','hunter',-3,-5,'Événement : filon d\'or','recolte','e_vein','unlock',1,'Ajoute le filon d\'or aux événements possibles',1],
@@ -269,6 +269,12 @@ const SPEC = {
   sandglass: [600, 2.5, l => `+${3 * l} s par expédition`],
   horde: [180, 2, l => `Apparitions +${20 * l} %`],
   bossDmg: [300, 2, l => `Dégâts aux boss ×${fmtNum(1 + 0.1 * l)}`],
+  armory: [2500, 1, () => 'Onglet Compagnie, emplacement d\'arme, besaces'],
+  refine: [3500, 1, () => 'Affinage des emplacements'],
+  recycle: [2500, 1, () => 'Objets recyclés en éclats'],
+  blessed: [3000, 2, l => `Affinage : +${4 * l} % de réussite`],
+  charm1: [6000, 1, () => '1 charme par lignée'],
+  charm2: [20000, 1, () => '2 charmes par lignée'],
 };
 // Descriptions réécrites pour coller à l'effet réel.
 const DESC = {
@@ -278,6 +284,9 @@ const DESC = {
   sandglass: 'Chaque expédition dure un peu plus longtemps.',
   heavyCoins: 'Tout le butin des élémentaires vaut un peu plus.',
   steel: 'Les flèches font plus mal (à venir).',
+  armory: 'Débloque la Compagnie : chaque lignée de héros reçoit un emplacement d\'arme, et les ennemis lâchent parfois des besaces d\'équipement.',
+  refine: 'À la forge, affine l\'emplacement d\'une lignée : son objet devient plus fort. Le bonus reste si tu changes d\'objet.',
+  recycle: 'Recycle les objets en trop contre des éclats, nécessaires aux affinages avancés.',
 };
 
 let depth = {};

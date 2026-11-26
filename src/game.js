@@ -1,5 +1,6 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
 import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, bagMax, tierOf } from './data.js';
+import { rollItem, RARITIES, DROP } from './gear.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -96,7 +97,7 @@ function eventSpot(world) {
   }
   return { x: b.x + 260, y: b.y };
 }
-function foeHp(world, type) { return ENEMIES[type].hp * Math.max(1, world.stats.damage.archer / HEROES.archer.damage) * world.zone.hpMult; }
+function foeHp(world, type) { return ENEMIES[type].hp * Math.max(1, (world.stats.archerBase || world.stats.damage.archer) / HEROES.archer.damage) * world.zone.hpMult; }
 function startEvent(world, ev) {
   const def = EVENTS[ev.kind], p = eventSpot(world), r = world.run;
   ev.done = true;
@@ -201,8 +202,9 @@ export function enterArena(world) {
 
 function exitArena(world) {
   const r = world.run, a = r.arena;
-  // pièces restées au sol : perdues. Pièces en vol : comptées.
-  for (const c of world.coins) if (c.fly) credit(world, c.value);
+  // pièces restées au sol : perdues. Pièces en vol : comptées. Besaces : gardées.
+  keepPouches(world);
+  for (const c of world.coins) if (c.fly && !c.dead) credit(world, c.value);
   r.lair.done = true;
   if (r.lair.only) { world.coins = []; world.phase = 'done'; world.events.push({ kind: 'done' }); return; }
   const st = r.stash, p = portalPos(world);
@@ -382,10 +384,11 @@ function nearestEnemy(world, p, zone = null) {
 
 function damage(world, e, amount, slow, from, type) {
   if (e.dead) return;
-  if (e.boss) amount *= world.stats.bossMult;
+  const st = world.stats;
+  if (e.boss) amount *= st.bossMult * ((st.bossBy && st.bossBy[type]) || 1);
   if (slow) e.slow = Math.max(e.slow, slow);
-  const crit = Math.random() < (world.stats.critChance || 0.12);
-  if (crit) amount *= world.stats.critMult || 2;
+  const crit = Math.random() < (st.critChance || 0.12) + ((st.critBy && st.critBy[type]) || 0);
+  if (crit) amount *= (st.critMult || 2) * ((st.critMultBy && st.critMultBy[type]) || 1);
   if (e.def.dodge && Math.random() < e.def.dodge) {
     world.texts.push({ x: e.x, y: e.y - e.r - 6, text: 'esquive', color: '#d6f2ff', size: 12, life: 0.7 });
     return;
@@ -420,6 +423,32 @@ function damage(world, e, amount, slow, from, type) {
   if (e.hp <= 0) killEnemy(world, e);
 }
 
+// ---------- Besaces d'équipement ----------
+// Une fois l'Armurerie achetée, certains ennemis lâchent une besace : elle file seule vers le sac.
+function maybePouch(world, e) {
+  const s = world.stats, r = world.run, gc = world.gearCtx;
+  if (!s.gearOn || !gc || !r) return;
+  r.pouches = r.pouches || 0;
+  let ch = (e.boss ? 1 : e.event ? DROP.event : e.gold ? DROP.gold : DROP.chance) * (s.dropMult || 1);
+  if (gc.first && !r.pouches && r.kills >= 20) ch = 1;   // première expédition armée : une besace garantie
+  if (!e.boss && r.pouches >= DROP.perRun) return;
+  if (Math.random() >= ch) return;
+  r.pouches++;
+  const item = rollItem(gc, 0);
+  world.coins.push({ x: e.x, y: e.y, vx: rnd(-40, 40), vy: rnd(-40, 40), kind: 'pouch', item, value: 0, life: 99, max: 99,
+    fly: false, sp: 0, z: 0, vz: 340, spin: 0, auto: 1.3 });
+  world.texts.push({ x: e.x, y: e.y - 34, text: 'Besace !', color: RARITIES[item.rarity].color, size: 18, life: 1.4 });
+  sfx(world, 'gold');
+}
+function gotItem(world, item) {
+  const r = world.run; r.items = r.items || [];
+  r.items.push(item);
+}
+// avant de vider le sol : les besaces ne se perdent jamais
+function keepPouches(world) {
+  for (const c of world.coins) if (c.item && !c.dead) { c.dead = true; gotItem(world, c.item); }
+}
+
 function killEnemy(world, e) {
   e.dead = true;
   world.run.kills++;
@@ -447,6 +476,7 @@ function killEnemy(world, e) {
       value: pc.value, life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0, z: 0, vz: rnd(160, 300), spin: rnd(0, 6) });
   }
   world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 2.2, t: 0.35, life: 0.35, color: e.def.color });
+  maybePouch(world, e);
 }
 
 // Clic maintenu (ou Espace) : pendant l'expédition c'est le Focus (les héros ne visent que la zone
@@ -735,9 +765,10 @@ function updateCoins(world, dt) {
       const dx = target.x - c.x, dy = target.y - c.y, d = Math.hypot(dx, dy) || 1;
       c.sp += 1400 * dt;
       c.x += dx / d * c.sp * dt; c.y += dy / d * c.sp * dt;
-      if (d < 14) { c.dead = true; credit(world, c.value); }
+      if (d < 14) { c.dead = true; if (c.item) gotItem(world, c.item); else credit(world, c.value); }
       continue;
     }
+    if (c.item) { c.auto -= dt; if (c.auto <= 0 && c.z <= 0) { c.fly = true; c.sp = 80; } }
     c.x += c.vx * dt; c.y += c.vy * dt;
     const fr = Math.pow(0.04, dt); c.vx *= fr; c.vy *= fr;
     if (c.vz !== undefined) { c.vz -= 900 * dt; c.z += c.vz * dt; if (c.z <= 0) { c.z = 0; c.vz = Math.abs(c.vz) > 60 ? -c.vz * 0.45 : 0; } }
@@ -770,7 +801,8 @@ function startTear(world) {
   world.phase = 'tear';
   for (const e of world.enemies) world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 1.6, t: 0.4, life: 0.4, color: e.def.color });
   world.enemies = []; world.arrows = [];
-  for (const c of world.coins) if (c.fly) addToBag(world, c.value);
+  keepPouches(world);
+  for (const c of world.coins) if (c.fly && !c.dead) addToBag(world, c.value);
   world.coins = [];
   r.tier = tierOf(r.bag, world.stats);
   r.mult = TIERS[r.tier].mult * (r.full ? FULL_BONUS : 1);
@@ -836,7 +868,9 @@ function tearWave(world) {
 function endTear(world) {
   const r = world.run;
   let left = 0;
+  keepPouches(world);
   for (const c of world.coins) {
+    if (c.dead) continue;
     if (c.fly) { r.tearGot += c.value; world.events.push({ kind: 'coins', value: c.value }); } else left += c.value;
   }
   world.coins = [];

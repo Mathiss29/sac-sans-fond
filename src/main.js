@@ -6,13 +6,17 @@ import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, po
 import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
+import { gearOf, gearBonus, RESERVE } from './gear.js';
+import { initCompany, gearIconCanvas, showLoot, companyRefresh, gearSheetReady } from './company.js';
 let iconSheet = null;
 treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
 
 const $ = id => document.getElementById(id);
 const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
 let save = loadSave();
-let stats = computeStats(save.level);
+// stats du moment : arbre + équipement de la Compagnie
+function calcStats() { return computeStats(save.level, save.gear ? gearBonus(save.gear, save.level) : null); }
+let stats = calcStats();
 let dpr = 1;
 const world = createWorld(800, 600);
 world.zone = ZONES[0];
@@ -118,15 +122,22 @@ function showRunUi() {
 function go() { wipe(goNow); }
 function goNow() {
   $('phase').hidden = true;
-  stats = computeStats(save.level);
+  stats = calcStats(); world.gearCtx = gearCtx();
   startExpedition(world, stats, ZONES[0], lairInfo(), stageFor(save.expeditions));
   showRunUi();
 }
 function goLair() {
   if (!lairOpen()) return;
-  stats = computeStats(save.level);
+  stats = calcStats(); world.gearCtx = gearCtx();
   startLair(world, stats, ZONES[0], lairInfo());
   showRunUi();
+}
+// Ce qu'il faut pour tirer un objet : lignées possédées, charmes débloqués, niveau des objets.
+function gearCtx() {
+  if (!(save.level.armory > 0)) return null;
+  const g = gearOf(save);
+  return { lines: HERO_ORDER.filter(k => stats.heroes[k] > 0), charms: save.level.charm1 > 0,
+    ilvl: Math.min(8, (save.maxTier || 0) + ((save.bosses || {})[ZONES[0].id] || 0)), first: !g.firstDone };
 }
 // Dans l'antre : pas de sac ni de mini-carte ; flèches seulement si la salle dépasse de l'écran.
 function arenaUi() {
@@ -177,6 +188,8 @@ function finishExpedition() {
   if (!r.lair.only) save.maxTier = Math.max(save.maxTier || 0, r.tier);
   const unlocked = !lairOpen() && r.tier >= ARENA.unlockTier;
   if (unlocked) save.lairOpen = true;
+  // objets trouvés : rangés dans la réserve (ceux qui ne rentrent pas sont recyclés en éclats)
+  const found = storeItems(r.items || []);
   writeSave(save);
   const rows = [['Élémentaires vaincus', fmt(r.kills), '#c4c8b2']];
   if (!r.lair.only) {
@@ -190,6 +203,7 @@ function finishExpedition() {
     rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got), '#ff9f7a']);
   }
   if (unlocked) rows.push([world.zone.boss.lair, 'portail ouvert !', '#c8a2ff']);
+  if (found.length) rows.push(['Besaces d\'équipement', String(found.length), '#c07aff']);
   const dl = $('resList'); dl.innerHTML = '';
   for (const [a, b, c] of rows) {
     const dt = document.createElement('dt'); dt.textContent = a; dt.style.setProperty('--c', c);
@@ -235,23 +249,38 @@ function finishExpedition() {
   $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true; $('attrBox').hidden = true;
   $('phase').hidden = true;
   // la scène s'assombrit d'abord sur le sac, puis le bilan glisse depuis la droite et le total compte
-  setTimeout(() => {
+  const showResult = () => {
     if (world.phase !== 'done') return;
     $('result').hidden = false;
     $('back').focus();
     const t0 = performance.now(), el = $('resTotal');
     const tick = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = '+' + fmt(Math.round(gained * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(tick); };
     el.textContent = '+0'; requestAnimationFrame(tick);
-  }, world.mode === 'arena' ? 200 : 750);
+  };
+  // écran « Sers-toi ! » d'abord s'il y a des objets, puis le bilan
+  setTimeout(() => { if (world.phase !== 'done') return; if (found.length) showLoot(found, showResult); else showResult(); }, world.mode === 'arena' ? 200 : 750);
+}
+function storeItems(items) {
+  if (!items.length || !(save.level.armory > 0)) return [];
+  const g = gearOf(save);
+  const out = [];
+  for (const it of items) {
+    it.id = g.next++;
+    it.isNew = true;
+    if (g.inv.length < RESERVE) { g.inv.push(it); g.news++; } else { it.recycled = true; g.shards += [1, 3, 8, 20][it.rarity]; }
+    out.push(it);
+  }
+  g.firstDone = true;
+  return out;
 }
 
 function toAtelier() { wipe(toAtelierNow); }
 function toAtelierNow() {
   $('phase').hidden = true;
   world.phase = 'idle'; world.run = null; world.heroes = []; world.coins = [];
-  stats = computeStats(save.level); world.stats = stats;
+  stats = calcStats(); world.stats = stats;
   $('result').hidden = true; $('atelier').hidden = false;
-  renderTree();
+  renderTree(); companyRefresh();
   centerTree();
 }
 
@@ -415,6 +444,7 @@ function nodeIcon(n) {
   const c = document.createElement('canvas'); c.width = c.height = 92;
   const ig = c.getContext('2d'); ig.imageSmoothingEnabled = false;
   const key = n.icon || '', ii = TREE_ICONS.indexOf(key);
+  if (key.startsWith('g_')) { const gi = gearIconCanvas(key.slice(2)); if (gi) ig.drawImage(gi, 0, 0, 64, 64, 6, 6, 80, 80); return c; }
   if (iconSheet && ii >= 0) { ig.drawImage(iconSheet, ii * 64, 0, 64, 64, 6, 6, 80, 80); return c; }
   if (HEROES[key]) { drawHero(ig, key, 46, 84, 1, 0, 1, 4); return c; }
   if (/^bag\d$/.test(key)) { drawBag(ig, 46, 86, +key[3], 0.1, 0, 0, 3); return c; }
@@ -554,8 +584,8 @@ function buy(n) {
   save.coins -= c; save.level[n.id] = lv + 1;
   unlockAudio(); play('buy');
   writeSave(save);
-  stats = computeStats(save.level);
-  renderTree();
+  stats = calcStats();
+  renderTree(); companyRefresh();
   buyFx(n, c, NODES.filter(m => hidden.has(m.id) && visible(m)));
 }
 
@@ -678,7 +708,7 @@ addEventListener('keydown', e => {
 let resetArmed = 0;
 $('reset').onclick = () => {
   if (Date.now() - resetArmed < 3000) {
-    save = freshSave(); seen.clear(); writeSave(save); selected = 'root'; stats = computeStats(save.level); renderTree();
+    save = freshSave(); seen.clear(); writeSave(save); selected = 'root'; stats = calcStats(); renderTree();
     $('reset').textContent = 'Recommencer à zéro';
   } else {
     resetArmed = Date.now(); $('reset').textContent = 'Clique encore pour tout effacer';
@@ -762,6 +792,10 @@ centerTree();
 requestAnimationFrame(frame);
 // les planches dessinées arrivent après le premier affichage : on redessine les icônes
 heroSheetsReady.then(() => { for (const k in heroIcons) delete heroIcons[k]; renderTree(); });
+
+initCompany({ get save() { return save; }, write: () => writeSave(save), fmt, heroIcon, play, unlockAudio,
+  onChange: () => { stats = calcStats(); renderTree(); } });
+gearSheetReady.then(() => renderTree());
 
 // Accès pour les tests automatisés
 window.__game = { world, get save() { return save; }, go, goLair, toAtelier };

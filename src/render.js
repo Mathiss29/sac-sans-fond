@@ -1,4 +1,5 @@
 // Tout le dessin sur le canvas, en pixel art (sprites dans sprites.js).
+import { RARITIES } from './gear.js';
 import { TIERS, bagMax, tierOf } from './data.js';
 const UI_FONT = "'Silkscreen', 'Pixelify Sans', monospace";
 import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos } from './game.js';
@@ -272,7 +273,7 @@ export function render(g, world, dpr) {
     const blink = !c.fly && c.life < 1.5 ? (Math.sin(t * 20) > 0 ? 1 : 0.4) : 1;
     g.globalAlpha = a * blink;
     const im = SPR.loot[c.kind || 'coin'] || SPR.coin;
-    const k = c.kind && c.kind !== 'coin' ? px : (c.big ? px + 1 : px);
+    const k = c.item ? px + 1 : c.kind && c.kind !== 'coin' ? px : (c.big ? px + 1 : px);
     const s = im.width * k, sh2 = im.height * k;
     const z = c.z || 0;
     if (z > 1) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(Math.round(c.x - s * 0.3), Math.round(c.y + sh2 * 0.35), Math.round(s * 0.6), px); }
@@ -280,7 +281,13 @@ export function render(g, world, dpr) {
       const sw = Math.max(px, Math.round(s * Math.abs(Math.cos(t * 6 + (c.spin || 0))) / px) * px);
       g.drawImage(im, Math.round(c.x - sw / 2), Math.round(c.y - sh2 / 2 - z), sw, sh2);
     } else {
-      if (c.kind !== 'bar') { // halo des gemmes et couronnes
+      if (c.item) { // besace : halo et rayon de la couleur de sa rareté
+        const col = RARITIES[c.item.rarity].color;
+        g.save(); g.globalAlpha *= 0.35 + 0.15 * Math.sin(t * 6); g.fillStyle = col;
+        g.beginPath(); g.arc(c.x, c.y - z, s * 1.2, 0, 7); g.fill();
+        if (!c.fly) g.fillRect(Math.round(c.x - px), Math.round(c.y - z - s * 3), px * 2, Math.round(s * 2.4));
+        g.restore();
+      } else if (c.kind !== 'bar') { // halo des gemmes et couronnes
         g.fillStyle = c.kind === 'gem' ? 'rgba(120,230,255,.25)' : 'rgba(255,220,100,.25)';
         g.beginPath(); g.arc(c.x, c.y - z, s * 0.9, 0, 7); g.fill();
       }
