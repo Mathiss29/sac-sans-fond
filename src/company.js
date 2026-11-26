@@ -34,6 +34,23 @@ function iconEl(name, cls = 'gIco') {
   draw(); if (!gearIconCanvas(name)) Promise.all([gearSheetReady, treeIcons]).then(draw);
   return c;
 }
+// Effets de rareté sur un cadre d'objet : lueur (rare), reflet et étincelles (épique), rayons tournants (légendaire)
+function rarFx(el, rarity) {
+  el.classList.add('rar', 'rar' + rarity);
+  if (rarity < 1) return el;
+  const back = h('span', 'fxb'), front = h('span', 'fxf');
+  if (rarity >= 3) back.append(h('i', 'rays'));
+  if (rarity >= 2) {
+    front.append(h('i', 'shine'));
+    const n = rarity >= 3 ? 4 : 2;
+    for (let i = 0; i < n; i++) {
+      const sp = h('i', 'spk'); sp.style.left = [18, 74, 30, 64][i] + '%'; sp.style.top = [22, 30, 76, 70][i] + '%';
+      sp.style.animationDelay = (i * 0.45) + 's'; front.append(sp);
+    }
+  }
+  el.prepend(back); el.append(front);
+  return el;
+}
 const pct = v => String(Math.round(v)).replace('.', ',');
 
 // ---------- État ----------
@@ -108,7 +125,7 @@ function renderLines(g) {
       const cell = h('span', 'mini' + (slotOpen(s.id) ? '' : ' locked'));
       const it = g.eq[k][s.id], rf = g.ref[k][s.id] || 0;
       if (!slotOpen(s.id)) cell.textContent = '🔒';
-      else if (it) { cell.append(iconEl(itemIcon(it))); cell.style.setProperty('--r', RARITIES[it.rarity].color); cell.classList.add('full'); }
+      else if (it) { cell.append(iconEl(itemIcon(it))); cell.style.setProperty('--r', RARITIES[it.rarity].color); cell.classList.add('full'); rarFx(cell, it.rarity); }
       if (rf && slotOpen(s.id)) cell.append(h('b', 'rf', '+' + rf));
       slots.append(cell);
     }
@@ -141,7 +158,7 @@ function slotCard(g, s, big = true) {
   const card = h('div', 'cSlot' + (it ? ' full' : '') + (op ? '' : ' locked'));
   if (it) card.style.setProperty('--r', RARITIES[it.rarity].color);
   const frame = h('div', 'cSlotIco');
-  if (it) frame.append(iconEl(itemIcon(it)));
+  if (it) { frame.append(iconEl(itemIcon(it))); frame.style.setProperty('--r', RARITIES[it.rarity].color); rarFx(frame, it.rarity); }
   else frame.append(h('span', 'ph', op ? (s.id === 'weapon' ? '⚔' : '✦') : '🔒'));
   if (rf) frame.append(h('b', 'rf', '+' + rf));
   const txt = h('div', 'cSlotTxt');
@@ -180,7 +197,7 @@ function renderRefine(g) {
     const b = h('button', 'cRefSlot' + (refSlot === s.id ? ' on' : '')); b.type = 'button';
     const it = g.eq[line][s.id], rf = g.ref[line][s.id] || 0;
     if (!slotOpen(s.id)) { b.disabled = true; b.append(h('span', 'ph', '🔒')); }
-    else if (it) { b.append(iconEl(itemIcon(it))); b.style.setProperty('--r', RARITIES[it.rarity].color); }
+    else if (it) { b.append(iconEl(itemIcon(it))); b.style.setProperty('--r', RARITIES[it.rarity].color); rarFx(b, it.rarity); }
     else b.append(h('span', 'ph', s.id === 'weapon' ? '⚔' : '✦'));
     if (rf) b.append(h('b', 'rf', '+' + rf));
     b.onclick = () => { refSlot = s.id; render(); };
@@ -238,6 +255,7 @@ function renderReserve(g) {
     const cell = h('button', 'cItem' + (it.isNew ? ' new' : '') + (picked === it.id ? ' sel' : '') + (recycleMode ? ' rec' : '')); cell.type = 'button';
     cell.style.setProperty('--r', RARITIES[it.rarity].color);
     cell.append(iconEl(itemIcon(it)));
+    rarFx(cell, it.rarity);
     if (it.kind === 'weapon') {
       const cur = g.eq[it.line].weapon;
       if (owned().includes(it.line) && (!cur || it.power > cur.power)) cell.append(h('b', 'up', '▲'));
@@ -333,7 +351,7 @@ export function showLoot(items, done) {
     const r = RARITIES[it.rarity];
     const card = h('div', 'lootCard r' + it.rarity); card.style.setProperty('--r', r.color); card.style.animationDelay = (0.25 + i * 0.28) + 's';
     card.append(h('div', 'rar', r.name + (it.rarity >= 2 ? ' !' : '')));
-    const fr = h('div', 'fr'); fr.append(iconEl(itemIcon(it))); card.append(fr);
+    const fr = h('div', 'fr'); fr.append(iconEl(itemIcon(it))); rarFx(fr, it.rarity); card.append(fr);
     card.append(h('div', 'nm', itemName(it)));
     const tag = it.recycled ? 'Réserve pleine : recyclé' : isBetter(g, it) && C.save.level[{ archer: 'root', mage: 'mage', knight: 'knight', bard: 'bard' }[it.line]] ? 'Meilleur !' : 'Nouveau';
     card.append(h('div', 'tag' + (tag === 'Meilleur !' ? ' best' : ''), tag));
