@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sac sans Fond</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@700;800&family=Alegreya+Sans:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -38,39 +38,60 @@
   </div>
   <div id="hint" hidden>Clique pour larguer tes archers · Passe le gant sur les pièces</div>
   <div id="banner"></div>
+  <div id="phase" hidden><div id="phaseTitle"></div><div id="phaseSub"></div><div class="tbar" id="phaseBar"><i id="phaseFill"></i><b style="left:25%"><u>×1,6</u></b><b style="left:50%"><u>×2,5</u></b><b style="left:75%"><u>×4</u></b></div></div>
+  <div id="flash"></div>
 
   <section class="screen" id="atelier">
-    <header class="screenHead">
-      <div>
-        <h1 class="logo">Sac <span>sans</span> Fond</h1>
-        <p class="sub">Largue tes héros, remplis le sac du vieux mage, puis rafle tout quand il se déchire.</p>
-      </div>
-      <div class="headRight">
-        <div class="chip big"><span class="coin-ico"></span><span id="atelierWallet" class="num">0</span></div>
+    <header class="topBar">
+      <div class="chip big wallet"><span class="coin-ico"></span><span id="atelierWallet" class="num">0</span></div>
+      <nav class="tabs" aria-label="Écrans de l'Atelier">
+        <button class="tab on" type="button" aria-current="page">Compétences</button>
+        <button class="tab" type="button" disabled title="Bientôt">Livre d'aventure</button>
+      </nav>
+      <div class="topRight">
+        <span class="chip small" id="runsChip">Expéditions : 0</span>
         <button class="ghost mute" type="button">🔊</button>
-        <button class="btn lair" id="lairBtn" type="button">Antre du Brasier</button>
-        <button class="btn" id="go">Partir en expédition</button>
       </div>
     </header>
     <div id="treeWrap">
       <div id="treeScroll"><div id="treeInner"><svg id="treeLines"></svg></div></div>
       <aside id="info"></aside>
     </div>
-    <footer class="screenFoot">
-      <button class="ghost" id="reset">Recommencer à zéro</button>
-      <span class="sub" id="stats"></span>
+    <footer class="bottomBar">
+      <div class="footLeft">
+        <button class="ghost" id="reset">Recommencer à zéro</button>
+        <p class="hintTxt">Clique une compétence pour l'acheter<br>Glisse pour voir, molette pour zoomer</p>
+      </div>
+      <button class="btn playBtn" id="go">Partir en expédition</button>
+      <button class="zoneCard" id="lairBtn" type="button">
+        <span class="zoneName">Clairière</span>
+        <span class="zoneBoss" id="zoneBoss">Antre du Brasier</span>
+      </button>
+      <span class="sub" id="stats" hidden></span>
     </footer>
   </section>
 
   <section class="screen" id="result" hidden>
     <div class="box">
-      <h2>Bilan de l'expédition</h2>
+      <h2>Expédition terminée</h2>
+      <div class="resSub" id="resSub"></div>
+      <div class="resTier"><span class="tierIco" id="resTierIco"></span><div class="tbar"><i id="resTierFill"></i><b style="left:25%"></b><b style="left:50%"></b><b style="left:75%"></b></div><span id="resMult" class="num"></span></div>
+      <div class="resLine"><span>Ramassé</span><span class="num" id="resGot">0</span></div>
+      <div class="total"><span><span class="coin-ico"></span>Total <b class="record" id="resRecord" hidden>Record !</b></span><span class="num" id="resTotal">0</span></div>
+      <p class="resGoal" id="resGoal"></p>
       <dl id="resList"></dl>
-      <div class="total"><span>Gagné</span><span class="num" id="resTotal">0</span></div>
-      <button class="btn" id="back">Retour à l'Atelier</button>
+      <p id="resNews"></p>
+      <div class="resBtns">
+        <button class="btn second" id="again" type="button">Rejouer</button>
+        <button class="btn" id="back" type="button">Améliorer</button>
+      </div>
+      <div class="resKeys"><span><kbd>R</kbd> rejouer</span><span><kbd>Entrée</kbd> améliorer</span></div>
     </div>
+    <div class="resDmg" id="resDmg"><h4>Dégâts de l'expédition</h4><ul id="dmgList"></ul></div>
+    <div class="resBetter" id="resBetter" hidden></div>
   </section>
 </div>
+<canvas id="wipe" aria-hidden="true"></canvas>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>

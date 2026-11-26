@@ -1,6 +1,7 @@
 // Tout le dessin sur le canvas, en pixel art (sprites dans sprites.js).
 import { TIERS, bagMax, tierOf } from './data.js';
-import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos } from './game.js';
+const UI_FONT = "'Silkscreen', 'Pixelify Sans', monospace";
+import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos, RARITIES } from './game.js';
 
 import { buildSprites, loadHeroSheets, loadMonsterSheets, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
 
@@ -213,7 +214,7 @@ export function render(g, world, dpr) {
   const r = world.run;
   if (arena) drawBraziers(g, map, t, px);
   else if (r && (world.phase === 'expedition' || world.phase === 'tear')) drawPortal(g, world, t, px);
-  if (r && !arena && (world.phase === 'expedition' || world.phase === 'tear')) {
+  if (r && !arena && (world.phase === 'expedition' || world.phase === 'tear' || world.phase === 'done')) {
     const b = bagPos(world);
     const max = bagMax(world.stats);
     if (world.phase === 'expedition') {
@@ -223,9 +224,28 @@ export function render(g, world, dpr) {
       g.strokeStyle = 'rgba(255,240,200,.18)'; g.setLineDash([3, 6]);
       g.beginPath(); g.arc(b.x, b.y, world.stats.bagMouth, 0, 7); g.stroke(); g.setLineDash([]);
     } else if (r.shake > 0) {
-      drawBag(g, b.x, b.y + 30, r.tier, Math.min(1, r.bag / max) + 0.1, t, r.shake, px);
+      const ct = r.climb ?? r.tier;
+      drawBag(g, b.x, b.y + 30, ct, Math.min(1, r.bag / max) + 0.1, t, r.shake, px);
+      // nom du palier atteint au-dessus du sac, qui « saute » à chaque montée
+      const age = r.climbAge || 0, sc = 1 + Math.max(0, 0.35 - age) * 1.6;
+      g.save(); g.translate(Math.round(b.x), Math.round(b.y - 58)); g.scale(sc, sc);
+      g.font = `400 20px ${UI_FONT}`; g.textAlign = 'center'; g.lineJoin = 'round';
+      const name = TIERS[ct].name.replace(/^Sac (de |d')/, '').toUpperCase() + ' !';
+      g.strokeStyle = '#10140d'; g.lineWidth = 5; g.strokeText(name, 0, 0);
+      g.fillStyle = TIERS[ct].glow; g.fillText(name, 0, 0);
+      if (ct > 0) {
+        const tag = '×' + String(TIERS[ct].mult).replace('.', ',');
+        g.font = `400 16px ${UI_FONT}`; const tw = g.measureText(tag).width + 12;
+        g.fillStyle = '#10140d'; g.fillRect(42, 26, tw + 6, 26);
+        g.fillStyle = TIERS[ct].color; g.fillRect(44, 28, tw + 2, 22);
+        g.fillStyle = '#1b1610'; g.fillRect(46, 30, tw - 2, 18);
+        g.fillStyle = TIERS[ct].glow; g.textAlign = 'left'; g.fillText(tag, 51, 45);
+      }
+      g.restore();
+      if (age < 0.18) { g.globalAlpha = (0.18 - age) / 0.18 * 0.85; g.fillStyle = '#ffffff'; g.beginPath(); g.arc(b.x, b.y + 4, 34, 0, 7); g.fill(); g.globalAlpha = 1; }
     } else {
-      // lambeaux du sac déchiré
+      // le sac vidé reste là, ouvert, au milieu de ses lambeaux
+      drawBag(g, b.x, b.y + 30, r.tier, 0.05, t, 0, px);
       g.fillStyle = TIERS[r.tier].color; g.globalAlpha = 0.8;
       for (let i = 0; i < 6; i++) {
         const a = i * 1.05 + 0.3;
@@ -253,8 +273,12 @@ export function render(g, world, dpr) {
     g.globalAlpha = a * blink;
     const im = SPR.loot[c.kind || 'coin'] || SPR.coin;
     const k = c.kind && c.kind !== 'coin' ? px : (c.big ? px + 1 : px);
-    const s = im.width * k, sh2 = im.height * k;
+    const nk = c.near ? 1.3 : 1;
+    const s = im.width * k * nk, sh2 = im.height * k * nk;
     const z = c.z || 0;
+    if (c.near) { // sous le gant : la pièce gonfle et brille avant d'être aspirée
+      g.fillStyle = 'rgba(255,240,170,.35)'; g.beginPath(); g.arc(c.x, c.y - z, s * 0.85, 0, 7); g.fill();
+    }
     if (z > 1) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(Math.round(c.x - s * 0.3), Math.round(c.y + sh2 * 0.35), Math.round(s * 0.6), px); }
     if (!c.kind || c.kind === 'coin') {
       const sw = Math.max(px, Math.round(s * Math.abs(Math.cos(t * 6 + (c.spin || 0))) / px) * px);
@@ -301,6 +325,16 @@ export function render(g, world, dpr) {
     }
   }
 
+  // traînées lumineuses derrière les projectiles (flèches blanches, givre bleu, notes dorées)
+  g.lineCap = 'round';
+  for (const a of world.arrows) {
+    const len = a.kind === 'arrow' ? 46 : 26, col = a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
+    const tr = g.createLinearGradient(a.x, a.y, a.x - a.dx * len, a.y - a.dy * len);
+    tr.addColorStop(0, `rgba(${col},.75)`); tr.addColorStop(1, `rgba(${col},0)`);
+    g.strokeStyle = tr; g.lineWidth = a.kind === 'arrow' ? 2.5 : 4;
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * len, a.y - a.dy * len); g.stroke();
+  }
+  g.lineCap = 'butt';
   for (const a of world.arrows) {
     if (a.kind === 'frost') {
       g.fillStyle = '#24161e'; g.fillRect(Math.round(a.x) - px * 2, Math.round(a.y) - px * 2, px * 4, px * 4);
@@ -315,11 +349,18 @@ export function render(g, world, dpr) {
     }
   }
 
+  if (r && r.relics && world.phase === 'tear') drawRelics(g, world, r.relics, t, px);
+
   g.textAlign = 'center'; g.lineJoin = 'round';
   for (const tx of world.texts) {
     g.globalAlpha = Math.min(1, tx.life * 3);
     const sc = tx.dmg ? 1 + Math.max(0, 0.6 - tx.pop * 6) : 1;
-    g.font = `800 ${Math.round(tx.size * sc)}px 'Alegreya Sans', system-ui, sans-serif`;
+    g.font = `800 ${Math.round(tx.size * sc)}px 'Pixelify Sans', system-ui, sans-serif`;
+    if (tx.box) { // coup critique : chiffre dans une étiquette rouge cernée
+      const bw = g.measureText(tx.text).width + 12, bh = tx.size * sc + 4;
+      g.fillStyle = '#10140d'; g.fillRect(Math.round(tx.x - bw / 2 - 2), Math.round(tx.y - bh + 4), Math.round(bw + 4), Math.round(bh + 4));
+      g.fillStyle = tx.box; g.fillRect(Math.round(tx.x - bw / 2), Math.round(tx.y - bh + 6), Math.round(bw), Math.round(bh));
+    }
     g.strokeStyle = '#24161e'; g.lineWidth = 3.5; g.strokeText(tx.text, tx.x, tx.y);
     g.fillStyle = tx.color; g.fillText(tx.text, tx.x, tx.y);
   }
@@ -329,11 +370,19 @@ export function render(g, world, dpr) {
   if (arena) drawEmbers(g, world, t, px); else drawLeaves(g, world, t, px);
   if (!arena && world.stage) drawAmbiance(g, world, t, camX, camY, dpr);
   g.drawImage(vignette(w, h, dpr), 0, 0, w, h);
+  if (r && !arena && world.phase === 'done') {
+    // fin d'expédition : la scène s'assombrit, un rond de lumière reste sur le sac
+    const b = bagPos(world), k = Math.min(1, (r.doneT || 0) * 1.6);
+    const sx = b.x - camX, sy = b.y - camY + 10;
+    const gr = g.createRadialGradient(sx, sy, 40, sx, sy, Math.max(w, h) * 0.55);
+    gr.addColorStop(0, 'rgba(8,10,6,0)'); gr.addColorStop(0.25, `rgba(8,10,6,${0.45 * k})`); gr.addColorStop(1, `rgba(8,10,6,${0.85 * k})`);
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  }
   const cb = world.combo;
   if (cb.t > 0 && cb.n >= 3 && world.pointer.inside) {
     const sc = 1 + Math.max(0, cb.t - 0.9) * 2;
     g.globalAlpha = Math.min(1, cb.t * 2);
-    g.font = `800 ${Math.round(18 * sc)}px 'Alegreya SC', Georgia, serif`; g.textAlign = 'left';
+    g.font = `800 ${Math.round(18 * sc)}px 'Pixelify Sans', monospace`; g.textAlign = 'left';
     g.strokeStyle = '#24161e'; g.lineWidth = 4;
     const txt = `×${cb.n}`;
     g.strokeText(txt, world.pointer.x + 22, world.pointer.y - 18); g.fillStyle = cb.n >= 20 ? '#ff9a3c' : '#ffd246'; g.fillText(txt, world.pointer.x + 22, world.pointer.y - 18);
@@ -353,11 +402,22 @@ export function render(g, world, dpr) {
     }
     const rad = gloveRadius(world);
     const on = attractionActive(world);
-    g.strokeStyle = on ? 'rgba(255,214,102,.95)' : 'rgba(255,248,225,.65)';
-    g.lineWidth = on ? 3 : 1.5; g.setLineDash([6, 6]); g.lineDashOffset = -t * 20;
-    g.beginPath(); g.arc(p.x, p.y, rad, 0, 7); g.stroke(); g.setLineDash([]);
-    if (on) { g.fillStyle = 'rgba(255,214,102,.08)'; g.beginPath(); g.arc(p.x, p.y, rad, 0, 7); g.fill(); }
-    g.fillStyle = '#fff8e1'; g.beginPath(); g.arc(p.x, p.y, 3, 0, 7); g.fill();
+    // anneau plein et fin cerné de sombre ; doré et pulsant quand l'attraction tire
+    const pr = on ? rad + Math.sin(t * 10) * 2 : rad;
+    if (on) { g.fillStyle = 'rgba(255,214,102,.10)'; g.beginPath(); g.arc(p.x, p.y, pr, 0, 7); g.fill(); }
+    g.strokeStyle = 'rgba(16,20,13,.55)'; g.lineWidth = on ? 5 : 4;
+    g.beginPath(); g.arc(p.x, p.y, pr, 0, 7); g.stroke();
+    g.strokeStyle = on ? '#ffd666' : 'rgba(244,236,210,.9)'; g.lineWidth = on ? 2.5 : 1.5;
+    g.beginPath(); g.arc(p.x, p.y, pr, 0, 7); g.stroke();
+    // viseur au centre : petit rond et quatre crans
+    const cx = Math.round(p.x), cy = Math.round(p.y), ink = on ? '#ffd666' : '#f4ecd2';
+    g.strokeStyle = '#10140d'; g.lineWidth = 4; g.beginPath(); g.arc(cx, cy, 8, 0, 7); g.stroke();
+    g.strokeStyle = ink; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, 8, 0, 7); g.stroke();
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      g.fillStyle = '#10140d'; g.fillRect(cx + dx * 11 - 2, cy + dy * 11 - 2, 4, 4);
+      g.fillStyle = ink; g.fillRect(cx + dx * 11 - 1, cy + dy * 11 - 1, 2, 2);
+    }
+    g.fillStyle = ink; g.fillRect(cx - 1, cy - 1, 2, 2);
   }
 }
 
@@ -445,11 +505,11 @@ function drawPortal(g, world, t, px) {
   }
   g.restore();
   g.drawImage(spr.c, x0, y0, W, H);
-  g.font = `800 15px 'Alegreya SC', Georgia, serif`; g.textAlign = 'center'; g.lineJoin = 'round';
+  g.font = `800 15px 'Pixelify Sans', monospace`; g.textAlign = 'center'; g.lineJoin = 'round';
   const label = r && r.lair.done ? 'Portail refermé' : open ? world.zone.boss.lair : 'Portail scellé';
   g.strokeStyle = '#24161e'; g.lineWidth = 4; g.strokeText(label, p.x, y0 - 8);
   g.fillStyle = open ? '#ffb347' : '#c8b8b0'; g.fillText(label, p.x, y0 - 8);
-  if (open) { const sub = 'clique pour entrer'; g.font = `700 12px 'Alegreya Sans', system-ui, sans-serif`; g.strokeText(sub, p.x, y0 + H + 16); g.fillStyle = '#fff2c8'; g.fillText(sub, p.x, y0 + H + 16); }
+  if (open) { const sub = 'clique pour entrer'; g.font = `700 12px 'Pixelify Sans', system-ui, sans-serif`; g.strokeText(sub, p.x, y0 + H + 16); g.fillStyle = '#fff2c8'; g.fillText(sub, p.x, y0 + H + 16); }
 }
 
 function drawBraziers(g, map, t, px) {
@@ -532,5 +592,36 @@ function drawLeaves(g, world, t, px) {
     g.fillStyle = cols[i % 3];
     const tw = Math.sin(t * 4 + i) > 0;
     g.fillRect(Math.round(x), Math.round(y), px * (tw ? 2 : 1), px);
+  }
+}
+
+// Trésors de la Déchirure : un rai de lumière, un cadre à la couleur de la rareté, le nom dessous.
+function drawRelics(g, world, relics, t, px) {
+  const p = world.pointer, cx = world.cam.x, cy = world.cam.y;
+  for (const o of relics) {
+    if (o.got || o.x === undefined) continue;
+    const col = RARITIES[o.rar].color, landed = o.t >= 0.6;
+    const bob = landed ? Math.round(Math.sin(t * 3 + o.tx) * 3) : 0;
+    const x = Math.round(o.x), y = Math.round(o.y + bob);
+    const hover = p.inside && (p.x + cx - x) ** 2 + (p.y + cy - y) ** 2 < 60 * 60;
+    if (landed) {
+      const beam = g.createLinearGradient(0, y - 160, 0, y);
+      beam.addColorStop(0, 'rgba(255,255,255,0)'); beam.addColorStop(1, col + '66');
+      g.fillStyle = beam; g.fillRect(x - 10, y - 160, 20, 160);
+      g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x - 14, y + 40 - bob, 28, 4);
+    }
+    const S = hover ? 54 : 46;
+    g.fillStyle = '#10140d'; g.fillRect(x - S / 2 - 2, y - S / 2 - 2, S + 4, S + 4);
+    g.fillStyle = col; g.fillRect(x - S / 2, y - S / 2, S, S);
+    g.fillStyle = '#1b1f18'; g.fillRect(x - S / 2 + 3, y - S / 2 + 3, S - 6, S - 6);
+    const im = SPR.loot[o.kind];
+    if (im) { const k = Math.max(1, Math.floor((S - 12) / Math.max(im.width, im.height))); g.drawImage(im, Math.round(x - im.width * k / 2), Math.round(y - im.height * k / 2), im.width * k, im.height * k); }
+    if (!landed) continue;
+    g.textAlign = 'center'; g.lineJoin = 'round';
+    g.font = `400 13px ${UI_FONT}`;
+    const rn = RARITIES[o.rar].name.toUpperCase();
+    g.strokeStyle = '#10140d'; g.lineWidth = 4; g.strokeText(rn, x, y - S / 2 - 8); g.fillStyle = col; g.fillText(rn, x, y - S / 2 - 8);
+    g.font = `500 14px 'Pixelify Sans', monospace`;
+    g.strokeText(o.name, x, y + S / 2 + 16); g.fillStyle = '#f4ecd2'; g.fillText(o.name, x, y + S / 2 + 16);
   }
 }

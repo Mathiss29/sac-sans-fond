@@ -2,7 +2,7 @@
 // Le contexte audio ne démarre qu'après une première action du joueur (règle des navigateurs).
 let ctx = null, master = null, noiseBuf = null, muted = false;
 const last = {};
-const GAP = { hit: 0.035, arrow: 0.05, frost: 0.08, note: 0.1, slash: 0.06, pop: 0.03, coin: 0.025, land: 0.05 };
+const GAP = { hit: 0.035, arrow: 0.05, frost: 0.08, note: 0.1, slash: 0.06, pop: 0.03, coin: 0.025, land: 0.05, tick: 0.04 };
 
 export function unlockAudio() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -51,11 +51,13 @@ export function play(name, opt = {}) {
     case 'land': tone('sine', 140, 55, 0.16, 0.25); noise(0.12, 0.08, 'lowpass', 600, 150); break;
     case 'tier': [0, 0.09, 0.18, 0.3].forEach((d, i) => tone('triangle', 523 * [1, 1.26, 1.5, 2][i], null, 0.22, 0.1, d)); break;
     case 'rumble': noise(1.1, 0.18, 'lowpass', 180, 90); tone('sawtooth', 55, 45, 1.1, 0.06); break;
-    case 'burst': noise(0.7, 0.3, 'lowpass', 2500, 120); tone('sine', 110, 40, 0.6, 0.35); [0.05, 0.12, 0.2].forEach((d, i) => tone('square', 1320 * (1 + i * 0.25), null, 0.12, 0.05, d)); break;
+    case 'burst': noise(0.8, 0.34, 'lowpass', 2500, 90); tone('sine', 100, 32, 0.8, 0.45); [0.05, 0.12, 0.2].forEach((d, i) => tone('square', 1320 * (1 + i * 0.25), null, 0.12, 0.05, d)); break;
     case 'boss': noise(0.9, 0.28, 'lowpass', 1800, 90); tone('sine', 90, 35, 0.9, 0.35); [0, 0.15, 0.3].forEach((d, i) => tone('triangle', 392 * [1, 1.26, 1.5][i], null, 0.5, 0.09, d + 0.2)); break;
     case 'warn': tone('sawtooth', 180 * j, 260, 0.35, 0.05); noise(0.35, 0.05, 'bandpass', 700, 1600); break;
     case 'fire': noise(0.45, 0.22, 'lowpass', 1600, 120); tone('sine', 120 * j, 45, 0.35, 0.22); break;
     case 'portal': [0, 0.08, 0.16, 0.24, 0.32].forEach((d, i) => tone('triangle', 330 * Math.pow(1.19, i), null, 0.18, 0.07, d)); noise(0.6, 0.08, 'bandpass', 600, 2400); break;
+    case 'climb': { const n = opt.n || 1; [0, 0.07, 0.14].forEach((d, i) => tone('square', 392 * Math.pow(1.335, n) * [1, 1.26, 1.5][i], null, 0.12, 0.07, d)); tone('sine', 90, 50, 0.3, 0.2); break; }
+    case 'tick': tone('square', 600 + 900 * (opt.k || 0), null, 0.03, 0.035); break;
     case 'click': tone('square', 700, 500, 0.04, 0.05); break;
     case 'buy': tone('square', 660, null, 0.06, 0.06); tone('square', 990, null, 0.09, 0.06, 0.06); break;
   }
