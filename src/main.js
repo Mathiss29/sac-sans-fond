@@ -1,5 +1,5 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, stageFor, TIERS, HEROES, HERO_ORDER, ARENA, ULTS, TRIALS, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { ZONES, LEVELS, levelZone, ENEMIES, stageFor, TIERS, HEROES, HERO_ORDER, ARENA, ULTS, TRIALS, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
@@ -20,7 +20,20 @@ function calcStats() { return computeStats(save.level, save.gear ? gearBonus(sav
 let stats = calcStats();
 let dpr = 1;
 const world = createWorld(800, 600);
-world.zone = ZONES[0];
+// ---------- Monde : 20 niveaux (10 régions × normal / II) ----------
+const LV = () => Math.max(0, Math.min(LEVELS.length - 1, save.region || 0));
+const curZone = () => levelZone(LV());
+const winsOf = id => (save.bosses || {})[id] || 0;
+// le niveau suivant s'ouvre quand le boss du précédent est battu ; les Enfers demandent aussi le portail
+function levelOpen(i) {
+  if (i <= 0) return true;
+  if (!(winsOf(LEVELS[i - 1].id) > 0)) return false;
+  return !(ZONES[LEVELS[i].zone].demon && !L('portal'));
+}
+// plus loin niveau atteint sur le chemin (boss précédents battus), pour les conditions de l'arbre
+function reached() { let i = 0; while (i + 1 < LEVELS.length && winsOf(LEVELS[i].id) > 0) i++; return i; }
+const totalWins = () => Object.values(save.bosses || {}).reduce((t, v) => t + (v > 0 ? 1 : 0), 0);
+world.zone = curZone();
 world.stats = stats;
 
 function resize() {
@@ -111,10 +124,80 @@ function wipe(mid) {
   requestAnimationFrame(frame);
 }
 
+// ---------- Carte du monde ----------
+const MECH = { fire: 'Cercles de feu sous les héros', guards: 'Bulle protégée : abats d\'abord ses gardes', copies: 'Fait apparaître de fausses copies', quake: 'Séismes de glace plus larges',
+  armor: 'Armure à briser avant de vraiment le blesser', spores: 'Nuages de spores', imps: 'Appelle des diablotins', dash: 'Fonce à travers la salle (ligne rouge)', final: 'Gardes, copies et ruées : tout à la fois' };
+const FAMILY = { king: 'Rois des élémentaires (se divisent)', puffer: 'Boursouflés (gonflent avec le temps)', healer: 'Soigneurs', bandit: 'Bandits (volent tes pièces)', mvp: 'Lapin d\'or (rare et très rapide)' };
+let wmSel = 0;
+function wmPos(i) { const row = Math.floor(i / 5), c = i % 5, col = row % 2 ? 4 - c : c; return { x: 10 + col * 20, y: 13 + row * 24.5 }; }
+function openWorld() { wmSel = LV(); $('worldMap').hidden = false; renderWorld(); }
+function renderWorld() {
+  const box = $('wmPath'), svg = $('wmLines');
+  box.querySelectorAll('.wmNode,.wmRegion').forEach(e => e.remove());
+  const done = LEVELS.filter(l => winsOf(l.id) > 0).length;
+  $('wmSub').textContent = `${done} / ${LEVELS.length} boss vaincus`;
+  let d = '';
+  LEVELS.forEach((lv, i) => { const p = wmPos(i); d += (i ? ' L' : 'M') + p.x + ' ' + p.y; });
+  svg.setAttribute('viewBox', '0 0 100 100'); svg.setAttribute('preserveAspectRatio', 'none');
+  const open = LEVELS.map((_, i) => levelOpen(i));
+  let lit = ''; LEVELS.forEach((lv, i) => { if (!open[i]) return; const p = wmPos(i); lit += (lit ? ' L' : 'M') + p.x + ' ' + p.y; });
+  svg.innerHTML = `<path d="${d}" fill="none" stroke="#1a1410" stroke-width="1.6" vector-effect="non-scaling-stroke" style="stroke-width:10px"/><path d="${d}" fill="none" stroke="#4a4030" stroke-dasharray="2 2" vector-effect="non-scaling-stroke" style="stroke-width:4px"/><path d="${lit}" fill="none" stroke="#e6c875" vector-effect="non-scaling-stroke" style="stroke-width:4px"/>`;
+  LEVELS.forEach((lv, i) => {
+    const z = ZONES[lv.zone], p = wmPos(i), b = document.createElement('button');
+    const won = winsOf(lv.id) > 0;
+    b.type = 'button';
+    b.className = 'wmNode' + (open[i] ? '' : ' locked') + (won ? ' won' : '') + (i === LV() ? ' cur' : '') + (i === wmSel ? ' sel' : '') + (lv.hard ? ' hard' : '');
+    b.style.left = p.x + '%'; b.style.top = p.y + '%';
+    b.style.setProperty('--g', z.ground[0]); b.style.setProperty('--g2', z.ground[1]); b.style.setProperty('--bc', z.boss.color || '#ff9a46');
+    b.innerHTML = `<span class="wmNum">${i + 1}</span>${won ? '<span class="wmCrown">♛</span>' : open[i] ? '' : '<span class="wmLock">🔒</span>'}<span class="wmName">${lv.name}</span>`;
+    b.onclick = () => { wmSel = i; renderWorld(); };
+    b.ondblclick = () => { if (open[i]) travel(i); };
+    box.append(b);
+  });
+  // panneau d'aperçu
+  const lv = LEVELS[wmSel], z = levelZone(wmSel), info = $('wmInfo'); info.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = lv.name; h.style.color = z.boss.color || '#e6c875';
+  const bl = document.createElement('p'); bl.className = 'wmBlurb'; bl.textContent = z.blurb || 'Là où tout commence : l\'ambiance change à chaque expédition';
+  const foes = document.createElement('div'); foes.className = 'wmFoes';
+  for (const k of Object.keys(z.spawn)) { const c = document.createElement('canvas'); c.width = c.height = 22; c.getContext('2d').drawImage(enemyIcon(k), 0, 0); c.title = ENEMIES[k].name; foes.append(c); }
+  const dl = document.createElement('dl');
+  const row = (a, v) => { const dt = document.createElement('dt'); dt.textContent = a; const dd = document.createElement('dd'); dd.textContent = v; dl.append(dt, dd); };
+  row('Boss', z.boss.name + (lv.hard ? ' (plus rapide)' : ''));
+  row('Combat', MECH[z.boss.mech] || '');
+  row('Ennemis', 'PV ×' + fmt(lv.hp));
+  row('Butin', '×' + fmt(lv.value));
+  if (z.mods && z.mods.speed) row('Climat', 'Tout le monde avance ' + Math.round((1 - z.mods.speed) * 100) + ' % moins vite');
+  if (z.demon) row('Démons', 'Frappés plus fort avec « Fléau des démons »');
+  const news = Object.keys(lv.families).filter(k => lv.families[k] && !(wmSel > 0 && LEVELS[wmSel - 1].families[k]));
+  if (news.length) row('Nouveau', news.map(k => FAMILY[k]).join(', '));
+  const best = (save.zoneTier || {})[z.id.replace(/2$/, '')];
+  if (best !== undefined) row('Meilleur sac', TIERS[best].name);
+  row('Boss vaincu', winsOf(lv.id) ? winsOf(lv.id) + ' fois' : 'pas encore');
+  const btn = document.createElement('button'); btn.className = 'btn'; btn.type = 'button';
+  if (open[wmSel]) { btn.textContent = wmSel === LV() ? 'Tu es ici' : 'Partir ici'; btn.disabled = wmSel === LV(); btn.onclick = () => travel(wmSel); }
+  else {
+    btn.disabled = true;
+    btn.textContent = '🔒 ' + (wmSel > 0 && !(winsOf(LEVELS[wmSel - 1].id) > 0) ? `Bats ${levelZone(wmSel - 1).boss.name} (${LEVELS[wmSel - 1].name})` : 'Achète « Portail des Enfers » dans l\'arbre');
+  }
+  info.append(h, bl, foes, dl, btn);
+}
+function travel(i) {
+  if (!levelOpen(i)) return;
+  save.region = i; writeSave(save);
+  world.zone = curZone();
+  $('worldMap').hidden = true;
+  renderTree(); play('buy');
+}
+
 // ---------- Expédition ----------
 // Portail de l'antre : ouvert une fois le palier Soie atteint (ou le boss déjà battu).
-const lairOpen = () => !!save.lairOpen || ((save.bosses || {})[ZONES[0].id] || 0) > 0;
-const lairInfo = () => ({ open: lairOpen(), first: !((save.bosses || {})[ZONES[0].id] > 0) });
+function lairOpen() {
+  const z = curZone();
+  if (winsOf(z.id) > 0) return true;
+  if (z.demon && !L('demonLord')) return false;
+  return !!((save.lairs || {})[z.id] || (z.id === 'clairiere' && save.lairOpen));
+}
+const lairInfo = () => ({ open: lairOpen(), first: !(winsOf(curZone().id) > 0) });
 function showRunUi() {
   $('atelier').hidden = true; $('result').hidden = true;
   $('hud').hidden = false; $('dropBar').hidden = false; $('hint').hidden = false; $('mapUi').hidden = false;
@@ -125,13 +208,13 @@ function go() { wipe(goNow); }
 function goNow() {
   $('phase').hidden = true;
   stats = calcStats(); world.gearCtx = gearCtx();
-  startExpedition(world, stats, ZONES[0], lairInfo(), stageFor(save.expeditions));
+  const z = curZone(); startExpedition(world, stats, z, lairInfo(), stageFor(save.expeditions, z));
   showRunUi();
 }
 function goLair() {
   if (!lairOpen()) return;
   stats = calcStats(); world.gearCtx = gearCtx();
-  startLair(world, stats, ZONES[0], lairInfo());
+  startLair(world, stats, curZone(), lairInfo());
   showRunUi();
 }
 // Ce qu'il faut pour tirer un objet : lignées possédées, charmes débloqués, niveau des objets.
@@ -139,8 +222,8 @@ function gearCtx() {
   if (!(save.level.armory > 0)) return null;
   const g = gearOf(save);
   return { lines: HERO_ORDER.filter(k => stats.heroes[k] > 0), charms: save.level.charm1 > 0,
-    ilvl: Math.min(8, (save.maxTier || 0) + ((save.bosses || {})[ZONES[0].id] || 0)), first: !g.firstDone,
-    mythic: ((save.bosses || {})[ZONES[0].id] || 0) >= 2 };
+    ilvl: Math.min(8, (save.maxTier || 0) + Math.min(4, totalWins()) + Math.floor(LV() / 4)), first: !g.firstDone,
+    mythic: winsOf('clairiere') >= 2 || totalWins() >= 3 };
 }
 // Dans l'antre : pas de sac ni de mini-carte ; flèches seulement si la salle dépasse de l'écran.
 function arenaUi() {
@@ -189,8 +272,11 @@ function finishExpedition() {
   const record = save.expeditions > 1 && gained > save.best;
   save.best = Math.max(save.best, gained);
   if (!r.lair.only) save.maxTier = Math.max(save.maxTier || 0, r.tier);
-  const unlocked = !lairOpen() && r.tier >= ARENA.unlockTier;
-  if (unlocked) save.lairOpen = true;
+  const wasOpen = lairOpen(), zid = world.zone.id, base = ZONES[LEVELS[LV()].zone].id;
+  if (!r.lair.only) { save.zoneTier = save.zoneTier || {}; save.zoneTier[base] = Math.max(save.zoneTier[base] || 0, r.tier); }
+  if (!r.lair.only && r.tier >= ARENA.unlockTier) { save.lairs = save.lairs || {}; save.lairs[zid] = true; if (zid === 'clairiere') save.lairOpen = true; }
+  const unlocked = !wasOpen && lairOpen();
+  const lairWait = !lairOpen() && world.zone.demon && (save.lairs || {})[zid];
   // objets trouvés : rangés dans la réserve (ceux qui ne rentrent pas sont recyclés en éclats)
   const found = storeItems(r.items || []);
   const trialsDone = checkTrials(r);
@@ -207,6 +293,8 @@ function finishExpedition() {
     rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got), '#ff9f7a']);
   }
   if (unlocked) rows.push([world.zone.boss.lair, 'portail ouvert !', '#c8a2ff']);
+  if (lairWait) rows.push([world.zone.boss.lair, 'demande « Seigneur des Enfers »', '#ff7a5a']);
+  if (r.bossKilled && winsOf(zid) === 1 && LV() + 1 < LEVELS.length) rows.push(['Nouveau niveau', LEVELS[LV() + 1].name + (levelOpen(LV() + 1) ? ' ouvert !' : ' (portail des Enfers requis)'), '#9fe07a']);
   if (found.length) rows.push(['Besaces d\'équipement', String(found.length), '#c07aff']);
   for (const o of r.relicsGot || []) rows.push([`${o.name} (${RARITIES[o.rar].name})`, '+' + fmt(o.value), RARITIES[o.rar].color]);
   if (r.relics && r.relics.length) rows.push(['Trésors attrapés', `${(r.relicsGot || []).length} / ${r.relics.length}`, '#e9cf86']);
@@ -217,7 +305,7 @@ function finishExpedition() {
     dl.append(dt, dd);
   }
   // en-tête : numéro d'expédition, palier du sac atteint et multiplicateur
-  $('resSub').textContent = r.lair.only ? world.zone.boss.lair : `Expédition ${save.expeditions} · ${world.zone.stage || world.zone.name}`;
+  $('resSub').textContent = r.lair.only ? world.zone.boss.lair : `Expédition ${save.expeditions} · ${world.zone.levelName || world.zone.stage || world.zone.name}${world.zone.amb ? '' : ' · ' + world.zone.stage}`;
   const tier = r.tier || 0, [lo, hi] = tierRange(tier, stats);
   $('resTierIco').style.background = TIERS[tier].color;
   $('resTierIco').title = TIERS[tier].name;
@@ -522,7 +610,7 @@ const visible = n => !n.parent || L(n.parent) > 0 || L(n.id) > 0;
 const teaser = () => false; // pas de « ? » : on ne voit que les nœuds révélés
 const colorOf = n => (BRANCHES[n.branch] || BRANCHES.depart)[1];
 const branchName = n => (BRANCHES[n.branch] || BRANCHES.depart)[0];
-const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: (save.bosses || {})[ZONES[0].id] || 0, L });
+const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: winsOf('clairiere'), L, reached: reached(), bosses: save.bosses || {}, zoneTier: save.zoneTier || {} });
 // épreuves d'ultime : acceptée (meilleur score enregistré) mais pas encore réussie
 const trialOn = n => n.type === 'ult' && !L(n.id) && save.trials && save.trials[n.id] !== undefined;
 // niveau maximum achetable pour l'instant (certains nœuds se débloquent par étapes)
@@ -564,9 +652,12 @@ function renderTree() {
   $('atelierWallet').textContent = fmt(save.coins);
   const lb = $('lairBtn'), open = lairOpen();
   lb.disabled = !open;
-  $('zoneBoss').textContent = (open ? '♛ ' : '🔒 ') + ZONES[0].boss.lair;
+  const z = curZone();
+  $('zoneName').textContent = z.levelName;
+  $('zoneBoss').textContent = (open ? '♛ ' : '🔒 ') + z.boss.lair;
+  document.querySelector('#lairBtn').style.setProperty('--zc', z.boss.color || '#ff9a46');
   $('runsChip').textContent = `Expéditions : ${save.expeditions}`;
-  lb.title = open ? `Affronter ${ZONES[0].boss.name} directement` : `Remplis le sac jusqu'au palier « ${TIERS[ARENA.unlockTier].name} » pour ouvrir le portail`;
+  lb.title = open ? `Affronter ${z.boss.name} directement` : z.demon && (save.lairs || {})[z.id] ? 'Achète « Seigneur des Enfers » dans l\'arbre pour ouvrir son antre' : `Remplis le sac jusqu'au palier « ${TIERS[ARENA.unlockTier].name} » ici pour ouvrir le portail`;
   const inner = $('treeInner'), svg = $('treeLines');
   const W = PAD * 2 + (maxX - minX) * G, H = PAD * 2 + (maxY - minY) * G;
   inner.style.width = W + 'px'; inner.style.height = H + 'px';
@@ -824,6 +915,7 @@ function drawMinimap() {
   mg.setTransform(dpr, 0, 0, dpr, 0, 0);
   mg.imageSmoothingEnabled = true;
   mg.drawImage(map.c, 0, 0, W, H);
+  for (const a of world.zone.areaList || []) { mg.strokeStyle = 'rgba(255,240,200,.6)'; mg.lineWidth = 1; mg.setLineDash([2, 2]); mg.beginPath(); mg.ellipse(a.x * k, a.y * k, a.r * k, a.r / 1.4 * k, 0, 0, 7); mg.stroke(); mg.setLineDash([]); }
   const dot = (x, y, r, col) => { mg.fillStyle = col; mg.fillRect(Math.round(x * k - r / 2), Math.round(y * k - r / 2), r, r); };
   for (const c of world.coins) dot(c.x, c.y, 2, '#ffd34d');
   for (const e of world.enemies) if (!e.boss) dot(e.x, e.y, e.gold ? 4 : 3, e.gold ? '#ffe14a' : '#ff6b4a');
@@ -833,7 +925,7 @@ function drawMinimap() {
     for (const e of world.enemies) if (e.gold || e.event) { mg.strokeStyle = e.event ? '#ff5a5a' : '#ffe14a'; mg.lineWidth = 1.5; mg.strokeRect(e.x * k - pulse / 2, e.y * k - pulse / 2, pulse, pulse); }
     for (const m of (world.run && world.run.mounds) || []) dot(m.x, m.y, 5, '#c9a06a');
   }
-  for (const h of (world.run && world.run.helpers) || []) dot(h.x, h.y, 3, h.kind === 'sprite' ? '#9bf06b' : '#e8eef8');
+  for (const h of (world.run && world.run.helpers) || []) dot(h.x, h.y, 3, h.kind === 'sprite' ? '#9bf06b' : h.kind === 'hound' ? '#ff7a3c' : '#e8eef8');
   const b = bagPos(world); dot(b.x, b.y, 6, '#fff2c8');
   for (const u of world.heroes) dot(u.x, u.y, 4, '#7ee06b');
   const lr = world.run && world.run.lair, pp = portalPos(world);
@@ -855,7 +947,14 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { if (e.code === 'Space') world.holdKey = false; });
 
 $('go').onclick = go;
+$('worldBtn').onclick = () => openWorld();
+$('wmClose').onclick = () => { $('worldMap').hidden = true; };
 $('lairBtn').onclick = goLair;
+addEventListener('keydown', e => {
+  if ($('atelier').hidden || !$('result').hidden || e.target.closest && e.target.closest('input,textarea')) return;
+  if (e.code === 'KeyM') { e.preventDefault(); if ($('worldMap').hidden) openWorld(); else $('worldMap').hidden = true; }
+  else if (e.code === 'Escape' && !$('worldMap').hidden) $('worldMap').hidden = true;
+});
 $('back').onclick = toAtelier;
 $('again').onclick = () => go();
 addEventListener('keydown', e => {
@@ -956,6 +1055,6 @@ initCompany({ get save() { return save; }, write: () => writeSave(save), fmt, he
 gearSheetReady.then(() => renderTree());
 
 // Accès pour les tests automatisés
-window.__game = { world, get save() { return save; }, go, goLair, toAtelier, lairOpen, useUlt: k => useUlt(world, k),
+window.__game = { world, get save() { return save; }, go, goLair, toAtelier, lairOpen, travel, openWorld, region: i => { save.region = i; world.zone = curZone(); }, useUlt: k => useUlt(world, k),
   buyable: () => NODES.filter(n => visible(n) && !lockedNow(n) && L(n.id) < capOf(n)).map(n => ({ id: n.id, cost: costOf(n, L(n.id)) })),
   buy: id => buy(NODE[id]) };

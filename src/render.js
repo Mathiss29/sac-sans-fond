@@ -7,7 +7,7 @@ import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, p
 import { buildSprites, loadHeroSheets, loadMonsterSheets, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
 
 const SPR = buildSprites();
-export const heroSheetsReady = Promise.all([loadHeroSheets(), loadMonsterSheets().then(() => { for (const k in iconCache) delete iconCache[k]; })]);
+export const heroSheetsReady = Promise.all([loadHeroSheets(), loadMonsterSheets().then(() => { for (const k in iconCache) delete iconCache[k]; for (const k in tintCache) delete tintCache[k]; })]);
 
 // Taille d'un pixel d'art à l'écran : 2 en général (vue large), 3 sur très grand écran.
 export function pixelSize(w, h) { return Math.max(2, Math.min(4, Math.floor(Math.min(w, h) / 420))); }
@@ -44,8 +44,10 @@ function shadow(g, x, y, rx, ry) {
 const iconCache = {};
 export function enemyIcon(type) {
   if (iconCache[type]) return iconCache[type];
-  const look = (ENEMIES[type] && ENEMIES[type].look) || type;
-  const f = (SPR.enemies[look] || SPR.enemies.wisp)[0].c;
+  const def = ENEMIES[type], look = (def && def.look) || type;
+  let fr = SPR.enemies[look] || SPR.enemies.wisp;
+  if (def && def.tint) fr = tinted(look, def.tint, fr);
+  const f = fr[0].c;
   const c = document.createElement('canvas'); c.width = 22; c.height = 22;
   const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
   const k = Math.max(1, Math.floor(22 / Math.max(f.width, f.height)));
@@ -60,13 +62,18 @@ export function drawEnemy(g, e, t, px = 3) {
     g.save(); g.translate(0, -k * 260); drawEnemy(g, { ...e, fall: 0, hp: e.max }, t, px); g.restore();
     return;
   }
-  const key = e.boss ? 'boss' : e.gold ? 'gold' : (e.def && e.def.look) || e.type;
+  const key = e.boss ? (e.def && e.def.look && SPR.enemies[e.def.look] ? e.def.look : 'boss') : e.gold ? 'gold' : (e.def && e.def.look) || e.type;
   let frames = SPR.enemies[key] || SPR.enemies.wisp;
-  if (e.def && e.def.tint && !e.boss) frames = tinted(key, e.def.tint, frames);
+  if (e.def && e.def.tint) frames = tinted(key, e.def.tint, frames);
+  if (e.elite) frames = tinted(key + 'elite', '#ffd246', frames);
+  if (e.boss && e.dash && e.dash.warn > 0) {   // ruée annoncée : ligne rouge vers la cible
+    g.strokeStyle = `rgba(255,70,50,${0.4 + 0.4 * Math.sin(t * 25)})`; g.lineWidth = e.r * 0.9; g.setLineDash([px * 4, px * 3]);
+    g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(e.dash.tx, e.dash.ty); g.stroke(); g.setLineDash([]);
+  }
   const drawn = SPR.enemyScale && SPR.enemyScale[key];
   // boss dessiné : 4 images de repos, puis 4 de coup de poing quand il frappe
   if (drawn && e.boss && frames.length === 8) frames = e.atk > 0 ? frames.slice(4) : frames.slice(0, 4);
-  const f = drawn && e.boss && e.atk > 0 ? frames[Math.min(3, Math.floor((1 - e.atk / 0.7) * 4))] : e.type === 'mimic' ? (frames.length >= 6 ? (e.awake ? frames[2 + Math.floor(e.ph * 4) % 4] : frames[Math.floor(e.ph * 0.9) % 2]) : frames[e.awake ? 1 : 0]) : frames[Math.floor(e.ph * (e.type === 'goblin' ? 4 : e.type === 'vein' ? 2 : 0.9)) % frames.length];
+  const f = drawn && e.boss && e.atk > 0 && frames.length >= 4 ? frames[Math.min(3, Math.floor((1 - e.atk / 0.7) * 4))] : e.type === 'mimic' ? (frames.length >= 6 ? (e.awake ? frames[2 + Math.floor(e.ph * 4) % 4] : frames[Math.floor(e.ph * 0.9) % 2]) : frames[e.awake ? 1 : 0]) : frames[Math.floor(e.ph * (e.type === 'goblin' ? 4 : e.type === 'vein' ? 2 : 0.9)) % frames.length];
   // le boss est frappé sans arrêt : un bref éclair seulement, sinon il resterait blanc
   const flash = e.boss ? e.hit > 0.09 && Math.floor(t * 20) % 3 === 0 : e.hit > 0.06 || (e.hit > 0 && Math.floor(t * 30) % 2);
   const img = flash ? f.white : f.c;
@@ -98,6 +105,9 @@ export function drawEnemy(g, e, t, px = 3) {
     g.font = `700 ${px * 6}px ${UI_FONT}`; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = '#24161e';
     const txt = 'Prime ' + Math.round(e.value); g.strokeText(txt, e.x, ty); g.fillStyle = '#ffd246'; g.fillText(txt, e.x, ty);
   }
+  if (e.boss) bossExtras(g, e, t, px, w, h);
+  if (e.elite) { g.strokeStyle = 'rgba(255,210,70,.8)'; g.lineWidth = 2; g.beginPath(); g.ellipse(e.x, e.y + h * 0.42, w * 0.42, px * 2.5, 0, 0, 7); g.stroke(); }
+  if (e.guard) { g.strokeStyle = '#aee6ff'; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.arc(e.x, e.y, w * 0.6, 0, 7); g.stroke(); g.setLineDash([]); }
   if (e.frozen > 0 && !e.boss) { g.fillStyle = 'rgba(174,230,255,.35)'; g.fillRect(Math.round(e.x - w / 2), Math.round(e.y - h / 2 + hover), w, h); }
   if (e.burn > 0 && Math.random() < 0.3) { g.fillStyle = Math.random() < 0.5 ? '#ff7a3c' : '#ffd246'; g.fillRect(Math.round(e.x + (Math.random() - 0.5) * w * 0.6), Math.round(e.y - h * 0.3 + hover), px, px * 2); }
   if (e.slow > 0) {
@@ -113,6 +123,25 @@ export function drawEnemy(g, e, t, px = 3) {
     const bw = Math.max(18, w * 0.7), y = Math.round(e.y - h / 2 + hover - 7);
     g.fillStyle = '#24161e'; g.fillRect(Math.round(e.x - bw / 2) - 1, y - 1, bw + 2, 5);
     g.fillStyle = '#9be36b'; g.fillRect(Math.round(e.x - bw / 2), y, bw * Math.max(0, e.hp / e.max), 3);
+  }
+}
+
+// Boss : bulle protectrice, armure, jauge d'étourdissement.
+function bossExtras(g, e, t, px, w, h) {
+  if (e.shield) {
+    g.fillStyle = `rgba(160,220,255,${0.18 + 0.06 * Math.sin(t * 4)})`; g.strokeStyle = 'rgba(200,240,255,.8)'; g.lineWidth = 2;
+    g.beginPath(); g.arc(e.x, e.y, Math.max(w, h) * 0.62, 0, 7); g.fill(); g.stroke();
+  }
+  const bw = Math.max(60, w * 0.8), x0 = Math.round(e.x - bw / 2); let y = Math.round(e.y + h * 0.5 + px * 3);
+  if (e.armorMax) {
+    g.fillStyle = '#24161e'; g.fillRect(x0 - 1, y - 1, bw + 2, 6);
+    g.fillStyle = e.armor > 0 ? '#c8d0d8' : '#5a5a60'; g.fillRect(x0, y, bw * Math.max(0, e.armor / e.armorMax), 4); y += 8;
+  }
+  if (e.stunned > 0) {
+    for (let i = 0; i < 3; i++) { const an = t * 5 + i * 2.1; g.fillStyle = '#ffe14a'; g.fillRect(Math.round(e.x + Math.cos(an) * w * 0.35) - px, Math.round(e.y - h * 0.55 + Math.sin(an) * px * 3) - px, px * 2, px * 2); }
+  } else if (e.stunBar) {
+    g.fillStyle = '#24161e'; g.fillRect(x0 - 1, y - 1, bw + 2, 4);
+    g.fillStyle = '#ffe14a'; g.fillRect(x0, y, bw * Math.min(1, e.stunBar / 120), 2);
   }
 }
 
@@ -229,6 +258,7 @@ export function render(g, world, dpr) {
 
   g.save(); g.translate(-camX, -camY);
   if (!arena) drawClouds(g, world, t, camX, camY);
+  if (!arena) drawAreas(g, world, t);
   const r = world.run;
   if (arena) drawBraziers(g, map, t, px);
   else if (r && (world.phase === 'expedition' || world.phase === 'tear')) drawPortal(g, world, t, px);
@@ -420,6 +450,13 @@ export function render(g, world, dpr) {
   // assistants : lutin (lumière verte à ailes) et pie
   for (const hp2 of (world.run && world.run.helpers) || []) {
     const bobY = Math.sin(t * 6 + hp2.x * 0.01) * 3;
+    if (hp2.kind === 'hound') {   // chien du pacte : sprite du chien des Enfers
+      const fr = SPR.enemies.d_hound, f = fr[Math.floor(t * 6) % fr.length].c, k = 1.6, w = f.width * k, h = f.height * k;
+      shadow(g, hp2.x, hp2.y + h * 0.45, w * 0.3, 3);
+      g.save(); g.translate(Math.round(hp2.x), 0); g.scale((hp2.face || 1) > 0 ? -1 : 1, 1);
+      g.drawImage(f, Math.round(-w / 2), Math.round(hp2.y - h / 2), w, h); g.restore();
+      continue;
+    }
     if (hp2.kind === 'sprite') {
       const gr = g.createRadialGradient(hp2.x, hp2.y + bobY, 1, hp2.x, hp2.y + bobY, 18);
       gr.addColorStop(0, 'rgba(180,255,140,.8)'); gr.addColorStop(1, 'rgba(180,255,140,0)');
@@ -559,28 +596,7 @@ function drawAmbiance(g, world, t, camX, camY, dpr) {
     g.fillStyle = sun; g.fillRect(0, 0, w, h);
     g.restore();
   } else if (id === 'minuit') {
-    // nuit : un voile sombre, troué de lumière autour des héros, du sac, des feux follets et du butin
-    if (!nightC || nightC.width !== w || nightC.height !== h) { nightC = document.createElement('canvas'); nightC.width = w; nightC.height = h; }
-    const n = nightC.getContext('2d');
-    n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, w, h);
-    n.fillStyle = 'rgba(12,16,44,0.78)'; n.fillRect(0, 0, w, h);
-    n.globalCompositeOperation = 'destination-out';
-    const hole = (x, y, r, a = 1) => {
-      x -= camX; y -= camY;
-      if (x < -r || y < -r || x > w + r || y > h + r) return;
-      const gr = n.createRadialGradient(x, y, r * 0.15, x, y, r);
-      gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      n.fillStyle = gr; n.beginPath(); n.arc(x, y, r, 0, 7); n.fill();
-    };
-    const b = bagPos(world);
-    hole(b.x, b.y, 200, 0.9);
-    const lan = (world.stats && world.stats.lantern) || 1;
-    for (const u of world.heroes) hole(u.x, u.y, (120 + 6 * Math.sin(t * 3 + u.x)) * lan, 0.85);
-    for (const e of world.enemies) if (e.type === 'wisp' || e.boss || e.event) hole(e.x, e.y, e.boss ? 160 : e.type === 'vein' ? 110 : 55, 0.7);
-    for (const c of world.coins) if (c.value >= 5) hole(c.x, c.y, 30, 0.5);
-    const p = world.pointer;
-    if (p.inside) hole(p.x + camX, p.y + camY, 90, 0.6);
-    g.drawImage(nightC, 0, 0, w, h);
+    nightMask(g, world, t, camX, camY, 'rgba(12,16,44,0.78)');
     // étoiles
     g.fillStyle = '#dfe8ff';
     for (let i = 0; i < 40; i++) {
@@ -598,6 +614,77 @@ function drawAmbiance(g, world, t, camX, camY, dpr) {
       g.fillRect(Math.round(x), Math.round(y), sz, sz);
     }
     g.globalAlpha = 1;
+  } else if (id === 'brume') {
+    // bancs de brume qui dérivent
+    g.fillStyle = 'rgba(210,225,215,.16)';
+    for (let i = 0; i < 9; i++) {
+      const x = ((i * 211 + t * (10 + i * 2) - camX * 0.5) % (w + 400) + w + 400) % (w + 400) - 200, y = (i * 137 - camY * 0.5) % h;
+      g.beginPath(); g.ellipse(x, (y + h) % h, 240, 70, 0, 0, 7); g.fill();
+    }
+  } else if (id === 'automne') {
+    const cols = ['#e07a2a', '#c84a2a', '#ffd070', '#a0481e'];
+    for (let i = 0; i < 60; i++) {
+      const sp = 26 + (i % 5) * 7, x = ((i * 97.1 + Math.sin(t * 1.3 + i) * 40 - camX * 0.3) % w + w) % w, y = ((i * 61.7 + t * sp - camY * 0.3) % h + h) % h;
+      g.fillStyle = cols[i % 4]; g.fillRect(Math.round(x), Math.round(y), 4, Math.sin(t * 4 + i) > 0 ? 3 : 2);
+    }
+  } else if (id === 'desert') {
+    g.save(); g.globalCompositeOperation = 'multiply'; g.fillStyle = 'rgba(255,215,160,.35)'; g.fillRect(0, 0, w, h); g.restore();
+    g.fillStyle = 'rgba(240,210,150,.5)';
+    for (let i = 0; i < 70; i++) { const x = ((i * 131 + t * (90 + i % 4 * 20) - camX * 0.4) % w + w) % w, y = ((i * 71.3 - camY * 0.4) % h + h) % h + Math.sin(t * 2 + i) * 6; g.fillRect(Math.round(x), Math.round(y), 3, 1); }
+  } else if (id === 'grotte' || id === 'lumi' || id === 'neant') {
+    nightMask(g, world, t, camX, camY, id === 'grotte' ? 'rgba(20,12,40,0.62)' : id === 'lumi' ? 'rgba(6,30,34,0.6)' : 'rgba(18,6,34,0.7)');
+    const cols = id === 'grotte' ? ['#b48cff', '#8ad0ff'] : id === 'lumi' ? ['#7fffd0', '#d0ff80'] : ['#ffffff', '#b48cff'];
+    for (let i = 0; i < 46; i++) {
+      const x = ((i * 157.3 + Math.sin(t * 0.6 + i) * 20 - camX * 0.6) % w + w) % w, y = ((i * 89.1 - t * (id === 'lumi' ? 12 : 4) - camY * 0.6) % h + h) % h;
+      g.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(t * 1.5 + i)); g.fillStyle = cols[i % 2]; g.fillRect(Math.round(x), Math.round(y), 2, 2);
+    }
+    g.globalAlpha = 1;
+  } else if (id === 'enfers') {
+    g.save(); g.globalCompositeOperation = 'multiply'; g.fillStyle = 'rgba(255,150,120,.4)'; g.fillRect(0, 0, w, h); g.restore();
+    drawEmbers(g, world, t, 3);
+  } else if (id === 'ciel') {
+    g.save(); g.globalCompositeOperation = 'screen'; g.fillStyle = 'rgba(200,225,255,.12)'; g.fillRect(0, 0, w, h); g.restore();
+    g.fillStyle = 'rgba(255,255,255,.35)';
+    for (let i = 0; i < 6; i++) { const x = ((i * 311 + t * (30 + i * 6) - camX * 0.7) % (w + 300) + w + 300) % (w + 300) - 150, y = (i * 157) % h; g.beginPath(); g.ellipse(x, y, 90, 26, 0, 0, 7); g.ellipse(x + 50, y - 12, 50, 22, 0, 0, 7); g.fill(); }
+  }
+}
+
+// Voile de nuit troué de lumière autour des héros, du sac, des feux follets et du butin.
+function nightMask(g, world, t, camX, camY, fill) {
+  const { w, h } = world;
+    // nuit : un voile sombre, troué de lumière autour des héros, du sac, des feux follets et du butin
+  if (!nightC || nightC.width !== w || nightC.height !== h) { nightC = document.createElement('canvas'); nightC.width = w; nightC.height = h; }
+  const n = nightC.getContext('2d');
+  n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, w, h);
+  n.fillStyle = fill; n.fillRect(0, 0, w, h);
+  n.globalCompositeOperation = 'destination-out';
+  const hole = (x, y, r, a = 1) => {
+    x -= camX; y -= camY;
+    if (x < -r || y < -r || x > w + r || y > h + r) return;
+    const gr = n.createRadialGradient(x, y, r * 0.15, x, y, r);
+    gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    n.fillStyle = gr; n.beginPath(); n.arc(x, y, r, 0, 7); n.fill();
+  };
+  const b = bagPos(world);
+  hole(b.x, b.y, 200, 0.9);
+  const lan = (world.stats && world.stats.lantern) || 1;
+  for (const u of world.heroes) hole(u.x, u.y, (120 + 6 * Math.sin(t * 3 + u.x)) * lan, 0.85);
+  for (const e of world.enemies) if (e.type === 'wisp' || e.boss || e.event) hole(e.x, e.y, e.boss ? 160 : e.type === 'vein' ? 110 : 55, 0.7);
+  for (const c of world.coins) if (c.value >= 5) hole(c.x, c.y, 30, 0.5);
+  const p = world.pointer;
+  if (p.inside) hole(p.x + camX, p.y + camY, 90, 0.6);
+  g.drawImage(nightC, 0, 0, w, h);
+}
+
+// Lieux nommés de la région : cercle pointillé au sol et nom en lettres pâles.
+function drawAreas(g, world, t) {
+  for (const a of (world.zone && world.zone.areaList) || []) {
+    g.strokeStyle = 'rgba(255,240,200,.22)'; g.lineWidth = 3; g.setLineDash([10, 12]); g.lineDashOffset = -t * 6;
+    g.beginPath(); g.ellipse(a.x, a.y, a.r, a.r / 1.4, 0, 0, 7); g.stroke(); g.setLineDash([]);
+    g.font = `400 18px ${UI_FONT}`; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = 'rgba(36,22,30,.5)';
+    const ty = a.y - a.r / 1.4 + 22; g.strokeText(a.name.toUpperCase(), a.x, ty); g.fillStyle = 'rgba(255,240,200,.55)'; g.fillText(a.name.toUpperCase(), a.x, ty);
+    g.font = `400 12px ${UI_FONT}`; const sub = `PV ×${String(a.hp).replace('.', ',')} · butin ×${String(a.gold).replace('.', ',')}`;
+    g.strokeText(sub, a.x, ty + 16); g.fillText(sub, a.x, ty + 16);
   }
 }
 
@@ -654,13 +741,14 @@ function drawBraziers(g, map, t, px) {
 }
 
 // Zone de feu annoncée : cercle rouge qui se remplit avant d'exploser.
+const HAZ = { fire: [[255, 70, 30], [255, 170, 60], '#ff5a2a'], ice: [[90, 170, 255], [190, 235, 255], '#7fd0ff'], spore: [[90, 200, 120], [200, 255, 140], '#6fe08a'] };
 function drawHazard(g, z, t, px) {
-  const k = 1 - z.t / z.warn;
-  g.fillStyle = `rgba(255,70,30,${0.12 + k * 0.25})`;
+  const k = 1 - z.t / z.warn, [a, b, line] = HAZ[z.kind] || HAZ.fire;
+  g.fillStyle = `rgba(${a},${0.12 + k * 0.25})`;
   g.beginPath(); g.ellipse(z.x, z.y, z.r, z.r * 0.6, 0, 0, 7); g.fill();
-  g.fillStyle = `rgba(255,170,60,${0.25 + 0.2 * Math.sin(t * 30)})`;
+  g.fillStyle = `rgba(${b},${0.25 + 0.2 * Math.sin(t * 30)})`;
   g.beginPath(); g.ellipse(z.x, z.y, z.r * k, z.r * 0.6 * k, 0, 0, 7); g.fill();
-  g.strokeStyle = '#ff5a2a'; g.lineWidth = px; g.setLineDash([px * 2, px * 2]); g.lineDashOffset = -t * 30;
+  g.strokeStyle = line; g.lineWidth = px; g.setLineDash([px * 2, px * 2]); g.lineDashOffset = -t * 30;
   g.beginPath(); g.ellipse(z.x, z.y, z.r, z.r * 0.6, 0, 0, 7); g.stroke(); g.setLineDash([]);
 }
 

@@ -15,6 +15,7 @@ export function loadSave() {
 function migrate(s) {
   const out = Object.assign(freshSave(), s);
   out.level = Object.assign({ root: 1 }, s.level || {});
+  if (!out.zoneTier) out.zoneTier = { clairiere: out.maxTier || 0 };
   if ((s.version || 1) < 2) toBigTree(out);
   out.version = SAVE_VERSION;
   return out;

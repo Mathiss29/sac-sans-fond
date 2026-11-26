@@ -54,7 +54,9 @@ export function centerCam(world, x, y) { world.cam.x = x - world.w / 2; world.ca
 export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]) {
   // l'étape modifie la zone (PV, butin) et les stats (feux follets dorés) pour cette expédition
   const m = stage.mods || {};
-  zone = { ...zone, stage: stage.name, hpMult: zone.hpMult * (m.hp || 1), valueMult: zone.valueMult * (m.value || 1) * (stats.valueMult || 1) };
+  zone = { ...zone, stage: stage.name, hpMult: zone.hpMult * (m.hp || 1), valueMult: zone.valueMult * (m.value || 1) * (stats.valueMult || 1) * (zone.demon ? stats.embers || 1 : 1) };
+  // zones nommées de la carte : plus d'ennemis costauds, plus d'or
+  zone.areaList = (zone.areas || []).map(([name, fx, fy, hp, gold]) => ({ name, x: fx * MAP.w, y: fy * MAP.h, r: 300, hp, gold }));
   stats = { ...stats, goldChance: stats.goldChance * (m.gold || 1) };
   world.stage = stage;
   Object.assign(world, {
@@ -67,13 +69,26 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
       lair: { open: !!lair.open, first: !!lair.first, done: false, got: 0, only: false }, arena: null,
       happenings: planEvents(stats), eventsGot: 0,
-      cnt: { kills: 0, slowed: 0, knocked: 0, auraT: 0 }, ult: { archer: 0.5, mage: 0.5, knight: 0.5, bard: 0.5 }, hymnT: 0, reinforced: false,
+      cnt: { kills: 0, slowed: 0, knocked: 0, auraT: 0 }, areasSeen: {}, mvpAt: zone.families && zone.families.mvp && Math.random() < 0.35 ? stats.duration * rnd(0.2, 0.8) : -1, ult: { archer: 0.5, mage: 0.5, knight: 0.5, bard: 0.5 }, hymnT: 0, reinforced: false,
     },
   });
   const b = bagPos(world);
   centerCam(world, b.x, b.y + 40);
   for (let i = 0; i < BASE.startPacks; i++) spawnPack(world, true);
   world.events.push({ kind: 'banner', title: stage.name, sub: stage.blurb });
+}
+
+export function areaAt(world, x, y) {
+  for (const a of (world.zone && world.zone.areaList) || []) if ((x - a.x) ** 2 + ((y - a.y) * 1.4) ** 2 < a.r * a.r) return a;
+  return null;
+}
+// Élite (nœud « Élites ») et zones nommées : appliqués à chaque nouvel élémentaire.
+function decorate(world, e) {
+  if (world.mode !== 'map' || e.event || e.boss) return e;
+  const a = areaAt(world, e.x, e.y);
+  if (a) { e.hp *= a.hp; e.max = e.hp; e.value *= a.gold; e.area = a; }
+  if (world.stats && world.stats.elite && !e.gold && !e.def.mvp && Math.random() < 0.03) { e.elite = true; e.hp *= 6; e.max = e.hp; e.value *= 5; e.r *= 1.3; }
+  return e;
 }
 
 // ---------- Événements d'expédition ----------
@@ -170,6 +185,16 @@ function updateEvents(world, dt) {
     }
     if (rain.t <= 0 || rain.left <= 0) r.rain = null;
   }
+  if (r.mvpAt >= 0 && r.t >= r.mvpAt) {
+    r.mvpAt = -1;
+    const p = eventSpot(world), e = spawnEnemy(world, false, 'mvp', p.x, p.y);
+    e.hp = e.max = foeHp(world, 'golem') * 4; e.life = 20; e.a = rnd(0, 6);
+    world.events.push({ kind: 'banner', title: 'Un lapin d\'or !', sub: 'Rare et très riche : coince-le avant qu\'il ne s\'enfuie' });
+    sfx(world, 'gold');
+  }
+  // zones nommées : un bandeau la première fois que la vue y entre
+  const cx = world.cam.x + world.w / 2, cy = world.cam.y + world.h / 2, ar = areaAt(world, cx, cy);
+  if (ar && !r.areasSeen[ar.name]) { r.areasSeen[ar.name] = true; world.events.push({ kind: 'banner', title: ar.name, sub: `Ennemis ×${String(ar.hp).replace('.', ',')} plus costauds · or ×${String(ar.gold).replace('.', ',')}` }); }
   if (r.lucky > 0) r.lucky -= dt;
   if (r.mirage > 0) r.mirage -= dt;
   if (r.mounds) {
@@ -239,15 +264,17 @@ export function enterArena(world) {
     u.drop = 0.6 + (i % 4) * 0.1; u.stun = 0; u.cd = rnd(0.2, 0.8);
   });
   const b = world.zone.boss;
-  r.arena = { t: 0, duration: ARENA.duration, fireT: 2.2, summoned: 0, loot: 0, won: false, leaving: 0 };
+  r.arena = { t: 0, duration: ARENA.duration, fireT: 2.2, summoned: 0, loot: 0, won: false, leaving: 0, mechT: 4, phase: 0 };
   const home = { x: aw / 2, y: ah * 0.4, r: Math.min(aw, ah) * 0.26 };
   const e = {
-    type: 'boss', boss: true, def: { ...b, color: '#ff7a3c', core: '#fff1c2' }, x: home.x, y: home.y, r: b.radius,
+    type: 'boss', boss: true, def: { ...b, color: b.color || '#ff7a3c', core: '#fff1c2' }, x: home.x, y: home.y, r: b.radius,
     hp: b.hp * world.zone.hpMult, max: b.hp * world.zone.hpMult, value: b.value * world.zone.valueMult * (r.lair.first ? ARENA.firstBonus : 1),
     a: rnd(0, 6), ph: rnd(0, 6), age: 0, hit: 0, dead: false, slow: 0, home,
   };
+  if (b.mech === 'armor') e.armor = e.armorMax = e.max * 0.3;
   world.enemies.push(e);
   r.boss = e;
+  if (b.mech === 'guards' || b.mech === 'final') spawnGuards(world, e);
   centerCam(world, aw / 2, ah / 2);
   world.fx.push({ kind: 'ring', x: home.x, y: home.y, r0: 10, r1: 300, t: 0.7, life: 0.7, color: '#ff9a3c' });
   shake(world, 8); sfx(world, 'portal');
@@ -272,7 +299,7 @@ function exitArena(world) {
   centerCam(world, p.x, p.y + 60);
   sfx(world, 'portal');
   world.events.push({ kind: 'arena', on: false });
-  world.events.push({ kind: 'banner', title: 'Retour à la ' + world.zone.name.toLowerCase(), sub: a.won ? 'Le portail se referme derrière toi' : 'Le Brasier t\'a repoussé…' });
+  world.events.push({ kind: 'banner', title: 'Retour sur la carte', sub: a.won ? 'Le portail se referme derrière toi' : world.zone.boss.name + ' t\'a repoussé…' });
 }
 
 function updateArena(world, dt) {
@@ -291,25 +318,93 @@ function updateArena(world, dt) {
     exitArena(world);
     return;
   }
-  // invocations : à 66 % et 33 % de vie, une couronne de feux follets
+  bossMechanics(world, dt);
+}
+
+// Type d'élémentaire qu'un boss appelle à l'aide.
+function summonType(world) {
+  const m = world.zone.boss.mech;
+  if (m === 'imps') return 'imp';
+  if (m === 'spores') return 'puffer';
+  return Object.keys(world.zone.spawn).find(k => ENEMIES[k].role === 'weak') || 'wisp';
+}
+// Gardes : tant qu'ils vivent, une bulle protège le boss.
+function spawnGuards(world, bo) {
+  const tough = Object.keys(world.zone.spawn).find(k => ENEMIES[k].role === 'tough') || 'golem';
+  for (let i = 0; i < 4; i++) {
+    const an = i / 4 * Math.PI * 2 + 0.4, g = spawnAt(world, tough, bo.x + Math.cos(an) * 150, bo.y + Math.sin(an) * 100);
+    g.hp = g.max = bo.max * 0.035; g.guard = true; g.value = 0; g.home = { x: g.x, y: g.y, r: 40 };
+  }
+  bo.shield = true;
+  world.events.push({ kind: 'banner', title: 'Gardes royaux !', sub: 'Abats les 4 gardes pour briser la bulle' });
+  sfx(world, 'warn');
+}
+// « Lequel ? » : le boss se cache parmi des copies ; toucher une copie la fait disparaître.
+function spawnCopies(world, bo) {
+  const slots = [], n = 5;
+  for (let i = 0; i < n; i++) { const an = i / n * Math.PI * 2; slots.push({ x: bo.home.x + Math.cos(an) * 170, y: bo.home.y + Math.sin(an) * 110 }); }
+  const real = Math.floor(Math.random() * n);
+  slots.forEach((p, i) => {
+    if (i === real) { bo.x = p.x; bo.y = p.y; return; }
+    world.enemies.push({ type: 'boss', boss: true, fake: true, def: bo.def, x: p.x, y: p.y, r: bo.r, hp: 1, max: 1, value: 0, a: 0, ph: rnd(0, 6), age: 0, hit: 0, dead: false, slow: 0, home: { x: p.x, y: p.y, r: 30 } });
+  });
+  world.run.arena.copiesT = 8;
+  burst(world, bo.home.x, bo.home.y, 40, ['#e8e0d0', '#ffffff'], 300, 2, 0, 0.7);
+  world.events.push({ kind: 'banner', title: 'Lequel ?', sub: 'Trouve le vrai parmi les copies' });
+  sfx(world, 'warn');
+}
+
+function bossMechanics(world, dt) {
+  const r = world.run, a = r.arena, bo = r.boss, b = world.zone.boss, mech = b.mech || 'fire', fast = b.faster || 1;
+  if (!bo || bo.dead) return;
+  if (bo.stunned > 0) { bo.stunned -= dt; bo.slow = 0.2; }
+  // bulle : tombe quand les gardes sont morts
+  if (bo.shield && !world.enemies.some(e => e.guard && !e.dead)) { bo.shield = false; world.events.push({ kind: 'banner', title: 'La bulle éclate !', sub: '' }); shake(world, 8); sfx(world, 'burst'); }
+  // copies : disparaissent au bout de quelques secondes
+  if (a.copiesT > 0) { a.copiesT -= dt; if (a.copiesT <= 0) for (const e of world.enemies) if (e.fake) e.dead = true; }
+  // armure qui repousse
+  if (mech === 'armor' && bo.armor <= 0 && bo.armorT > 0) { bo.armorT -= dt; if (bo.armorT <= 0) { bo.armor = bo.armorMax; world.events.push({ kind: 'banner', title: 'L\'armure se reforme', sub: '' }); } }
   const ratio = bo.hp / bo.max;
+  // paliers de vie : 66 % et 33 %
   if (a.summoned < b.summonAt.length && ratio <= b.summonAt[a.summoned]) {
     a.summoned++;
-    for (let i = 0; i < b.summonN; i++) {
-      const an = i / b.summonN * Math.PI * 2;
-      spawnAt(world, 'wisp', bo.x + Math.cos(an) * 110, bo.y + Math.sin(an) * 80);
+    if (mech === 'copies' || (mech === 'final' && a.summoned === 1)) spawnCopies(world, bo);
+    else if ((mech === 'guards' || mech === 'final') && !bo.shield) spawnGuards(world, bo);
+    else {
+      const t = summonType(world);
+      for (let i = 0; i < b.summonN; i++) { const an = i / b.summonN * Math.PI * 2; const m = spawnAt(world, t, bo.x + Math.cos(an) * 110, bo.y + Math.sin(an) * 80); if (ENEMIES[t].puffer) m.base = m.value; }
+      shake(world, 6); sfx(world, 'warn');
+      world.events.push({ kind: 'banner', title: b.name + ' s\'embrase !', sub: 'Il appelle ses sbires' });
     }
-    shake(world, 6); sfx(world, 'warn');
-    world.events.push({ kind: 'banner', title: 'Le Brasier s\'embrase !', sub: 'Il appelle ses feux follets' });
   }
-  // cercles de feu sur les héros : ils sont étourdis s'ils restent dedans
-  a.fireT -= dt * (1 + a.summoned * 0.35);
+  if (bo.stunned > 0) return;
+  // ruée du griffon : ligne d'alerte, puis il fonce à travers la salle
+  if (mech === 'dash' || mech === 'final') {
+    if (bo.dash) {
+      const d = bo.dash;
+      if (d.warn > 0) { d.warn -= dt; }
+      else {
+        const dx = d.tx - bo.x, dy = d.ty - bo.y, dd = Math.hypot(dx, dy) || 1, sp = 700 * dt;
+        bo.x += dx / dd * Math.min(dd, sp); bo.y += dy / dd * Math.min(dd, sp);
+        for (const u of world.heroes) if (u.drop <= 0 && d2(u, bo) < (bo.r + 20) ** 2 && !d.hit.has(u)) { d.hit.add(u); stunHero(world, u, 1.5); u.x += dx / dd * 40; u.y += dy / dd * 40; }
+        if (dd < 10) { bo.dash = null; shake(world, 8); bo.home = { x: bo.x, y: bo.y, r: bo.home.r }; }
+      }
+    } else if ((a.mechT -= dt * fast) <= 0) {
+      a.mechT = 5;
+      const u = world.heroes.filter(h => h.drop <= 0)[Math.floor(Math.random() * world.heroes.length)];
+      if (u) { const ex = u.x + (u.x - bo.x) * 0.6, ey = u.y + (u.y - bo.y) * 0.6; bo.dash = { tx: Math.max(60, Math.min(world.mapW - 60, ex)), ty: Math.max(60, Math.min(world.mapH - 60, ey)), warn: 1, hit: new Set(), x0: bo.x, y0: bo.y }; sfx(world, 'warn'); }
+    }
+  }
+  // attaques au sol (cercles de feu, de glace ou de spores) sur les héros
+  a.fireT -= dt * (1 + a.summoned * 0.35) * fast;
   if (a.fireT <= 0) {
-    a.fireT = b.fireEvery;
-    if (bo && !bo.dead) bo.atk = 0.7;
-    const targets = world.heroes.filter(u => u.drop <= 0).sort(() => Math.random() - 0.5).slice(0, 1 + a.summoned);
+    a.fireT = b.fireEvery * (mech === 'quake' ? 0.8 : 1);
+    bo.atk = 0.7;
+    const kind = mech === 'quake' ? 'ice' : mech === 'spores' ? 'spore' : 'fire';
+    const n = 1 + a.summoned + (mech === 'quake' ? 1 : 0);
+    const targets = world.heroes.filter(u => u.drop <= 0).sort(() => Math.random() - 0.5).slice(0, n);
     if (!targets.length) targets.push({ x: rnd(150, world.mapW - 150), y: rnd(150, world.mapH - 120) });
-    for (const u of targets) world.hazards.push({ x: u.x + rnd(-14, 14), y: u.y + 8 + rnd(-10, 10), r: b.fireRadius, t: b.fireWarn, warn: b.fireWarn });
+    for (const u of targets) world.hazards.push({ x: u.x + rnd(-14, 14), y: u.y + 8 + rnd(-10, 10), r: b.fireRadius * (mech === 'quake' ? 1.5 : 1), t: b.fireWarn, warn: b.fireWarn, kind });
     sfx(world, 'warn');
   }
 }
@@ -327,8 +422,9 @@ function updateHazards(world, dt) {
       u.x += dx / d * 26; u.y += dy / d * 18;
       world.texts.push({ x: u.x, y: u.y - 40, text: 'étourdi', color: '#ffb347', size: 13, life: 0.9 });
     }
-    burst(world, z.x, z.y, 26, ['#ff5a2a', '#ffb040', '#fff0b0', '#24161e'], 200, 2, 0, 0.6);
-    world.fx.push({ kind: 'ring', x: z.x, y: z.y, r0: z.r * 0.3, r1: z.r * 1.3, t: 0.35, life: 0.35, color: '#ff9a3c' });
+    const pal = z.kind === 'ice' ? ['#aee6ff', '#ffffff', '#5a8cdc', '#24161e'] : z.kind === 'spore' ? ['#7fffd0', '#40c0a0', '#e0ffe0', '#24161e'] : ['#ff5a2a', '#ffb040', '#fff0b0', '#24161e'];
+    burst(world, z.x, z.y, 26, pal, 200, 2, 0, 0.6);
+    world.fx.push({ kind: 'ring', x: z.x, y: z.y, r0: z.r * 0.3, r1: z.r * 1.3, t: 0.35, life: 0.35, color: pal[0] });
     shake(world, 5); sfx(world, 'fire');
   }
   world.hazards = world.hazards.filter(z => !z.done);
@@ -366,7 +462,11 @@ function pickEnemyType(zone) {
 // Hordes : les élémentaires arrivent en paquets qui se déplacent ensemble.
 const PACK_SIZE = { wisp: [10, 18], golem: [3, 6], wind: [6, 10] };
 function spawnPack(world, anywhere = false) {
-  const type = pickEnemyType(world.zone);
+  let type = pickEnemyType(world.zone);
+  // familles spéciales selon l'avancée : roi, boursouflé, soigneur, bandit
+  const fam = world.zone.families || {}, rf = Math.random();
+  let special = null;
+  if (fam.king && rf < 0.06) special = 'king'; else if (fam.puffer && rf < 0.13) special = 'puffer'; else if (fam.healer && rf < 0.19) special = 'healer'; else if (fam.bandit && rf < 0.24) special = 'bandit';
   const { mapW, mapH } = world, bag = bagPos(world);
   let x, y;
   for (let k = 0; k < 14; k++) {
@@ -378,13 +478,17 @@ function spawnPack(world, anywhere = false) {
     x = Math.max(100, Math.min(mapW - 100, x)); y = Math.max(100, Math.min(mapH - 100, y));
     if ((x - bag.x) ** 2 + (y - bag.y) ** 2 > 260 * 260) break;
   }
-  const [lo, hi] = PACK_SIZE[type] || [6, 10];
+  const [lo, hi] = PACK_SIZE[type] || PACK_SIZE[ENEMIES[type].look] || [6, 10];
   const n = Math.round(rnd(lo, hi) * (world.stats?.packMult || 1));
   const pack = { x, y, a: rnd(0, Math.PI * 2), n: 0 };
   for (let i = 0; i < n; i++) {
     const a = rnd(0, Math.PI * 2), d = Math.sqrt(Math.random()) * (24 + n * 3.5);
     const e = spawnEnemy(world, false, type, x + Math.cos(a) * d * 1.3, y + Math.sin(a) * d);
     e.pack = pack;
+  }
+  if (special) {
+    const k = special === 'king' ? 1 : special === 'healer' ? 2 : special === 'bandit' ? 2 : 3;
+    for (let i = 0; i < k; i++) { const e = spawnEnemy(world, false, special, x + rnd(-30, 30), y + rnd(-30, 30)); e.pack = pack; e.base = e.value; }
   }
   // Horde dorée : des feux follets dorés se glissent dans chaque paquet
   for (let i = 0; i < ((world.stats && world.stats.goldHorde) || 0) && world.phase === 'expedition'; i++) {
@@ -410,7 +514,7 @@ function spawnEnemy(world, anywhere = false, forceType = null, px = null, py = n
     x = Math.max(40, Math.min(mapW - 40, x)); y = Math.max(40, Math.min(mapH - 40, y));
     if ((x - bag.x) ** 2 + (y - bag.y) ** 2 > 190 * 190) break;
   }
-  const gold = type === 'wisp' && Math.random() < (world.stats?.goldChance || 0);
+  const gold = (def.role === 'weak') && !def.king && Math.random() < (world.stats?.goldChance || 0);
   const e = {
     type, def, x, y, r: def.radius, gold, slow: 0,
     hp: def.hp * world.zone.hpMult, max: def.hp * world.zone.hpMult,
@@ -419,6 +523,7 @@ function spawnEnemy(world, anywhere = false, forceType = null, px = null, py = n
     ph: rnd(0, 6), age: 0, hit: 0, dead: false,
   };
   if (gold) { e.hp *= GOLD_WISP.hp; e.max = e.hp; if (world.run) world.run.golds++; }
+  decorate(world, e);
   world.enemies.push(e);
   if (px === null || gold) world.fx.push({ kind: 'ring', x, y, r0: 2, r1: def.radius * 1.8, t: 0.4, life: 0.4, color: gold ? GOLD_WISP.color : def.color });
   if (gold && world.phase === 'expedition') world.texts.push({ x, y: y - 26, text: 'Feu follet doré !', color: GOLD_WISP.color, size: 15, life: 1.6 });
@@ -455,7 +560,15 @@ function nearestEnemy(world, p, zone = null) {
 function damage(world, e, amount, slow, from, type) {
   if (e.dead) return;
   const st = world.stats;
-  if (e.boss) amount *= st.bossMult * ((st.bossBy && st.bossBy[type]) || 1);
+  if (e.boss || e.elite) amount *= st.bossMult * ((st.bossBy && st.bossBy[type]) || 1);
+  if (e.def.demon) amount *= st.demonMult || 1;
+  if (e.fake) { e.dead = true; burst(world, e.x, e.y, 20, ['#e8e0d0', '#ffffff', '#8c8f86'], 160, 2, 0, 0.5); world.texts.push({ x: e.x, y: e.y - 30, text: 'Faux !', color: '#e8e0d0', size: 16, life: 0.8 }); return; }
+  if (e.boss) {
+    if (e.shield) { if (Math.random() < 0.08) world.texts.push({ x: e.x, y: e.y - e.r - 6, text: 'bulle', color: '#aee6ff', size: 12, life: 0.5 }); return; }
+    if (e.armor > 0) { e.armor -= amount; amount *= 0.15; if (e.armor <= 0) { e.armor = 0; e.armorT = 12; e.stunned = 3; world.events.push({ kind: 'banner', title: 'Armure brisée !', sub: 'Il est sonné : frappe fort' }); shake(world, 10); } }
+    if (e.stunned > 0) amount *= 2;
+    else { e.stunBar = (e.stunBar || 0) + 1; if (e.stunBar >= 120) { e.stunBar = 0; e.stunned = 4; world.events.push({ kind: 'banner', title: 'Sonné !', sub: 'Dégâts ×2 pendant 4 s' }); shake(world, 8); } }
+  }
   const r0 = world.run;
   if (slow) { if (type === 'mage' && e.slow <= 0 && r0 && r0.cnt) r0.cnt.slowed++; e.slow = Math.max(e.slow, slow); }
   if (type === 'mage' && st.has && st.has.maA2 && (e.type === 'golem' || e.elite) && !e.boss) e.frozen = Math.max(e.frozen || 0, 2);
@@ -557,6 +670,13 @@ function killEnemy(world, e) {
   world.run.kills++;
   if (world.run.cnt) world.run.cnt.kills++;
   if (e.bounty && !e.boss && !e.event) e.value *= 1.5;
+  // un roi se divise en petits élémentaires
+  if (e.def.king) {
+    const weak = Object.keys(world.zone.spawn).find(k => ENEMIES[k].role === 'weak') || 'wisp';
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, c = spawnEnemy(world, false, weak, e.x + Math.cos(a) * 30, e.y + Math.sin(a) * 30); c.value *= 3; c.kx = Math.cos(a) * 160; c.ky = Math.sin(a) * 160; }
+    world.texts.push({ x: e.x, y: e.y - 30, text: 'Le roi se divise !', color: '#ffd246', size: 16, life: 1.2 });
+  }
+  if (e.def.mvp) { world.texts.push({ x: e.x, y: e.y - 34, text: 'Lapin d\'or !', color: '#ffe14a', size: 22, life: 1.6 }); shake(world, 8); }
   // Cœur de braise : un ennemi brûlé explose
   if (e.burn > 0 && world.stats.has && world.stats.has.maB1) {
     world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: 6, r1: 70, t: 0.3, life: 0.3, color: '#ff7a3c' });
@@ -750,6 +870,18 @@ function updateEnemies(world, dt) {
     if (e.fall > 0) { e.fall -= dt; if (e.fall <= 0) { burst(world, e.x, e.y, 8, ['#e8d8b0', '#ffffff'], 100, 2, 0, 0.4); world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: 4, r1: 30, t: 0.3, life: 0.3, color: '#fff6dc' }); } continue; }
     if (e.rush) { e.x += e.rush.vx * dt * (e.slow > 0 ? 0.5 : 1); e.y += Math.sin(e.age * 4) * 20 * dt; continue; }
     if (e.frozen > 0) { e.frozen -= dt; continue; }
+    if (e.def.puffer && e.base) { const g = 1 + Math.min(3, e.age / 8); e.value = e.base * g; e.r = e.def.radius * (1 + (g - 1) * 0.35); }
+    if (e.def.healer) {
+      e.healT = (e.healT || 0) - dt;
+      if (e.healT <= 0) { e.healT = 1; for (const o of world.enemies) if (!o.dead && o !== e && !o.boss && o.hp < o.max && d2(o, e) < 90 * 90) { o.hp = Math.min(o.max, o.hp + o.max * 0.08); world.fx.push({ kind: 'ring', x: o.x, y: o.y, r0: 4, r1: 18, t: 0.3, life: 0.3, color: '#80ff90' }); } }
+    }
+    if (e.def.bandit) for (const c of world.coins) if (!c.fly && !c.item && !c.dead && !c.air && d2(c, e) < 28 * 28) { c.dead = true; e.value += c.value; e.stole = true; }
+    if (e.def.mvp) {
+      e.life = (e.life || 20) - dt;
+      if (e.life <= 0) { e.dead = true; world.texts.push({ x: e.x, y: e.y - 24, text: 'Le lapin s\'est enfui…', color: '#e8e0d0', size: 14, life: 1.4 }); continue; }
+      let near = null, nd = 260 * 260; for (const u of world.heroes) { if (u.drop > 0) continue; const d = d2(u, e); if (d < nd) { nd = d; near = u; } }
+      if (near) e.a = Math.atan2(e.y - near.y, e.x - near.x) + Math.sin(e.age * 3) * 0.5;
+    }
     if (e.event && moveEventFoe(world, e, dt)) continue;
     if (taunts.length && !e.boss) { for (const k of taunts) if (d2(k, e) < 170 * 170) { e.a = Math.atan2(k.y - e.y, k.x - e.x) + rnd(-0.3, 0.3); break; } }
     let sp = e.def.speed * (0.55 + 0.45 * Math.max(0, Math.sin(e.ph))) * ((world.stage && world.stage.mods.speed) || 1);
@@ -928,8 +1060,18 @@ function updateHelpers(world, dt) {
   const b = bagPos(world);
   if (s.sprite && !r.helpers.some(h => h.kind === 'sprite')) r.helpers.push({ kind: 'sprite', x: b.x, y: b.y - 30, t: 0 });
   if (s.magpie && !r.helpers.some(h => h.kind === 'magpie')) r.helpers.push({ kind: 'magpie', x: b.x + 40, y: b.y - 60, t: 0, a: 0, steal: 0 });
+  if (s.pact && !r.helpers.some(h => h.kind === 'hound')) r.helpers.push({ kind: 'hound', x: b.x - 40, y: b.y + 20, t: 0, bite: 0 });
   for (const h of r.helpers) {
     h.t += dt;
+    if (h.kind === 'hound') {
+      // le chien du pacte court sur l'ennemi le plus proche et le mord
+      if (!h.target || h.target.dead) h.target = nearestEnemy(world, h);
+      const tg = h.target || { x: b.x - 40, y: b.y + 20 }, dx = tg.x - h.x, dy = tg.y - h.y, d = Math.hypot(dx, dy) || 1;
+      if (d > 14) { h.x += dx / d * Math.min(d, 170 * dt); h.y += dy / d * Math.min(d, 170 * dt); h.face = dx >= 0 ? 1 : -1; }
+      h.bite -= dt;
+      if (h.target && d < 24 && h.bite <= 0) { h.bite = 0.6; damage(world, h.target, (s.archerBase || s.damage.archer) * 2.5, 0, h, 'archer'); }
+      continue;
+    }
     if (h.kind === 'sprite') {
       if (!h.target || h.target.dead || h.target.fly) {
         let best = null, bd = Infinity;

@@ -221,7 +221,7 @@ const RAW = [
 const pct = v => `${Math.round(v * 100)} %`;
 const s_ = (n, one, many) => `${n} ${n > 1 ? many : one}`;
 // Ce qui est déjà jouable : coût, croissance, texte de l'effet au niveau l, conditions.
-// need(ctx) : condition d'un cadenas ; ctx = { maxTier, bossWins }.
+// need(ctx) : condition d'un cadenas ; ctx = { maxTier, bossWins, L, reached (niveau du monde atteint), bosses, zoneTier }.
 const SPEC = {
   root: [0, 1, () => 'Débloqué'],
   arrowDmg: [20, 1.75, l => `Dégâts des archers ×${fmtNum(1 + 0.05 * l)}`],
@@ -349,6 +349,15 @@ const SPEC = {
   archerFork: [30000, 1, () => 'Les archers fusionnent (puissance ×1,5)', { need: c => c.bossWins >= 2, cond: 'Bats le Brasier primordial 2 fois' }],
   mageFork: [60000, 1, () => 'Les mages fusionnent (puissance ×1,5)', { need: c => c.bossWins >= 3 && c.L('mage3') > 0, cond: 'Bats le Brasier primordial 3 fois et recrute 3 mages' }],
   knightFork: [40000, 1, () => 'Les chevaliers fusionnent (puissance ×1,5)', { need: c => c.maxTier >= 2 && c.L('knight3') > 0, cond: 'Remplis le sac jusqu\'au palier Soie et recrute 3 chevaliers' }],
+  // Lot C : le monde
+  portal: [20000, 1, () => 'Les Enfers sont accessibles sur la carte du monde', { need: c => c.reached >= 14, cond: 'Atteins les Enfers sur la carte du monde (bats le boss des Champignons II)' }],
+  demonBane: [25000, 2, l => `Dégâts aux démons +${10 * l} %`],
+  demonLord: [60000, 1, () => 'Antre du Seigneur des Enfers ouverte', { need: c => (c.zoneTier.enfers || 0) >= 3, cond: 'Remplis le sac jusqu\'au palier Céleste aux Enfers' }],
+  embers: [30000, 2, l => `Butin aux Enfers +${10 * l} %`],
+  pact: [80000, 1, () => 'Un chien des Enfers t\'accompagne'],
+  elite: [15000, 1, () => 'Élites : 3 % des ennemis, PV ×6, butin ×5'],
+  tierDemon: [150000, 1, () => 'Palier cuir de démon ×6', { need: c => (c.bosses.enfers || 0) > 0, cond: 'Bats le Seigneur des Enfers' }],
+  tierVoid: [2000000, 1, () => 'Palier étoffe du néant ×10', { need: c => c.reached >= 18, cond: 'Atteins le Néant sur la carte du monde' }],
   bardFork: [80000, 1, () => 'Les bardes fusionnent (puissance ×1,5)', { need: c => c.maxTier >= 3 && c.L('bard3') > 0, cond: 'Remplis le sac jusqu\'au palier Céleste et recrute 3 bardes' }],
 };
 // Voies de classe : on n'en prend qu'une par fourche.
@@ -380,6 +389,9 @@ const DESC = {
   hymn: 'Ultime : tous les héros tirent deux fois plus vite pendant 3 s.',
   armory: 'Débloque la Compagnie : chaque lignée de héros reçoit un emplacement d\'arme, et les ennemis lâchent parfois des besaces d\'équipement.',
   refine: 'À la forge, affine l\'emplacement d\'une lignée : son objet devient plus fort. Le bonus reste si tu changes d\'objet.',
+  portal: 'Le chemin de la carte du monde passe par les Enfers : ce portail les ouvre. Les démons y valent plus, mais tapent fort.',
+  elite: 'Des élites apparaissent dans les hordes : plus grosses, six fois plus de PV, cinq fois plus de butin.',
+  tierVoid: 'Dernier palier : le sac n\'a presque plus de fond, ×10.',
   recycle: 'Recycle les objets en trop contre des éclats, nécessaires aux affinages avancés.',
 };
 
@@ -390,7 +402,7 @@ export const NODES = RAW.map(([id, parent, x, y, name, branch, icon, type, max, 
     id, parent, x, y, name, branch, icon, type, max: Math.max(1, max), desc: DESC[id] || desc, badge: badge || '',
     soon: !sp, cond: o.cond || (sp ? '' : cond || ''), need: o.need, cap: o.cap, capMsg: o.capMsg,
     cost: sp ? sp[0] : 0, growth: sp ? sp[1] : 1, effect: sp ? sp[2] : () => desc,
-    tier: { tierCuir: 1, tierSoie: 2, tierCeleste: 3 }[id] || 0,
+    tier: { tierCuir: 1, tierSoie: 2, tierCeleste: 3, tierDemon: 4, tierVoid: 5 }[id] || 0,
   };
 });
 export const NODE = Object.fromEntries(NODES.map(n => [n.id, n]));

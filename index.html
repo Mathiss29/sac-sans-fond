@@ -50,6 +50,7 @@
         <button class="tab" type="button" disabled title="Bientôt">Livre d'aventure</button>
       </nav>
       <div class="topRight">
+        <button class="ghost worldBtn" id="worldBtn" type="button" title="Carte du monde (M)">🗺 Carte</button>
         <span class="chip small" id="runsChip">Expéditions : 0</span>
         <button class="ghost mute" type="button">🔊</button>
       </div>
@@ -67,11 +68,18 @@
       </div>
       <button class="btn playBtn" id="go">Partir en expédition</button>
       <button class="zoneCard" id="lairBtn" type="button">
-        <span class="zoneName">Clairière</span>
+        <span class="zoneName" id="zoneName">Clairière</span>
         <span class="zoneBoss" id="zoneBoss">Antre du Brasier</span>
       </button>
       <span class="sub" id="stats" hidden></span>
     </footer>
+  </section>
+
+  <section class="screen" id="worldMap" hidden>
+    <div class="wmBox">
+      <header class="wmHead"><h2>Carte du monde</h2><span class="sub" id="wmSub"></span><button class="ghost" id="wmClose" type="button" aria-label="Fermer">✕</button></header>
+      <div class="wmBody"><div id="wmPath"><svg id="wmLines"></svg></div><aside id="wmInfo"></aside></div>
+    </div>
   </section>
 
   <section class="screen" id="result" hidden>

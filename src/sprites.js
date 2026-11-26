@@ -1,3 +1,4 @@
+import { DEMONS } from './demons.js';
 // Pixel art du jeu, dessiné à la main sous forme de cartes de caractères.
 // Chaque lettre est une couleur de la palette ; '.' est transparent.
 // Les sprites sont convertis en petits canvas au chargement, puis agrandis sans lissage.
@@ -432,6 +433,9 @@ export function buildSprites() {
     goblin: mk(GOBLIN, GOBLIN_PAL),
     mimic: mk(MIMIC, MIMIC_PAL),
   };
+  // démons des Enfers (dessins maison)
+  SPR.enemyScale = SPR.enemyScale || {};
+  for (const [id, d] of Object.entries(DEMONS)) { SPR.enemies['d_' + id] = mk(d.frames, d.pal); SPR.enemyScale['d_' + id] = 0.55; }
   SPR.coin = toCanvas(COIN, COIN_PAL);
   SPR.loot = { coin: SPR.coin, bar: toCanvas(BAR, LOOT_PAL), gem: toCanvas(GEM, GEM_PAL), crown: toCanvas(CROWN, LOOT_PAL), pouch: toCanvas(POUCH, POUCH_PAL), pouchGold: toCanvas(POUCH, POUCH_GOLD_PAL) };
   SPR.ready = true;

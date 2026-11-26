@@ -9,31 +9,117 @@ export const TIERS = [
   { id: 'cuir', name: 'Sac de cuir', color: '#9a6238', seam: '#5a3418', glow: '#ffbf7a', mult: 1.6 },
   { id: 'soie', name: 'Sac de soie enchantée', color: '#8e62d6', seam: '#4b2a86', glow: '#e0c8ff', mult: 2.5 },
   { id: 'celeste', name: 'Sac d\'étoffe céleste', color: '#5fd6f0', seam: '#1d6f8a', glow: '#d8fbff', mult: 4 },
+  { id: 'demon', name: 'Sac en cuir de démon', color: '#d8402a', seam: '#5a1410', glow: '#ffb07a', mult: 6 },
+  { id: 'void', name: 'Sac d\'étoffe du néant', color: '#3a2458', seam: '#b48cff', glow: '#e8d8ff', mult: 10 },
 ];
 export const FULL_BONUS = 1.25;
 // Sac plein : les pièces en trop débordent ; seule une petite part arrive quand même dans la bourse.
 export const OVERFLOW_RATE = 0.1;
 
+// Régions : 10 biomes, chacun avec ses couleurs, ses 3 élémentaires, son boss et son ambiance.
+// boss.mech : mécanique du boss (fire, guards, copies, quake, armor, spores, imps, dash, final).
+const B0 = { radius: 40, speed: 22, at: [0.84, 0.2], area: 0.13, fireEvery: 3.2, fireRadius: 48, fireWarn: 1.1, stun: 1.8, summonAt: [0.66, 0.33], summonN: 8 };
 export const ZONES = [
   {
-    id: 'clairiere', name: 'Clairière', stage: 'Clairière du matin',
+    id: 'clairiere', name: 'Clairière', stage: 'Clairière du matin', amb: null,
     ground: ['#6fa65a', '#4f8a45'], patch: '#86bb68', flower: ['#f6e27a', '#f29bb8', '#ffffff'],
     rock: '#8c8f86', tree: '#2f6b3c', path: '#c9a06a', water: '#3f8fc8',
     hpMult: 1, valueMult: 1,
     spawn: { wisp: 5, golem: 2, wind: 3 },
-    // Élémentaire primordial : vit dans la clairière sombre (position en fraction de la région).
+    areas: [['Bois profonds', 0.18, 0.26, 2, 2.4], ['Lisière fleurie', 0.78, 0.78, 1.5, 1.7]],
     // Élémentaire primordial : on l'affronte dans son antre (voir ARENA). Sur la carte, sa clairière garde le portail.
-    boss: { name: 'Brasier primordial', lair: 'Antre du Brasier', hp: 3400, value: 400, radius: 40, speed: 22, at: [0.84, 0.2], area: 0.13,
-      fireEvery: 3.2, fireRadius: 48, fireWarn: 1.1, stun: 1.8, summonAt: [0.66, 0.33], summonN: 8 },
+    boss: { ...B0, name: 'Brasier primordial', lair: 'Antre du Brasier', hp: 3400, value: 400, mech: 'fire' },
   },
+  { id: 'marais', name: 'Marais brumeux', stage: 'Marais brumeux', amb: 'brume', blurb: 'La brume cache les hordes',
+    ground: ['#4f7a55', '#3d6446'], patch: '#628c5c', flower: ['#c8d878', '#9fc0a0', '#e0f0c0'], rock: '#6a7468', tree: '#24503a', path: '#8a7a50', water: '#3a6a58',
+    spawn: { frog: 5, mosquito: 3, mudgolem: 2 }, areas: [['Tourbière', 0.2, 0.3, 2, 2.4], ['Roselière', 0.75, 0.72, 1.5, 1.7]],
+    boss: { ...B0, name: 'Reine des crapauds', lair: 'Mare de la Reine', hp: 3400, value: 400, mech: 'guards', color: '#7ac060', tint: '#6aa040' } },
+  { id: 'automne', name: 'Bois d\'automne', stage: 'Bois d\'automne', amb: 'automne', blurb: 'Les feuilles tombent… et les citrouilles marchent',
+    ground: ['#9a8a48', '#7e6e38'], patch: '#b09a50', flower: ['#e07a2a', '#c84a2a', '#ffd070'], rock: '#8a7a6a', tree: '#a0481e', path: '#c9a06a', water: '#4a7a98',
+    spawn: { pumpkin: 5, leaves: 3, stump: 2 }, areas: [['Sous-bois roux', 0.22, 0.28, 2, 2.4], ['Champ de citrouilles', 0.76, 0.76, 1.5, 1.7]],
+    boss: { ...B0, name: 'Épouvantail géant', lair: 'Champ de l\'Épouvantail', hp: 3400, value: 400, mech: 'copies', color: '#e0a040', tint: '#c87a2a' } },
+  { id: 'gel', name: 'Cimes gelées', stage: 'Cimes gelées', amb: 'neige', blurb: 'Le froid ralentit tout le monde',
+    ground: ['#d8e4ec', '#bccbd8'], patch: '#e8f0f6', flower: ['#ffffff', '#c8e0f0', '#a0c8e8'], rock: '#8a98a8', tree: '#2a5a5a', path: '#a8b8c8', water: '#6ab0d8',
+    spawn: { snowball: 4, icebat: 4, troll: 2 }, mods: { speed: 0.8 }, areas: [['Crevasses', 0.2, 0.25, 2, 2.4], ['Col venteux', 0.78, 0.75, 1.5, 1.7]],
+    boss: { ...B0, name: 'Yéti des glaces', lair: 'Grotte du Yéti', hp: 3400, value: 400, mech: 'quake', color: '#cfe8ff', tint: '#a0d0ff' } },
+  { id: 'desert', name: 'Désert de cuivre', stage: 'Désert de cuivre', amb: 'desert', blurb: 'La chaleur fait danser l\'air',
+    ground: ['#d8a868', '#c89050'], patch: '#e0b878', flower: ['#7a9a40', '#e0d0a0', '#c86a3a'], rock: '#a07050', tree: '#5a7a30', path: '#e8c890', water: '#3a9ab0',
+    spawn: { beetle: 5, dustdevil: 3, scarab: 2 }, areas: [['Ruines', 0.2, 0.28, 2, 2.4], ['Oasis', 0.75, 0.75, 1.5, 1.7]],
+    boss: { ...B0, name: 'Scorpion de cuivre', lair: 'Nid du Scorpion', hp: 3400, value: 400, mech: 'armor', color: '#e08a40', tint: '#c87a3a' } },
+  { id: 'grotte', name: 'Grottes de cristal', stage: 'Grottes de cristal', amb: 'grotte', blurb: 'Seuls les cristaux éclairent',
+    ground: ['#4a4060', '#3a3250'], patch: '#5a5070', flower: ['#b48cff', '#8ad0ff', '#e0c0ff'], rock: '#6a6080', tree: '#7a5ab0', path: '#7a7090', water: '#4a6ab0',
+    spawn: { spider: 5, moth: 3, turtle: 2 }, areas: [['Géode', 0.22, 0.25, 2, 2.4], ['Lac souterrain', 0.75, 0.78, 1.5, 1.7]],
+    boss: { ...B0, name: 'Golem de cristal', lair: 'Cœur de la géode', hp: 3400, value: 400, mech: 'guards', color: '#b48cff', tint: '#9a6aff' } },
+  { id: 'lumi', name: 'Forêt luminescente', stage: 'Forêt luminescente', amb: 'lumi', blurb: 'Les champignons brillent dans la nuit',
+    ground: ['#2a4a48', '#203a3a'], patch: '#346058', flower: ['#7fffd0', '#d0ff80', '#80c0ff'], rock: '#4a5a60', tree: '#1a6a5a', path: '#5a6a58', water: '#2a5a80',
+    spawn: { shroom: 5, firefly: 3, brute: 2 }, areas: [['Cercle des fées', 0.2, 0.3, 2, 2.4], ['Sous les géants', 0.76, 0.74, 1.5, 1.7]],
+    boss: { ...B0, name: 'Champignon-roi', lair: 'Trône moussu', hp: 3400, value: 400, mech: 'spores', color: '#7fffd0', tint: '#40c0a0' } },
+  { id: 'enfers', name: 'Les Enfers', stage: 'Les Enfers', amb: 'enfers', blurb: 'La lave gronde sous les pieds', demon: true,
+    ground: ['#5a2a24', '#481e1c'], patch: '#6a3428', flower: ['#ff7a3c', '#ffd246', '#c83a2a'], rock: '#3a2a2a', tree: '#2a1a1a', path: '#8a4a30', water: '#e05a20',
+    spawn: { imp: 5, hound: 3, skull: 2 }, areas: [['Fournaise', 0.22, 0.26, 2, 2.4], ['Champs de cendre', 0.76, 0.76, 1.5, 1.7]],
+    boss: { ...B0, name: 'Seigneur des Enfers', lair: 'Trône de lave', hp: 3400, value: 400, mech: 'imps', look: 'd_warlock', color: '#ff5e4d' } },
+  { id: 'ciel', name: 'Îles célestes', stage: 'Îles célestes', amb: 'ciel', blurb: 'Le vent souffle entre les nuages',
+    ground: ['#b8d8e8', '#a0c8dc'], patch: '#d0e8f4', flower: ['#ffffff', '#ffe8a0', '#c0d8ff'], rock: '#e0e0e8', tree: '#78a8c8', path: '#f0f0f8', water: '#88c8f0',
+    spawn: { puff: 5, harpy: 3, guardian: 2 }, areas: [['Temple du vent', 0.2, 0.25, 2, 2.4], ['Nuages d\'orage', 0.76, 0.76, 1.5, 1.7]],
+    boss: { ...B0, name: 'Griffon tempête', lair: 'Aire du Griffon', hp: 3400, value: 400, mech: 'dash', color: '#ffe8a0', tint: '#f0e0a0' } },
+  { id: 'neant', name: 'Le Néant', stage: 'Le Néant', amb: 'neant', blurb: 'Ici, plus rien n\'a de fond',
+    ground: ['#2a1a40', '#201434'], patch: '#3a2450', flower: ['#b48cff', '#ffffff', '#6040c0'], rock: '#3a3050', tree: '#4a2a7a', path: '#4a3a68', water: '#1a1030',
+    spawn: { blob: 5, shade: 3, voideye: 2 }, areas: [['Faille', 0.2, 0.28, 2, 2.4], ['Débris d\'étoiles', 0.76, 0.75, 1.5, 1.7]],
+    boss: { ...B0, name: 'Ombre du sac', lair: 'Fond du sac', hp: 3400, value: 400, mech: 'final', color: '#b48cff', tint: '#6030a0' } },
 ];
+// 20 niveaux : chaque région a un niveau normal puis un niveau difficile (II), avec le même boss plus fort.
+export const LEVELS = [];
+ZONES.forEach((z, i) => [0, 1].forEach(hard => {
+  const n = LEVELS.length;
+  LEVELS.push({ i: n, id: hard ? z.id + '2' : z.id, zone: i, hard, name: z.name + (hard ? ' II' : ''),
+    hp: Math.pow(1.8, n), value: Math.pow(1.6, n),
+    // familles qui apparaissent selon l'avancée
+    families: { king: n >= 2, puffer: n >= 3, healer: n >= 5, bandit: n >= 6, mvp: n >= 8 } });
+}));
+// Zone du niveau : couleurs et boss de la région, multiplicateurs du niveau.
+export function levelZone(lv) {
+  const L = typeof lv === 'number' ? LEVELS[lv] : lv, z = ZONES[L.zone];
+  return { ...z, id: L.id, level: L.i, levelName: L.name, hard: L.hard, families: L.families, hpMult: L.hp, valueMult: L.value,
+    boss: { ...z.boss, faster: L.hard ? 1.35 : 1 } };
+}
 
 // Familles d'élémentaires
 export const ENEMIES = {
-  wisp: { name: 'Feu follet', hp: 4, value: 2, radius: 10, speed: 62, color: '#ffb347', core: '#fff1c2' },
-  golem: { name: 'Golem d\'argile', hp: 16, value: 6, radius: 18, speed: 20, color: '#b7774a', core: '#7a4a2a' },
-  wind: { name: 'Esprit du vent', hp: 6, value: 3, radius: 13, speed: 44, color: '#d6f2ff', core: '#8fc7e6', dodge: 0.3 },
+  wisp: { name: 'Feu follet', hp: 4, value: 2, radius: 10, speed: 62, color: '#ffb347', core: '#fff1c2', role: 'weak' },
+  golem: { name: 'Golem d\'argile', hp: 16, value: 6, radius: 18, speed: 20, color: '#b7774a', core: '#7a4a2a', role: 'tough' },
+  wind: { name: 'Esprit du vent', hp: 6, value: 3, radius: 13, speed: 44, color: '#d6f2ff', core: '#8fc7e6', dodge: 0.3, role: 'fast' },
 };
+// Élémentaires des autres régions : mêmes rôles (faible / rapide / costaud), dessins provisoires teintés
+// (look = planche d'origine, tint = couleur) en attendant leurs planches.
+const ROLE = { weak: ['wisp', { hp: 4, value: 2, radius: 10, speed: 62 }], fast: ['wind', { hp: 6, value: 3, radius: 13, speed: 50, dodge: 0.25 }], tough: ['golem', { hp: 16, value: 6, radius: 18, speed: 20 }] };
+const KIN = [
+  ['frog', 'weak', 'Grenouille gluante', '#7ac060'], ['mosquito', 'fast', 'Moustique géant', '#a0b080'], ['mudgolem', 'tough', 'Golem de boue', '#5a7a40'],
+  ['pumpkin', 'weak', 'Citrouille marcheuse', '#e07a2a'], ['leaves', 'fast', 'Tourbillon de feuilles', '#d04a2a'], ['stump', 'tough', 'Souche vivante', '#7a4a2a'],
+  ['snowball', 'weak', 'Boule de neige', '#f0f8ff'], ['icebat', 'fast', 'Chauve-souris de glace', '#9fd8ff'], ['troll', 'tough', 'Troll du givre', '#cfe8ff'],
+  ['beetle', 'weak', 'Scarabée des sables', '#c9a06a'], ['dustdevil', 'fast', 'Diable de poussière', '#e0c080'], ['scarab', 'tough', 'Scarabée de cuivre', '#c87a3a'],
+  ['spider', 'weak', 'Araignée de cristal', '#b48cff'], ['moth', 'fast', 'Papillon des grottes', '#d0b0ff'], ['turtle', 'tough', 'Tortue de cristal', '#8a6ad0'],
+  ['shroom', 'weak', 'Champignon sauteur', '#7fffd0'], ['firefly', 'fast', 'Luciole', '#d0ff80'], ['brute', 'tough', 'Brute champignon', '#40a080'],
+  ['puff', 'weak', 'Petit nuage', '#ffffff'], ['harpy', 'fast', 'Harpie blanche', '#f0f0ff'], ['guardian', 'tough', 'Gardien du temple', '#e8e0c8'],
+  ['blob', 'weak', 'Goutte du néant', '#8040c0'], ['shade', 'fast', 'Ombre vacillante', '#5a3080'], ['voideye', 'tough', 'Œil du néant', '#6030a0'],
+];
+for (const [id, role, name, tint] of KIN) {
+  const [look, st] = ROLE[role];
+  ENEMIES[id] = { name, ...st, color: tint, core: '#24161e', look, tint, role };
+}
+// Démons des Enfers : dessins maison (assets/sprites/demons), une image chacun.
+Object.assign(ENEMIES, {
+  imp: { name: 'Diablotin', hp: 4, value: 2, radius: 11, speed: 66, color: '#c83a2a', core: '#ffd246', look: 'd_imp', role: 'weak', demon: true },
+  hound: { name: 'Chien des Enfers', hp: 6, value: 3, radius: 13, speed: 70, color: '#8a2a20', core: '#ff7a3c', look: 'd_hound', role: 'fast', demon: true },
+  skull: { name: 'Crâne ardent', hp: 16, value: 6, radius: 16, speed: 24, color: '#e0d0b0', core: '#ff5e4d', look: 'd_skull', role: 'tough', demon: true },
+});
+// Familles qui apparaissent dans toutes les régions à partir d'un certain niveau.
+Object.assign(ENEMIES, {
+  king: { name: 'Roi des élémentaires', hp: 60, value: 30, radius: 26, speed: 18, color: '#ffd246', core: '#24161e', look: 'golem', tint: '#ffd246', king: true },
+  puffer: { name: 'Boursouflé', hp: 10, value: 4, radius: 12, speed: 30, color: '#ff80c0', core: '#24161e', look: 'wisp', tint: '#ff80c0', puffer: true },
+  healer: { name: 'Soigneur', hp: 8, value: 5, radius: 12, speed: 40, color: '#80ff90', core: '#24161e', look: 'wind', tint: '#60e070', healer: true },
+  bandit: { name: 'Bandit', hp: 12, value: 6, radius: 12, speed: 90, color: '#806040', core: '#24161e', look: 'goblin', tint: '#604020', bandit: true },
+  mvp: { name: 'Lapin d\'or', hp: 30, value: 160, radius: 12, speed: 150, color: '#ffe14a', core: '#24161e', look: 'gold', tint: '#fff080', mvp: true },
+});
 // Créatures d'événement (n'apparaissent pas dans les hordes). Leurs PV suivent les dégâts de l'archer.
 export const EVENT_FOES = {
   vein: { name: 'Filon d\'or', hp: 30, value: 0, radius: 22, speed: 0, color: '#ffd246', core: '#8c8f86', still: true },
@@ -51,7 +137,11 @@ export const STAGES = [
   { id: 'minuit', name: 'Clairière de minuit', blurb: 'Butin +30 %, mais il fait noir', mods: { value: 1.3 } },
   { id: 'neige', name: 'Clairière enneigée', blurb: 'Ennemis lents et robustes · butin +15 %', mods: { hp: 1.25, speed: 0.75, value: 1.15 } },
 ];
-export function stageFor(expeditions) { return STAGES[expeditions % STAGES.length]; }
+// En Clairière, l'ambiance tourne d'une expédition à l'autre ; ailleurs, chaque région a la sienne.
+export function stageFor(expeditions, zone = ZONES[0]) {
+  if (!zone.amb) return STAGES[expeditions % STAGES.length];
+  return { id: zone.amb, name: zone.levelName || zone.name, blurb: zone.blurb || '', mods: zone.mods || {} };
+}
 
 // Événements : deux par expédition, à des moments tirés au hasard.
 // share : part de la capacité du sac que l'événement peut rapporter.
@@ -213,7 +303,7 @@ export function computeStats(level, gb = null) {
     bossMult: (1 + 0.1 * L('bossDmg')) * (1 + 0.1 * L('veteran')),
     goldChance: GOLD_WISP.chance * (1 + 0.6 * L('goldWisp')) * (1 + GG('goldWisp') / 100),
     bagCapacity: BASE.bagCapacity * Math.pow(1.6, L('capacity')) * Math.pow(1.25, L('seams2')),
-    tiers: 1 + L('tierCuir') + (L('tierCuir') ? L('tierSoie') : 0) + (L('tierCuir') && L('tierSoie') ? L('tierCeleste') : 0),
+    tiers: (() => { let t = 1; for (const k of ['tierCuir', 'tierSoie', 'tierCeleste', 'tierDemon', 'tierVoid']) { if (!L(k)) break; t++; } return t; })(),
     gloveRadius: BASE.gloveRadius * (1 + 0.18 * L('glove')) * (1 + ((gb && gb.glove) || 0) / 100) * (has('goldHand') ? 1.25 : 1),
     attraction: BASE.attraction + 0.75 * L('attraction') + Math.round(GG('focus') * 10) / 10,
     coinLife: BASE.coinLife + 2 * L('coinLife') + GG('coinLife'),
@@ -227,6 +317,7 @@ export function computeStats(level, gb = null) {
     magnet: 25 * L('magnet'), pull: 70 * (1 + 0.15 * L('quickHand')) * (has('goldHand') ? 2 : 1), mimicTame: has('mimic'), fairy: has('fairyFingers'),
     overflowRate: OVERFLOW_RATE + 0.04 * L('falseBottom'), tripleBottom: has('tripleBottom'), deepMouth: has('deepMouth'),
     gemMult: 1 + 0.15 * L('gems'), crownChance: 0.01 * L('crown'), suction: has('suctionWave'),
+    elite: has('elite'), demonMult: 1 + 0.1 * L('demonBane'), embers: 1 + 0.1 * L('embers'), pact: has('pact'),
     goldHorde: L('goldHorde'), lantern: 1 + 0.3 * L('lantern'), furBoots: has('furBoots'), spyglass: has('spyglass'),
     eventMult: (1 + 0.15 * L('hunter')) * (1 + GG('event') / 100),
     stunMult: Math.max(0.2, 1 - GG('stun') / 100) * (1 - 0.25 * L('shield')),
