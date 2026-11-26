@@ -1,5 +1,5 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
-import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, ULTS, bagMax, tierOf } from './data.js';
+import { ENEMIES, HEROES, HERO_ORDER, ALL_HEROES, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, ULTS, bagMax, tierOf } from './data.js';
 import { rollItem, RARITIES as GEAR_RARITIES, DROP } from './gear.js';
 import { CARD_DROP } from './curio.js';
 
@@ -543,7 +543,7 @@ export function dropHero(world, x, y) {
   const r = world.run, type = r.sel;
   world.heroes.push({ type, x, y, cd: rnd(0, 0.3), drop: 1, face: 1, bob: rnd(0, 6), boost: 0, rank: (world.stats.rank && world.stats.rank[type]) || 1, rage: 0, timer: rnd(0, 1) });
   r.toDrop[type]--;
-  if (r.toDrop[type] <= 0) { const next = HERO_ORDER.find(k => r.toDrop[k] > 0); if (next) r.sel = next; }
+  if (r.toDrop[type] <= 0) { const next = ALL_HEROES.find(k => r.toDrop[k] > 0); if (next) r.sel = next; }
   return true;
 }
 
@@ -996,6 +996,17 @@ function updateHeroes(world, dt) {
     u.recoil = Math.max(0, (u.recoil || 0) - dt * 6);
     if (u.boost > 0 && Math.random() < dt * 0.8) world.texts.push({ x: u.x + rnd(-8, 8), y: u.y - 34, text: '♪', color: '#ffe68a', size: 14, life: 0.7 });
     classTick(world, u, dt);
+    // ingénieur : pose une tourelle de temps en temps
+    if (u.type === 'engineer' && world.phase === 'expedition') {
+      u.turretT = (u.turretT === undefined ? 2 : u.turretT) - dt;
+      if (u.turretT <= 0) {
+        u.turretT = def.turretEvery;
+        if (world.zones.filter(z => z.turret).length < (s.turrets || 2)) {
+          world.zones.push({ turret: true, x: u.x + u.face * 26, y: u.y + 4, r: 0, t: 25, cd: 0.5, dmg: s.damage.engineer * 0.6, type: 'engineer', face: u.face });
+          burst(world, u.x + u.face * 26, u.y + 8, 10, ['#e0a040', '#b8c0c8', '#ffffff'], 90, 2, 0, 0.4);
+        }
+      }
+    }
     let t;
     if (focus) {
       t = nearestEnemy(world, u, fp);
@@ -1023,10 +1034,24 @@ function updateHeroes(world, dt) {
       u.cd = s.cooldown[u.type];
       u.recoil = 1;
       const dmg = s.damage[u.type] * (u.fury > 0 ? 2 : 1);
-      if (onScreen(world, u.x, u.y)) sfx(world, def.shot === 'melee' ? 'slash' : def.shot);
+      if (onScreen(world, u.x, u.y)) sfx(world, def.shot === 'melee' ? 'slash' : { vines: 'frost', bolt: 'arrow', flask: 'frost', spirit: 'note' }[def.shot] || def.shot);
+      if (def.shot === 'vines') {   // druide : ronces qui immobilisent et blessent
+        world.zones.push({ x: t.x, y: t.y, r: 46, t: 2.5, root: true, dps: dmg, type: u.type, look: 'vines' });
+        world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 6, r1: 46, t: 0.3, life: 0.3, color: '#6fd08a' });
+        continue;
+      }
+      if (def.shot === 'flask') {   // alchimiste : fiole en cloche, explosion et flaque acide
+        world.strikes.push({ kind: 'flask', x: t.x, y: t.y, x0: u.x + u.face * 10, y0: u.y - 16, r: def.aoe, t: 0.45, t0: 0.45, dmg, type: u.type });
+        continue;
+      }
+      if (def.shot === 'spirit') {   // invocateur : un esprit qui fonce et explose
+        world.strikes.push({ kind: 'spirit', x: u.x, y: u.y - 24, vx: u.face * 40, vy: -80, t: 4, dmg, type: u.type, r: 46, target: t });
+        continue;
+      }
       if (def.shot === 'melee') {
         // coup circulaire : touche la cible et tout ce qui est autour
         for (const e of world.enemies) if (!e.dead && d2(e, t) < (def.cleave * (s.cleave || 1) + e.r) ** 2) damage(world, e, dmg, 0, u, u.type);
+        if (def.steal && Math.random() < def.steal && !t.event) { dropCoin(world, t.x, t.y, 'coin', Math.max(0.5, t.value * 0.15)); world.texts.push({ x: t.x, y: t.y - 20, text: 'chipé !', color: '#c8d0dc', size: 11, life: 0.5 }); }
         if (has.knB) u.rage = Math.min(1, (u.rage || 0) + 0.06);
         if (s.myths && s.myths.quake && Math.random() < 0.25) {   // mythique Séisme
           for (const e of world.enemies) if (!e.dead && d2(e, u) < 100 * 100) damage(world, e, dmg * 1.5, 0, u, u.type);
@@ -1036,9 +1061,9 @@ function updateHeroes(world, dt) {
         if (has.knB1) world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 16, t: 0.3, life: 0.3, color: '#ffcf4a' });
       } else {
         const fire = u.type === 'mage' && has.maB;
-        const shot = (target, k = 1) => world.arrows.push({ kind: fire ? 'fire' : def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target, damage: dmg * k, type: u.type, dx: 0, dy: 0, speed: def.speed,
+        const shot = (target, k = 1) => world.arrows.push({ kind: fire ? 'fire' : def.shot === 'bolt' ? 'arrow' : def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target, damage: dmg * k, type: u.type, dx: 0, dy: 0, speed: def.speed,
           aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' && !fire ? s.slowTime || HEROES.mage.slowTime : 0,
-          pierce: u.type === 'archer' ? s.pierce || 0 : 0, bounces: u.type === 'archer' ? s.bounce || 0 : 0, hit: null });
+          pierce: u.type === 'archer' ? s.pierce || 0 : u.type === 'engineer' ? 1 : 0, bounces: u.type === 'archer' ? s.bounce || 0 : 0, hit: null });
         shot(t);
         const others = n => { const l = []; for (const e of world.enemies) if (!e.dead && e !== t && d2(e, u) < reach * reach) l.push(e); return l.sort((a, b) => d2(a, t) - d2(b, t)).slice(0, n); };
         if (u.type === 'archer' && has.arA) for (const o of others(2)) shot(o);          // Tireur d'élite : éventail
@@ -1235,6 +1260,35 @@ function dashStep(world, u, dt) {
 // Frappes différées (pluie de flèches, phénix) et zones alliées (pièges, givre, flammes).
 function updateStrikes(world, dt) {
   for (const k of world.strikes) {
+    if (k.kind === 'spirit') {
+      k.t -= dt;
+      if (!k.target || k.target.dead) k.target = nearestEnemy(world, k);
+      if (k.target) {
+        const dx = k.target.x - k.x, dy = k.target.y - k.y, d = Math.hypot(dx, dy) || 1;
+        k.vx += dx / d * 900 * dt; k.vy += dy / d * 900 * dt;
+        const sp = Math.hypot(k.vx, k.vy); if (sp > 320) { k.vx *= 320 / sp; k.vy *= 320 / sp; }
+        if (d < k.target.r + 10) k.t = 0;
+      }
+      k.x += k.vx * dt; k.y += k.vy * dt;
+      if (Math.random() < 0.5) burst(world, k.x, k.y, 1, ['#d080ff', '#f0d0ff'], 30, 2, 0, 0.4);
+      if (k.t <= 0) {
+        k.done = true;
+        for (const e of world.enemies) if (!e.dead && d2(e, k) < (k.r + e.r) ** 2) damage(world, e, k.dmg, 0, k, k.type);
+        burst(world, k.x, k.y, 18, ['#d080ff', '#f0d0ff', '#ffffff'], 160, 2, 0, 0.5);
+        world.fx.push({ kind: 'ring', x: k.x, y: k.y, r0: 6, r1: k.r, t: 0.3, life: 0.3, color: '#d080ff' });
+      }
+      continue;
+    }
+    if (k.kind === 'flask') {
+      k.t -= dt;
+      if (k.t > 0) continue;
+      k.done = true;
+      for (const e of world.enemies) if (!e.dead && d2(e, k) < (k.r + e.r) ** 2) damage(world, e, k.dmg, 0, k, k.type);
+      world.zones.push({ x: k.x, y: k.y, r: k.r * 0.8, t: 2.5, burn: true, dps: k.dmg * 0.3, type: k.type, look: 'acid' });
+      burst(world, k.x, k.y, 16, ['#d0f060', '#8ac030', '#ffffff'], 140, 2, 0, 0.45);
+      if (Math.random() < 0.4) sfx(world, 'hit');
+      continue;
+    }
     if (k.kind === 'phoenix') {
       k.x += k.vx * dt; k.y += k.vy * dt; k.t -= dt;
       burst(world, k.x, k.y, 2, ['#ff7a3c', '#ffd246', '#ff5a2a'], 60, 2, 0, 0.4);
@@ -1251,6 +1305,17 @@ function updateStrikes(world, dt) {
   }
   world.strikes = world.strikes.filter(k => !k.done);
   for (const z of world.zones) {
+    if (z.turret) {   // tourelle de l'ingénieur
+      z.t -= dt; z.cd -= dt;
+      if (z.cd <= 0) {
+        const e = nearestEnemy(world, z);
+        if (e && d2(e, z) < 240 * 240) {
+          z.cd = 0.7; z.face = e.x >= z.x ? 1 : -1;
+          world.arrows.push({ kind: 'arrow', x: z.x + z.face * 8, y: z.y - 16, target: e, damage: z.dmg, type: 'engineer', dx: 0, dy: 0, speed: 700, aoe: 0, slow: 0, pierce: 0, bounces: 0, hit: null });
+        } else z.cd = 0.3;
+      }
+      continue;
+    }
     z.t -= dt; z.tick = (z.tick || 0) - dt;
     const tick = z.tick <= 0; if (tick) z.tick = 0.5;
     for (const e of world.enemies) {

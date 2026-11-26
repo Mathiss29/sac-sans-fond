@@ -94,6 +94,35 @@ const HEROES = {
   },
 };
 
+// Nouveaux héros : dessins provisoires (même corps, capuches et objets à eux) en attendant leurs planches.
+Object.assign(HEROES, {
+  thief: {
+    pal: { h: '#3a3e4a', H: '#262a34', g: '#5a6070', c: '#4a5060', C: '#30343e', b: '#8a5a30', p: '#2a2e38', B: '#1a1c22', k: '#c8d0dc' },
+    head: ['......OOOO......', '....OOhhhhOO....', '...OhhhhhhhhO...'], cut: 2,
+    items: [{ x: 12, y: 10, rows: ['..O.', '.OkO', '.OkO', 'OyyyO', '.OwO.', '..O..'] }, { x: 1, y: 11, rows: ['.O.', 'OkO', 'OkO', 'OwO', '.O.'] }],
+  },
+  druid: {
+    pal: { h: '#6a4a2a', H: '#4a321a', g: '#8a6a3a', c: '#4a8a3a', C: '#2e6a2a', b: '#a07a40', p: '#3a5a2a', B: '#2a1a10', l: '#7fe07a', L: '#3fa04a' },
+    head: ['....O....O......', '...OlO..OlO.....', '...OLlOOlLO.....', '....OLllLO......'], cut: 1,
+    items: [{ x: 12, y: 4, rows: ['.OlO.', 'OlLlO', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '..O..'] }],
+  },
+  engineer: {
+    pal: { h: '#c88a3a', H: '#9a6228', g: '#e8b060', c: '#6a7a8a', C: '#4a5868', b: '#3a2a1a', p: '#5a4a3a', B: '#2a221a', k: '#b8c0c8', K: '#7a8490', i: '#9fe0ff' },
+    head: ['....OOOOOOOO....', '...OkkkkkkkkO...', '...OKiOKKOiKO...'], cut: 1,
+    items: [{ x: 11, y: 9, rows: ['OOOOO.', 'OkkkKO', '.OkO..', '.OwO..', '..O...'] }],
+  },
+  alchemist: {
+    pal: { h: '#7a3a8a', H: '#5a2a6a', g: '#9a5aaa', c: '#8a4a9a', C: '#5a2a6a', b: '#d0f060', p: '#4a2a5a', B: '#2a1a2a', v: '#d0f060', V: '#8ac030', k: '#e8f0f8' },
+    head: ['.......O........', '......OhO.......', '.....OhhhO......', '....OhhhhhO.....'], cut: 2,
+    items: [{ x: 12, y: 9, rows: ['.OO.', '.OkO', 'OvvvO', 'OvVvO', '.OOO.'] }],
+  },
+  summoner: {
+    pal: { h: '#2a1a40', H: '#1a1030', g: '#4a2a6a', c: '#3a2458', C: '#241640', b: '#d080ff', p: '#2a1a40', B: '#140c20', u: '#d080ff', U: '#f0d0ff' },
+    head: ['.......OO.......', '......OhhO......', '.....OhhhhO.....', '....OhhhhhhO....'], cut: 2,
+    items: [{ x: 12, y: 3, rows: ['.OOO.', 'OuUuO', 'OUuUO', '.OuO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '.OwO.', '..O..'] }],
+  },
+});
+
 // ---------- Élémentaires ----------
 
 const WISP = [

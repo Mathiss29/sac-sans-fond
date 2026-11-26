@@ -1,5 +1,5 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, LEVELS, levelZone, ENEMIES, stageFor, TIERS, HEROES, HERO_ORDER, ARENA, ULTS, TRIALS, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { ZONES, LEVELS, levelZone, ENEMIES, stageFor, TIERS, HEROES, HERO_ORDER, ALL_HEROES, ARENA, ULTS, TRIALS, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
@@ -263,7 +263,8 @@ function heroIcon(type) {
 function buildDropBar() {
   const box = $('dropBar'); box.innerHTML = '';
   const r = world.run;
-  const types = HERO_ORDER.filter(k => stats.heroes[k] > 0);
+  const types = ALL_HEROES.filter(k => stats.heroes[k] > 0);
+  box.classList.toggle('many', types.length > 5);
   types.forEach((type, i) => {
     const n = r.toDrop[type];
     const b = document.createElement('button');
@@ -358,7 +359,7 @@ function finishExpedition() {
   $('resGoal').textContent = world.zone.dungeon ? `Clés de donjon restantes : ${curioOf(save).keys}` : lairOpen() && !bossDone ? `${world.zone.boss.name} t'attend dans son antre !`
     : tier < stats.tiers - 1 ? `Prochain palier : ${TIERS[tier + 1].name}` : 'Sac au palier maximal !';
   // dégâts par héros, à gauche
-  const dmg = r.dmg || {}, types = HERO_ORDER.filter(k => dmg[k] > 0);
+  const dmg = r.dmg || {}, types = ALL_HEROES.filter(k => dmg[k] > 0);
   const top = Math.max(1, ...types.map(k => dmg[k])), sum = types.reduce((t, k) => t + dmg[k], 0);
   const ul = $('dmgList'); ul.innerHTML = '';
   for (const k of types.sort((x, y) => dmg[y] - dmg[x])) {
@@ -919,9 +920,9 @@ const playing = () => world.phase === 'expedition' || world.phase === 'tear';
 window.addEventListener('keydown', e => {
   if (CAM_KEYS[e.code] && playing()) { held.add(e.code); e.preventDefault(); }
   for (const k of HERO_ORDER) if (e.code === ULTS[k].key && world.phase === 'expedition') useUlt(world, k);
-  const m = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
   if (m && world.phase === 'expedition') {
-    const type = HERO_ORDER.filter(k => stats.heroes[k] > 0)[+m[1] - 1];
+    const type = ALL_HEROES.filter(k => stats.heroes[k] > 0)[+m[1] - 1];
     if (type) { selectHero(world, type); buildDropBar(); }
   }
 });

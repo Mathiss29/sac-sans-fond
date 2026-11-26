@@ -175,7 +175,22 @@ export const HEROES = {
   bard: { name: 'Barde', plural: 'Bardes', range: 160, damage: 1, cooldown: 0.9, shot: 'note', speed: 360, walkSpeed: 100,
     aura: 150, auraBoost: 0.1, blurb: 'Ses chansons font tirer plus vite les héros proches.' },
 };
-export const HERO_ORDER = ['archer', 'mage', 'knight', 'bard'];
+// Les 5 nouveaux héros (dessins provisoires en attendant leurs planches)
+Object.assign(HEROES, {
+  thief: { name: 'Voleur', plural: 'Voleurs', range: 24, damage: 4, cooldown: 0.4, shot: 'melee', walkSpeed: 200, cleave: 12, steal: 0.25,
+    blurb: 'Rapide au contact ; ses coups font parfois tomber des pièces.' },
+  druid: { name: 'Druide', plural: 'Druides', range: 180, damage: 2.5, cooldown: 1.6, shot: 'vines', walkSpeed: 90,
+    blurb: 'Fait jaillir des ronces qui immobilisent et blessent.' },
+  engineer: { name: 'Ingénieur', plural: 'Ingénieurs', range: 210, damage: 2.5, cooldown: 0.9, shot: 'bolt', speed: 700, walkSpeed: 95, turretEvery: 9,
+    blurb: 'Tire des carreaux et pose des tourelles automatiques.' },
+  alchemist: { name: 'Alchimiste', plural: 'Alchimistes', range: 170, damage: 5, cooldown: 1.5, shot: 'flask', walkSpeed: 90, aoe: 55,
+    blurb: 'Lance des fioles qui explosent et laissent une flaque acide.' },
+  summoner: { name: 'Invocateur', plural: 'Invocateurs', range: 230, damage: 7, cooldown: 2.2, shot: 'spirit', walkSpeed: 85,
+    blurb: 'Invoque des esprits qui foncent sur les ennemis et explosent.' },
+});
+export const HERO_ORDER = ['archer', 'mage', 'knight', 'bard'];   // lignées avec classes, ultimes et équipement
+export const NEW_HEROES = ['thief', 'druid', 'engineer', 'alchemist', 'summoner'];
+export const ALL_HEROES = [...HERO_ORDER, ...NEW_HEROES];
 
 // Ultimes : un par lignée, débloqué en réussissant une épreuve pendant une expédition.
 export const ULTS = {
@@ -259,6 +274,13 @@ export function computeStats(level, gb = null) {
   const C = id => has(id);   // une classe précise est-elle prise ?
   if (C('baB2')) { if (heroes.knight) heroes.knight++; else heroes.archer++; }
   const conductor = C('baA2') ? 1.3 : 1;
+  // nouveaux héros : un exemplaire, deux avec le nœud ×2, dégâts +5 % par niveau
+  const nd = {}, ncd = {};
+  for (const k of NEW_HEROES) {
+    heroes[k] = L(k) + L(k + '2') + (has('ost') && L(k) ? 1 : 0);
+    nd[k] = HEROES[k].damage * (1 + 0.05 * L(k + 'Dmg')) * all;
+    ncd[k] = HEROES[k].cooldown / conductor;
+  }
   return {
     rank, cls, has: Object.fromEntries(['arA', 'arB', 'arA1', 'arA2', 'arB1', 'arB2', 'maA', 'maB', 'maA1', 'maA2', 'maB1', 'maB2', 'knA', 'knB', 'knA1', 'knA2', 'knB1', 'knB2', 'baA', 'baB', 'baA1', 'baA2', 'baB1', 'baB2'].map(id => [id, C(id)])),
     ults: Object.fromEntries(HERO_ORDER.map(k => [k, has(ULTS[k].id) && base[k] > 0])),
@@ -277,14 +299,15 @@ export function computeStats(level, gb = null) {
       archer: (HEROES.archer.damage + L('steel')) * (1 + 0.05 * L('arrowDmg')) * all * G('dmg', 'archer') * merge.archer,
       mage: HEROES.mage.damage * (1 + 0.05 * L('mageDmg')) * all * G('dmg', 'mage') * merge.mage,
       knight: HEROES.knight.damage * (1 + 0.05 * L('knightDmg')) * all * G('dmg', 'knight') * merge.knight,
-      bard: HEROES.bard.damage * all * G('dmg', 'bard') * merge.bard,
+      bard: HEROES.bard.damage * all * G('dmg', 'bard') * merge.bard, ...nd,
     },
     // PV des créatures d'événement : suivent les dégâts de l'arbre, pas ceux de l'équipement
     archerBase: HEROES.archer.damage * (1 + 0.05 * L('arrowDmg')) * all,
     cooldown: {
       archer: HEROES.archer.cooldown * Math.pow(0.98, L('arrowRate')) / G('rate', 'archer') / conductor,
-      mage: HEROES.mage.cooldown / G('rate', 'mage') / conductor, knight: HEROES.knight.cooldown / G('rate', 'knight') / conductor, bard: HEROES.bard.cooldown / G('rate', 'bard') / conductor,
+      mage: HEROES.mage.cooldown / G('rate', 'mage') / conductor, knight: HEROES.knight.cooldown / G('rate', 'knight') / conductor, bard: HEROES.bard.cooldown / G('rate', 'bard') / conductor, ...ncd,
     },
+    turrets: 2 + L('engineer2') * 2,
     critMultBy: { archer: G('critDmg', 'archer'), mage: G('critDmg', 'mage'), knight: G('critDmg', 'knight'), bard: G('critDmg', 'bard') },
     dropMult: 1 + ((gb && gb.drop) || 0) / 100,
     critBy: { archer: (G('crit', 'archer') - 1) + (C('arA1') ? 0.15 : 0), mage: (G('crit', 'mage') - 1), knight: (G('crit', 'knight') - 1), bard: (G('crit', 'bard') - 1) },

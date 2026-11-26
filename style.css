@@ -802,3 +802,7 @@ button[disabled] { cursor: var(--cur) !important; }
 .cuBar i { display: block; height: 100%; background: #e7d3a1; }
 .cuShards { margin-top: auto; font: 400 14px var(--ui); color: #c07aff; }
 @media (max-width: 900px) { #curio { grid-template-columns: 1fr; } }
+/* barre de largage avec beaucoup de héros : cartes compactes, sans le nom */
+#dropBar.many { gap: 4px; }
+#dropBar.many .card { padding: 4px 8px 4px 4px; gap: 4px; }
+#dropBar.many .card .nm { display: none; }

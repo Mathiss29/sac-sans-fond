@@ -375,7 +375,29 @@ export function render(g, world, dpr) {
   }
   // zones alliées : pièges, sol gelé, flammes
   for (const z of world.zones || []) {
+    if (z.turret) {   // tourelle de l'ingénieur : trépied et canon
+      const x = Math.round(z.x), y = Math.round(z.y), f = z.face || 1;
+      shadow(g, x, y + 6, 12, 3);
+      g.fillStyle = '#24161e'; g.fillRect(x - 9, y - 2, 18, 8); g.fillRect(x - 7, y - 16, 14, 14); g.fillRect(f > 0 ? x + 2 : x - 16, y - 13, 14, 6);
+      g.fillStyle = '#7a4a2a'; g.fillRect(x - 8, y - 1, 16, 5);
+      g.fillStyle = '#e0a040'; g.fillRect(x - 6, y - 15, 12, 12);
+      g.fillStyle = '#b8c0c8'; g.fillRect(f > 0 ? x + 3 : x - 15, y - 12, 12, 4);
+      if (z.t < 3 && Math.floor(t * 6) % 2) { g.fillStyle = 'rgba(255,255,255,.4)'; g.fillRect(x - 6, y - 15, 12, 12); }
+      continue;
+    }
     const a = Math.min(1, z.t / 0.5) * 0.35;
+    if (z.look === 'vines') {   // ronces du druide
+      g.globalAlpha = Math.min(1, z.t / 0.4);
+      for (let i = 0; i < 7; i++) {
+        const an = i / 7 * Math.PI * 2 + z.x, rr = z.r * (0.3 + 0.6 * ((i * 37) % 10) / 10), bx = z.x + Math.cos(an) * rr, by = z.y + Math.sin(an) * rr * 0.6;
+        const hgt = 10 + (i % 3) * 5;
+        g.strokeStyle = '#24161e'; g.lineWidth = 4; g.beginPath(); g.moveTo(bx, by); g.quadraticCurveTo(bx + 6, by - hgt / 2, bx - 2, by - hgt); g.stroke();
+        g.strokeStyle = i % 2 ? '#3fa04a' : '#6fd08a'; g.lineWidth = 2; g.stroke();
+      }
+      g.globalAlpha = 1;
+      continue;
+    }
+    if (z.look === 'acid') z.color = 'rgba(160,220,60,1)';
     g.globalAlpha = a; g.fillStyle = z.color; g.beginPath(); g.ellipse(z.x, z.y, z.r, z.r * 0.7, 0, 0, 7); g.fill();
     g.globalAlpha = a * 2; g.strokeStyle = z.color; g.lineWidth = 2; g.setLineDash(z.root ? [6, 4] : []); g.stroke(); g.setLineDash([]);
     if (z.burn && Math.random() < 0.3) { g.fillStyle = '#ffd246'; g.fillRect(Math.round(z.x + (Math.random() - 0.5) * z.r), Math.round(z.y + (Math.random() - 0.5) * z.r * 0.6), px, px * 2); }
@@ -383,6 +405,21 @@ export function render(g, world, dpr) {
   g.globalAlpha = 1;
   // frappes à venir : ombre au sol qui se resserre (pluie de flèches)
   for (const k of world.strikes || []) {
+    if (k.kind === 'spirit') {
+      g.fillStyle = 'rgba(208,128,255,.35)'; g.beginPath(); g.arc(k.x, k.y, 13, 0, 7); g.fill();
+      g.fillStyle = '#d080ff'; g.fillRect(Math.round(k.x) - 5, Math.round(k.y) - 6, 10, 10);
+      g.fillStyle = '#f0d0ff'; g.fillRect(Math.round(k.x) - 3, Math.round(k.y) - 4, 6, 5);
+      g.fillStyle = '#24161e'; g.fillRect(Math.round(k.x) - 2, Math.round(k.y) - 3, 1, 2); g.fillRect(Math.round(k.x) + 1, Math.round(k.y) - 3, 1, 2);
+      continue;
+    }
+    if (k.kind === 'flask') {   // fiole en cloche
+      const q = 1 - Math.max(0, k.t / k.t0), x = k.x0 + (k.x - k.x0) * q, y = k.y0 + (k.y - k.y0) * q - Math.sin(q * Math.PI) * 70;
+      g.strokeStyle = 'rgba(160,220,60,.5)'; g.lineWidth = 2; g.beginPath(); g.ellipse(k.x, k.y, k.r * q, k.r * 0.6 * q, 0, 0, 7); g.stroke();
+      g.save(); g.translate(Math.round(x), Math.round(y)); g.rotate(q * 8);
+      g.fillStyle = '#24161e'; g.fillRect(-5, -6, 10, 11); g.fillStyle = '#d0f060'; g.fillRect(-4, -2, 8, 6); g.fillStyle = '#e8f0f8'; g.fillRect(-2, -5, 4, 3);
+      g.restore();
+      continue;
+    }
     if (k.kind === 'phoenix') {
       g.fillStyle = '#ff7a3c'; g.beginPath(); g.arc(k.x, k.y, 10, 0, 7); g.fill();
       g.fillStyle = '#fff0b0'; g.beginPath(); g.arc(k.x, k.y, 5, 0, 7); g.fill();
