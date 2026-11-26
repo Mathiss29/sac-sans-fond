@@ -145,9 +145,44 @@ function bossExtras(g, e, t, px, w, h) {
   }
 }
 
+// Flèches au bord de l'écran : portail du boss ouvert, créatures d'événement hors de vue.
+function edgeArrows(g, world, t, camX, camY) {
+  const { w, h } = world, r = world.run, list = [];
+  if (r.lair && r.lair.open && !r.lair.done) list.push({ ...portalPos(world), color: '#ff9a3c', label: '♛' });
+  for (const e of world.enemies) if (e.event && !e.dead) list.push({ x: e.x, y: e.y, color: '#ffd246', label: '!' });
+  for (const p of list) {
+    const sx = p.x - camX, sy = p.y - camY;
+    if (sx > 0 && sy > 0 && sx < w && sy < h) continue;
+    const cx = w / 2, cy = h / 2, dx = sx - cx, dy = sy - cy, k = Math.min((w / 2 - 34) / Math.abs(dx || 1), (h / 2 - 34) / Math.abs(dy || 1));
+    const ax = cx + dx * k, ay = cy + dy * k, an = Math.atan2(dy, dx), pul = 1 + 0.12 * Math.sin(t * 6);
+    g.save(); g.translate(ax, ay); g.rotate(an); g.scale(pul, pul);
+    g.fillStyle = '#24161e'; g.beginPath(); g.moveTo(18, 0); g.lineTo(-10, -13); g.lineTo(-10, 13); g.closePath(); g.fill();
+    g.fillStyle = p.color; g.beginPath(); g.moveTo(14, 0); g.lineTo(-7, -9); g.lineTo(-7, 9); g.closePath(); g.fill();
+    g.restore();
+    g.font = `400 13px ${UI_FONT}`; g.textAlign = 'center'; g.fillStyle = '#24161e'; g.fillText(p.label, ax - Math.cos(an) * 20 + 1, ay - Math.sin(an) * 20 + 6);
+    g.fillStyle = '#fff6dc'; g.fillText(p.label, ax - Math.cos(an) * 20, ay - Math.sin(an) * 20 + 5);
+  }
+}
+
+// Garde-robe : teinte de tenue par lignée (voir COSTUMES dans data.js).
+let heroTints = {};
+const tintSheets = new Map();
+export function setHeroTints(m) { heroTints = m || {}; }
+function tintOf(src, color) {
+  if (!color) return src;
+  let byCol = tintSheets.get(src);
+  if (!byCol) { byCol = {}; tintSheets.set(src, byCol); }
+  if (byCol[color]) return byCol[color];
+  const c = document.createElement('canvas'); c.width = src.width || src.naturalWidth; c.height = src.height || src.naturalHeight;
+  const x = c.getContext('2d'); x.drawImage(src, 0, 0);
+  x.globalCompositeOperation = 'source-atop'; x.globalAlpha = 0.4; x.fillStyle = color; x.fillRect(0, 0, c.width, c.height);
+  return (byCol[color] = c);
+}
+
 // Héros : pieds posés en (x, y), regard vers la droite si face = 1.
 // pose = { anim, k } pour les héros qui ont une planche dessinée (sinon ancien sprite à 2 images).
 export function drawHero(g, type, x, y, face, bob, alpha = 1, px = 3, pose = null) {
+  const tint = heroTints[type];
   const sheet = SPR.sheets && SPR.sheets[type];
   const anim = pose ? pose.anim : 'idle';
   if (sheet && sheet.img[anim] && sheet.img[anim].complete && sheet.img[anim].naturalWidth) {
@@ -157,12 +192,12 @@ export function drawHero(g, type, x, y, face, bob, alpha = 1, px = 3, pose = nul
     g.save(); g.globalAlpha = alpha;
     shadow(g, x, y - px, 6 * px, 1.8 * px);
     g.translate(Math.round(x), Math.round(y)); g.scale(-face, 1); // la planche regarde vers la gauche
-    g.drawImage(sheet.img[anim], k * cw, 0, cw, ch, -sheet.anchor * sc, -h + sc, w, h);
+    g.drawImage(tintOf(sheet.img[anim], tint), k * cw, 0, cw, ch, -sheet.anchor * sc, -h + sc, w, h);
     g.restore();
     return;
   }
   const frames = SPR.heroes[type] || SPR.heroes.archer;
-  const img = frames[Math.floor(bob / Math.PI) % 2];
+  const img = tintOf(frames[Math.floor(bob / Math.PI) % 2], tint);
   const w = img.width * px, h = img.height * px;
   g.save(); g.globalAlpha = alpha;
   shadow(g, x, y - px, 6 * px, 1.8 * px);
@@ -569,6 +604,7 @@ export function render(g, world, dpr) {
   if (arena) drawEmbers(g, world, t, px); else drawLeaves(g, world, t, px);
   if (!arena && world.stage) drawAmbiance(g, world, t, camX, camY, dpr);
   g.drawImage(vignette(w, h, dpr), 0, 0, w, h);
+  if (r && !arena && world.phase === 'expedition') edgeArrows(g, world, t, camX, camY);
   if (r && !arena && world.phase === 'done') {
     // fin d'expédition : la scène s'assombrit, un rond de lumière reste sur le sac
     const b = bagPos(world), k = Math.min(1, (r.doneT || 0) * 1.6);

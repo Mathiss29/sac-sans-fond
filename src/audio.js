@@ -1,6 +1,6 @@
 // Sons générés à la volée avec Web Audio : aucun fichier, aucune licence.
 // Le contexte audio ne démarre qu'après une première action du joueur (règle des navigateurs).
-let ctx = null, master = null, noiseBuf = null, muted = false;
+let ctx = null, master = null, noiseBuf = null, muted = false, sfxVol = 1, musicVol = 1;
 const last = {};
 const GAP = { hit: 0.035, arrow: 0.05, frost: 0.08, note: 0.1, slash: 0.06, pop: 0.03, coin: 0.025, land: 0.05, tick: 0.04 };
 
@@ -9,12 +9,14 @@ export function unlockAudio() {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
   ctx = new AC();
-  master = ctx.createGain(); master.gain.value = muted ? 0 : 0.32; master.connect(ctx.destination);
+  master = ctx.createGain(); master.gain.value = muted ? 0 : 0.32 * sfxVol; master.connect(ctx.destination);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 1.2, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
 }
-export function setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.32; if (typeof refreshMusic === 'function') refreshMusic(); }
+// Volumes séparés (0 à 1) : bruitages et musique.
+export function setVolumes(sfx, music) { sfxVol = sfx; musicVol = music; if (master) master.gain.value = muted ? 0 : 0.32 * sfxVol; if (!fadeTimer) fadeLoop(); }
+export function setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.32 * sfxVol; if (typeof refreshMusic === 'function') refreshMusic(); }
 export function isMuted() { return muted; }
 
 function env(g, t, a, peak, dur) {
@@ -88,7 +90,7 @@ function player(name) {
 function fadeLoop() {
   let busy = false;
   for (const [name, a] of Object.entries(players)) {
-    const target = name === current && !muted ? MUSIC_VOL : 0;
+    const target = name === current && !muted ? Math.round(MUSIC_VOL * musicVol * 100) / 100 : 0;
     const v = a.volume + Math.sign(target - a.volume) * 0.03;
     a.volume = Math.max(0, Math.min(1, Math.abs(target - a.volume) < 0.03 ? target : v));
     if (a.volume === 0 && name !== current && !a.paused) a.pause();

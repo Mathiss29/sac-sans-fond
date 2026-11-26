@@ -1,15 +1,16 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
 import { ZONES, LEVELS, levelZone, ENEMIES, stageFor, TIERS, HEROES, HERO_ORDER, ALL_HEROES, ARENA, ULTS, TRIALS, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
-import { loadSave, writeSave, freshSave } from './save.js';
+import { loadSave, writeSave, freshSave, exportSave, importSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
 import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
-import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
+import { setHeroTints, render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
 import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
 import { initCurio, curioRefresh } from './curio-ui.js';
+import { initEpic, epicRefresh, recordRun, heroTints, applyVolumes } from './epic-ui.js';
 import { initCompany, gearIconCanvas, showLoot, companyRefresh, gearSheetReady } from './company.js';
 let iconSheet = null;
 treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
@@ -17,8 +18,11 @@ treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
 const $ = id => document.getElementById(id);
 const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
 let save = loadSave();
+const heroIcons = {};   // icônes des héros (refaites quand la tenue change)
 // stats du moment : arbre + équipement de la Compagnie
 function calcStats() {
+  setHeroTints(heroTints(save));
+  for (const k in heroIcons) delete heroIcons[k];
   const s = computeStats(save.level, curioBonus(save, gearBonus(save.gear, save.level)));
   s.eventCount += extraEvents(save);
   return s;
@@ -253,7 +257,6 @@ function arenaUi() {
 }
 
 // Cartes des héros à larguer : un clic (ou 1, 2, 3, 4) choisit lequel tombera au prochain clic sur la carte.
-const heroIcons = {};
 function heroIcon(type) {
   if (heroIcons[type]) return heroIcons[type];
   const c = document.createElement('canvas'); c.width = c.height = 68;
@@ -316,6 +319,7 @@ function finishExpedition() {
   const cardsGot = r.cards && r.cards.length && L('cabinet') ? addCards(save, r.cards, gearOf) : [];
   if (save.curio) { save.curio.active = []; fillQuests(save, randOpen()); }
   const found = storeItems([...(r.items || []), ...extra]);
+  recordRun(save, r, gained);
   const trialsDone = checkTrials(r);
   writeSave(save);
   const rows = [['Élémentaires vaincus', fmt(r.kills), '#c4c8b2']];
@@ -435,7 +439,7 @@ function toAtelierNow() {
   world.phase = 'idle'; world.run = null; world.heroes = []; world.coins = [];
   stats = calcStats(); world.stats = stats;
   $('result').hidden = true; $('atelier').hidden = false;
-  renderTree(); companyRefresh(); curioRefresh();
+  renderTree(); companyRefresh(); curioRefresh(); epicRefresh();
   focusCheapest();
 }
 // En revenant au bilan : la vue se pose sur la compétence achetable la moins chère, qui clignote.
@@ -996,6 +1000,8 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyM') { e.preventDefault(); if ($('worldMap').hidden) openWorld(); else $('worldMap').hidden = true; }
   else if (e.code === 'Escape' && !$('worldMap').hidden) $('worldMap').hidden = true;
 });
+// Tab : grande mini-carte pendant l'expédition
+addEventListener('keydown', e => { if (e.code === 'Tab' && playing() && world.mode === 'map') { e.preventDefault(); mm.classList.toggle('big'); } });
 $('back').onclick = toAtelier;
 $('again').onclick = () => go();
 addEventListener('keydown', e => {
@@ -1096,6 +1102,11 @@ initCompany({ get save() { return save; }, write: () => writeSave(save), fmt, he
 initCurio({ get save() { return save; }, write: () => writeSave(save), fmt, play, enemyIcon, gearCtx, goDungeon, open: () => randOpen(),
   onChange: () => { stats = calcStats(); renderTree(); },
   storeAndShow: items => { const f = storeItems(items.filter(Boolean)); writeSave(save); if (f.length) showLoot(f, () => { companyRefresh(); }); } });
+applyVolumes(save);
+initEpic({ get save() { return save; }, write: () => writeSave(save), fmt, enemyIcon, stats: () => stats,
+  exportSave: () => exportSave(save), importSave: txt => { const err = importSave(txt); if (!err) location.reload(); return err; },
+  drawHeroIcon: (cg, k) => { cg.imageSmoothingEnabled = false; drawHero(cg, k, 34, 64, 1, 0, 1, HERO_SHEETS[k] ? 2 : 3); },
+  onChange: () => { stats = calcStats(); renderTree(); } });
 gearSheetReady.then(() => renderTree());
 
 // Accès pour les tests automatisés

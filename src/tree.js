@@ -363,6 +363,7 @@ const SPEC = {
   archerFork: [30000, 1, () => 'Les archers fusionnent (puissance ×1,5)', { need: c => c.bossWins >= 2, cond: 'Bats le Brasier primordial 2 fois' }],
   mageFork: [60000, 1, () => 'Les mages fusionnent (puissance ×1,5)', { need: c => c.bossWins >= 3 && c.L('mage3') > 0, cond: 'Bats le Brasier primordial 3 fois et recrute 3 mages' }],
   knightFork: [40000, 1, () => 'Les chevaliers fusionnent (puissance ×1,5)', { need: c => c.maxTier >= 2 && c.L('knight3') > 0, cond: 'Remplis le sac jusqu\'au palier Soie et recrute 3 chevaliers' }],
+  looks: [20000, 1, () => 'Garde-robe ouverte (onglet Épopée)'],
   // Lot E : les 5 nouveaux héros
   thief: [30000, 1, () => '1 voleur par expédition', { need: c => c.reached >= 3, cond: 'Bats la Reine des crapauds (Marais brumeux)' }],
   thief2: [90000, 1, () => '2 voleurs par expédition'],

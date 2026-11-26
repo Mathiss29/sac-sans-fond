@@ -16,6 +16,12 @@ function migrate(s) {
   const out = Object.assign(freshSave(), s);
   out.level = Object.assign({ root: 1 }, s.level || {});
   if (!out.zoneTier) out.zoneTier = { clairiere: out.maxTier || 0 };
+  // valeurs abîmées (sauvegarde modifiée à la main, bug ancien) : on répare plutôt que de planter
+  for (const k of ['coins', 'expeditions', 'best', 'maxTier']) if (!Number.isFinite(out[k]) || out[k] < 0) out[k] = 0;
+  for (const [k, v] of Object.entries(out.level)) if (!Number.isFinite(v) || v < 0) delete out.level[k];
+  out.level.root = 1;
+  if (out.bosses && typeof out.bosses !== 'object') out.bosses = {};
+  if (!Number.isInteger(out.region) || out.region < 0) out.region = 0;
   if ((s.version || 1) < 2) toBigTree(out);
   out.version = SAVE_VERSION;
   return out;
@@ -43,4 +49,23 @@ function toBigTree(out) {
   if (b) lv.bard = 1;
   // palier le plus haut déjà atteint : on le devine (portail de l'antre ouvert = palier Soie)
   out.maxTier = Math.max(out.maxTier || 0, out.lairOpen ? 2 : n('tierCuir') && out.expeditions ? 1 : 0);
+}
+
+// Export / import en texte : JSON encodé en base 64, préfixé pour reconnaître une sauvegarde.
+const PREFIX = 'SSF1:';
+export function exportSave(save) {
+  const json = JSON.stringify(save);
+  return PREFIX + btoa(unescape(encodeURIComponent(json)));
+}
+// Renvoie un message d'erreur, ou '' si la sauvegarde est chargée (dans le stockage du navigateur).
+export function importSave(txt) {
+  let raw = null;
+  try {
+    const body = txt.startsWith(PREFIX) ? txt.slice(PREFIX.length) : txt;
+    raw = JSON.parse(body.trim().startsWith('{') ? body : decodeURIComponent(escape(atob(body.trim()))));
+  } catch (e) { return 'Ce texte n\'est pas une sauvegarde valide.'; }
+  if (!raw || typeof raw !== 'object' || typeof raw.level !== 'object' || typeof raw.coins !== 'number') return 'Ce texte n\'est pas une sauvegarde de Sac sans Fond.';
+  if ((raw.version || 1) > SAVE_VERSION) return 'Cette sauvegarde vient d\'une version plus récente du jeu.';
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(migrate(raw))); } catch (e) { return 'Impossible d\'écrire la sauvegarde (stockage plein ou bloqué).'; }
+  return '';
 }

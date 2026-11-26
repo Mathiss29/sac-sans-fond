@@ -669,6 +669,7 @@ function keepPouches(world) {
 function killEnemy(world, e) {
   e.dead = true;
   world.run.kills++;
+  if (!e.fake && !e.guard) { const kb = world.run.killsBy || (world.run.killsBy = {}); kb[e.boss ? 'boss:' + world.zone.id : e.type] = (kb[e.boss ? 'boss:' + world.zone.id : e.type] || 0) + 1; }
   if (world.run.cnt) world.run.cnt.kills++;
   if (e.bounty && !e.boss && !e.event) e.value *= 1.5;
   // un roi se divise en petits élémentaires

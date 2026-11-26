@@ -1,7 +1,7 @@
 // Toutes les données d'équilibrage du jeu. On ajuste ici sans toucher au moteur.
 
 export const SAVE_KEY = 'sac-sans-fond/v1';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 // Paliers du sac : chaque palier double la capacité totale (voir bagMax).
 export const TIERS = [
@@ -188,6 +188,17 @@ Object.assign(HEROES, {
   summoner: { name: 'Invocateur', plural: 'Invocateurs', range: 230, damage: 7, cooldown: 2.2, shot: 'spirit', walkSpeed: 85,
     blurb: 'Invoque des esprits qui foncent sur les ennemis et explosent.' },
 });
+// Garde-robe : tenues teintes, gagnées en battant des boss de niveau (need = nombre de niveaux vaincus).
+export const COSTUMES = [
+  { id: 'base', name: 'Tenue d\'origine', tint: null, need: 0 },
+  { id: 'azur', name: 'Azur', tint: '#4a78ff', need: 1 },
+  { id: 'braise', name: 'Braise', tint: '#ff5a2a', need: 3 },
+  { id: 'jade', name: 'Jade', tint: '#40e0a0', need: 6 },
+  { id: 'ombre', name: 'Ombre', tint: '#2a1440', need: 9 },
+  { id: 'or', name: 'Or massif', tint: '#ffd246', need: 12 },
+  { id: 'givre', name: 'Givre', tint: '#cfe8ff', need: 16 },
+  { id: 'neant', name: 'Néant', tint: '#b48cff', need: 20 },
+];
 export const HERO_ORDER = ['archer', 'mage', 'knight', 'bard'];   // lignées avec classes, ultimes et équipement
 export const NEW_HEROES = ['thief', 'druid', 'engineer', 'alchemist', 'summoner'];
 export const ALL_HEROES = [...HERO_ORDER, ...NEW_HEROES];

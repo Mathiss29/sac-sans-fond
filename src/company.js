@@ -87,10 +87,11 @@ export function initCompany(ctx) {
 }
 export function showView(v) { show(v); }
 function show(v) {
-  if (v !== 'tree' && v !== 'curio' && !L('armory')) return;
+  if (v !== 'tree' && v !== 'curio' && v !== 'epic' && !L('armory')) return;
   view = v; open = v === 'company';
   $('treeWrap').hidden = v !== 'tree'; $('company').hidden = v !== 'company'; $('album').hidden = v !== 'album';
   if ($('curio')) $('curio').hidden = v !== 'curio';
+  if ($('epic')) $('epic').hidden = v !== 'epic';
   document.querySelectorAll('#atelier .tabs .tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
   $('atelier').querySelector('.hintTxt').innerHTML = v === 'curio' ? 'Clique une carte pour l\'équiper<br>Achète avant de partir' : v === 'company' ? 'Clique un objet pour l\'équiper<br>Survole pour comparer'
     : v === 'album' ? 'Trouve des objets en expédition<br>pour remplir l\'album' : 'Clique une compétence pour l\'acheter<br>Glisse pour voir, molette pour zoomer';
@@ -109,7 +110,7 @@ export function companyRefresh() {
   const bk = $('tabBook');
   bk.disabled = !on; bk.title = on ? 'Album des objets' : 'Bientôt';
   bk.classList.toggle('bang', on && view !== 'album' && !!(g && g.albumNews > 0));
-  if (!on && view !== 'tree' && view !== 'curio') show('tree');
+  if (!on && view !== 'tree' && view !== 'curio' && view !== 'epic') show('tree');
   if (view === 'album') renderAlbum();
   if (open) render();
 }
