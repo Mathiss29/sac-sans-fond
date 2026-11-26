@@ -71,7 +71,7 @@ export function initCompany(ctx) {
   C = ctx;
   const tabs = document.querySelector('#atelier .tabs');
   const [tree, book] = tabs.querySelectorAll('.tab');
-  tree.dataset.view = 'tree';
+  tree.dataset.view = 'tree'; tree.id = 'tabTree';
   const comp = h('button', 'tab', 'Compagnie'); comp.type = 'button'; comp.id = 'tabCompany'; comp.dataset.view = 'company';
   comp.append(h('span', 'tabBang', '!'));
   tree.after(comp);
