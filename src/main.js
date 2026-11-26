@@ -261,7 +261,7 @@ function finishExpedition() {
     const t0 = performance.now(), el = $('resTotal');
     let lastTick = 0;
     const tick = now => {
-      const k = Math.min(1, (now - t0) / 900); el.textContent = '+' + fmt(Math.round(gained * (1 - Math.pow(1 - k, 3))));
+      const k = Math.max(0, Math.min(1, (now - t0) / 900)); el.textContent = '+' + fmt(Math.round(gained * (1 - Math.pow(1 - k, 3))));
       if (gained > 0 && now - lastTick > 55 && k < 1) { lastTick = now; play('tick', { k }); }
       if (k < 1) requestAnimationFrame(tick); else if (gained > 0) { play(record ? 'gold' : 'buy'); el.classList.remove('land'); void el.offsetWidth; el.classList.add('land'); }
     };
@@ -769,7 +769,8 @@ function musicFor() {
 const STEP = 1 / 60;
 let acc = 0, last = performance.now();
 function frame(now) {
-  acc += Math.min(0.25, (now - last) / 1000); last = now;
+  const sp = window.__speed || 1;   // accéléré seulement par les tests automatisés
+  acc += Math.max(0, Math.min(0.25 * sp, (now - last) / 1000 * sp)); last = now;
   const wr = $('walletBox').getBoundingClientRect(), ar = app.getBoundingClientRect();
   world.walletPos = { x: wr.left - ar.left + 20, y: wr.top - ar.top + wr.height / 2 };
   if (paused) acc = 0;
@@ -837,4 +838,6 @@ initCompany({ get save() { return save; }, write: () => writeSave(save), fmt, he
 gearSheetReady.then(() => renderTree());
 
 // Accès pour les tests automatisés
-window.__game = { world, get save() { return save; }, go, goLair, toAtelier };
+window.__game = { world, get save() { return save; }, go, goLair, toAtelier, lairOpen,
+  buyable: () => NODES.filter(n => visible(n) && !lockedNow(n) && L(n.id) < capOf(n)).map(n => ({ id: n.id, cost: costOf(n, L(n.id)) })),
+  buy: id => buy(NODE[id]) };
