@@ -1,6 +1,6 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
 import { ENEMIES, HEROES, HERO_ORDER, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, bagMax, tierOf } from './data.js';
-import { rollItem, RARITIES, DROP } from './gear.js';
+import { rollItem, RARITIES as GEAR_RARITIES, DROP } from './gear.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -414,7 +414,7 @@ function damage(world, e, amount, slow, from, type) {
   }
   const shown = Math.round(amount * 10) / 10;
   world.texts.push({ x: e.x + rnd(-8, 8), y: e.y - e.r - 4, text: (shown >= 10 ? Math.round(shown) : String(shown).replace('.', ',')) + (crit ? ' !' : ''),
-    color: crit ? '#ffd246' : '#ffffff', size: crit ? 20 : 14, life: crit ? 0.9 : 0.6, dmg: true, vy: -70, pop: 0 });
+    color: crit ? '#fff4d0' : '#ffffff', size: crit ? 24 : e.boss ? 18 : 15, life: crit ? 1 : 0.65, dmg: true, vy: crit ? -90 : -70, pop: 0, box: crit ? '#c8402a' : null });
   if (from && !e.boss && !e.def.still) {
     const dx = e.x - from.x, dy = e.y - from.y, d = Math.hypot(dx, dy) || 1, k = (e.type === 'golem' ? 60 : 140) * (crit ? 1.6 : 1);
     e.kx = (e.kx || 0) + dx / d * k; e.ky = (e.ky || 0) + dy / d * k;
@@ -437,7 +437,7 @@ function maybePouch(world, e) {
   const item = rollItem(gc, 0);
   world.coins.push({ x: e.x, y: e.y, vx: rnd(-40, 40), vy: rnd(-40, 40), kind: 'pouch', item, value: 0, life: 99, max: 99,
     fly: false, sp: 0, z: 0, vz: 340, spin: 0, auto: 1.3 });
-  world.texts.push({ x: e.x, y: e.y - 34, text: 'Besace !', color: RARITIES[item.rarity].color, size: 18, life: 1.4 });
+  world.texts.push({ x: e.x, y: e.y - 34, text: 'Besace !', color: GEAR_RARITIES[item.rarity].color, size: 18, life: 1.4 });
   sfx(world, 'gold');
 }
 function gotItem(world, item) {
@@ -462,7 +462,9 @@ function killEnemy(world, e) {
     r.bossKilled = true;
     if (r.arena) { r.arena.won = true; r.arena.loot = ARENA.lootTime; r.attraction = world.stats.attraction; world.hazards = []; for (const m of world.enemies) if (!m.boss && !m.dead) { m.dead = true; burst(world, m.x, m.y, 8, pal, 120, 2, 0, 0.4); } }
     world.events.push({ kind: 'boss', name: e.def.name });
-    world.events.push({ kind: 'banner', title: e.def.name + ' vaincu !', sub: 'Rafle le butin avant que le portail ne se referme' });
+    world.slowT = 1.1; // ralenti au coup de grâce
+    world.events.push({ kind: 'flash' });
+    world.events.push({ kind: 'banner', big: true, title: e.def.name + ' vaincu !', sub: 'Rafle le butin avant que le portail ne se referme' });
     world.fx.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r, r1: e.r * 5, t: 0.8, life: 0.8, color: '#ffd246' });
   }
   if (e.event && e.value > 0) {
@@ -528,6 +530,7 @@ function addToBag(world, value) {
 }
 
 export function update(world, dt) {
+  if (world.slowT > 0) { world.slowT -= dt; dt *= world.slowT > 0.3 ? 0.25 : 0.6; }
   world.t += dt;
   for (const f of world.fx) f.t -= dt;
   world.fx = world.fx.filter(f => f.t > 0);
@@ -578,6 +581,7 @@ export function update(world, dt) {
     } else {
       r.tearT -= dt;
       if (r.waves && r.waves.length) { r.waveT += dt; tearWave(world); }
+      updateRelics(world, dt);
       const anyFlying = world.coins.some(c => c.fly) || (r.waves && r.waves.length > 0);
       if ((r.tearT <= 0 && !anyFlying) || r.tearT < -1.5 || (world.coins.length === 0 && !anyFlying && r.tearT < r.tearDur - 0.5)) endTear(world);
     }
@@ -777,6 +781,11 @@ function updateCoins(world, dt) {
     c.life -= dt;
     if (c.life <= 0) { c.dead = true; continue; }
     const fresh = c.life < c.max - 0.15 && !c.air;
+    c.near = false;
+    if (fresh && inside) {
+      const dd = (c.x - p.x) ** 2 + (c.y - p.y) ** 2, nr = gr * 1.7;
+      if (dd < nr * nr) { c.near = true; const d = Math.sqrt(dd) || 1; c.x += (p.x - c.x) / d * 70 * dt; c.y += (p.y - c.y) / d * 70 * dt; }
+    }
     if (fresh && inside && (c.x - p.x) ** 2 + (c.y - p.y) ** 2 < gr * gr) {
       c.fly = true; c.sp = 120;
       if (c.value >= 4.5) world.texts.push({ x: c.x, y: c.y - 14, text: '+' + Math.round(c.value * (world.phase === 'tear' ? 1 : 1)), color: c.kind === 'gem' ? '#8ff0ff' : '#ffd246',
@@ -822,7 +831,7 @@ function climbTier(world, dt) {
   const b = bagPos(world), tier = TIERS[r.climb];
   world.fx.push({ kind: 'ring', x: b.x, y: b.y - 10, r0: 20, r1: 110, t: 0.45, life: 0.45, color: tier.glow });
   burst(world, b.x, b.y - 10, 30, [tier.color, tier.glow, '#ffffff'], 260, 3, 0, 0.6);
-  shake(world, 6); sfx(world, 'burst');
+  shake(world, 6); sfx(world, 'climb', { n: r.climb });
   world.events.push({ kind: 'tierUp', tier: r.climb });
 }
 
@@ -842,10 +851,52 @@ function burstBag(world) {
   r.tearT += (W - 1) * TEAR_WAVE_GAP;
   r.waveT = 0;
   tearWave(world);
+  if (total > 0) spawnRelics(world, total);
   world.fx.push({ kind: 'ring', x: b.x, y: b.y - 20, r0: 10, r1: Math.max(world.w, world.h) * 0.6, t: 0.7, life: 0.7, color: TIERS[r.tier].glow });
   burst(world, b.x, b.y - 20, 60, [TIERS[r.tier].color, TIERS[r.tier].seam, TIERS[r.tier].glow], 420, 3, 0, 1);
   shake(world, 14); sfx(world, 'burst');
   world.events.push({ kind: 'burst', title: total > 0 ? 'Rafle tout !' : 'Le sac était vide…', sub: total > 0 ? 'Passe le gant sur les pièces pour les attraper' : '' });
+}
+
+// Trésors : quelques objets rares jaillissent du sac et flottent au-dessus, à attraper au survol.
+export const RARITIES = [
+  { id: 'rare', name: 'Rare', color: '#6fb7ff', share: 0.04 },
+  { id: 'epique', name: 'Épique', color: '#c08bff', share: 0.07 },
+  { id: 'legend', name: 'Légendaire', color: '#ffb43c', share: 0.12 },
+];
+const RELIC_NAMES = { bar: ['Lingot du mage', 'Barre d\'orichalque', 'Lingot runique'], gem: ['Larme d\'étoile', 'Œil de givre', 'Cœur d\'ambre'], crown: ['Couronne oubliée', 'Diadème des fées', 'Tiare du roi-crapaud'] };
+function spawnRelics(world, total) {
+  const r = world.run, b = bagPos(world);
+  const n = Math.min(5, 1 + r.tier + (r.full ? 1 : 0));
+  r.relics = [];
+  for (let i = 0; i < n; i++) {
+    const roll = Math.random(), leg = 0.08 + 0.08 * r.tier, epi = leg + 0.25;
+    const rar = roll < leg ? 2 : roll < epi ? 1 : 0;
+    const kind = ['bar', 'gem', 'crown'][Math.floor(Math.random() * 3)];
+    const names = RELIC_NAMES[kind];
+    r.relics.push({ kind, rar, name: names[Math.floor(Math.random() * names.length)], value: Math.max(1, Math.round(total * RARITIES[rar].share)),
+      x0: b.x, y0: b.y - 10, tx: b.x + (i - (n - 1) / 2) * 78, ty: b.y - 110 - (i % 2) * 16, t: -0.25 - i * 0.12, got: false });
+  }
+}
+function updateRelics(world, dt) {
+  const r = world.run;
+  if (!r.relics) return;
+  const p = pointerWorld(world), gr = gloveRadius(world) + 18;
+  for (const o of r.relics) {
+    if (o.got) continue;
+    o.t += dt;
+    const k = Math.max(0, Math.min(1, o.t / 0.6)), e = 1 - Math.pow(1 - k, 3);
+    o.x = o.x0 + (o.tx - o.x0) * e; o.y = o.y0 + (o.ty - o.y0) * e - Math.sin(k * Math.PI) * 60;
+    if (k >= 1 && world.pointer.inside && (o.x - p.x) ** 2 + (o.y - p.y) ** 2 < gr * gr) {
+      o.got = true; r.tearGot += o.value; world.events.push({ kind: 'coins', value: o.value });
+      (r.relicsGot = r.relicsGot || []).push(o);
+      const col = RARITIES[o.rar].color;
+      world.texts.push({ x: o.x, y: o.y - 30, text: '+' + Math.round(o.value), color: col, size: 24, life: 1.2, dmg: true, vy: -80, pop: 0 });
+      world.fx.push({ kind: 'ring', x: o.x, y: o.y, r0: 10, r1: 70, t: 0.4, life: 0.4, color: col });
+      burst(world, o.x, o.y, 26, [col, '#ffffff', '#ffe68a'], 220, 3, 0, 0.6);
+      sfx(world, 'gold'); shake(world, 4);
+    }
+  }
 }
 
 const TEAR_WAVES = 4, TEAR_WAVE_GAP = 0.55;

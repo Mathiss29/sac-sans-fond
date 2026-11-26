@@ -1,8 +1,8 @@
 // Tout le dessin sur le canvas, en pixel art (sprites dans sprites.js).
-import { RARITIES } from './gear.js';
+import { RARITIES as GEAR_RARITIES } from './gear.js';
 import { TIERS, bagMax, tierOf } from './data.js';
 const UI_FONT = "'Silkscreen', 'Pixelify Sans', monospace";
-import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos } from './game.js';
+import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos, RARITIES } from './game.js';
 
 import { buildSprites, loadHeroSheets, loadMonsterSheets, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
 
@@ -274,15 +274,19 @@ export function render(g, world, dpr) {
     g.globalAlpha = a * blink;
     const im = SPR.loot[c.kind || 'coin'] || SPR.coin;
     const k = c.item ? px + 1 : c.kind && c.kind !== 'coin' ? px : (c.big ? px + 1 : px);
-    const s = im.width * k, sh2 = im.height * k;
+    const nk = c.near ? 1.3 : 1;
+    const s = im.width * k * nk, sh2 = im.height * k * nk;
     const z = c.z || 0;
+    if (c.near) { // sous le gant : la pièce gonfle et brille avant d'être aspirée
+      g.fillStyle = 'rgba(255,240,170,.35)'; g.beginPath(); g.arc(c.x, c.y - z, s * 0.85, 0, 7); g.fill();
+    }
     if (z > 1) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(Math.round(c.x - s * 0.3), Math.round(c.y + sh2 * 0.35), Math.round(s * 0.6), px); }
     if (!c.kind || c.kind === 'coin') {
       const sw = Math.max(px, Math.round(s * Math.abs(Math.cos(t * 6 + (c.spin || 0))) / px) * px);
       g.drawImage(im, Math.round(c.x - sw / 2), Math.round(c.y - sh2 / 2 - z), sw, sh2);
     } else {
       if (c.item) { // besace : halo et rayon de la couleur de sa rareté
-        const col = RARITIES[c.item.rarity].color;
+        const col = GEAR_RARITIES[c.item.rarity].color;
         g.save(); g.globalAlpha *= 0.35 + 0.15 * Math.sin(t * 6); g.fillStyle = col;
         g.beginPath(); g.arc(c.x, c.y - z, s * 1.2, 0, 7); g.fill();
         if (!c.fly) g.fillRect(Math.round(c.x - px), Math.round(c.y - z - s * 3), px * 2, Math.round(s * 2.4));
@@ -352,11 +356,18 @@ export function render(g, world, dpr) {
     }
   }
 
+  if (r && r.relics && world.phase === 'tear') drawRelics(g, world, r.relics, t, px);
+
   g.textAlign = 'center'; g.lineJoin = 'round';
   for (const tx of world.texts) {
     g.globalAlpha = Math.min(1, tx.life * 3);
     const sc = tx.dmg ? 1 + Math.max(0, 0.6 - tx.pop * 6) : 1;
     g.font = `800 ${Math.round(tx.size * sc)}px 'Pixelify Sans', system-ui, sans-serif`;
+    if (tx.box) { // coup critique : chiffre dans une étiquette rouge cernée
+      const bw = g.measureText(tx.text).width + 12, bh = tx.size * sc + 4;
+      g.fillStyle = '#10140d'; g.fillRect(Math.round(tx.x - bw / 2 - 2), Math.round(tx.y - bh + 4), Math.round(bw + 4), Math.round(bh + 4));
+      g.fillStyle = tx.box; g.fillRect(Math.round(tx.x - bw / 2), Math.round(tx.y - bh + 6), Math.round(bw), Math.round(bh));
+    }
     g.strokeStyle = '#24161e'; g.lineWidth = 3.5; g.strokeText(tx.text, tx.x, tx.y);
     g.fillStyle = tx.color; g.fillText(tx.text, tx.x, tx.y);
   }
@@ -588,5 +599,36 @@ function drawLeaves(g, world, t, px) {
     g.fillStyle = cols[i % 3];
     const tw = Math.sin(t * 4 + i) > 0;
     g.fillRect(Math.round(x), Math.round(y), px * (tw ? 2 : 1), px);
+  }
+}
+
+// Trésors de la Déchirure : un rai de lumière, un cadre à la couleur de la rareté, le nom dessous.
+function drawRelics(g, world, relics, t, px) {
+  const p = world.pointer, cx = world.cam.x, cy = world.cam.y;
+  for (const o of relics) {
+    if (o.got || o.x === undefined) continue;
+    const col = RARITIES[o.rar].color, landed = o.t >= 0.6;
+    const bob = landed ? Math.round(Math.sin(t * 3 + o.tx) * 3) : 0;
+    const x = Math.round(o.x), y = Math.round(o.y + bob);
+    const hover = p.inside && (p.x + cx - x) ** 2 + (p.y + cy - y) ** 2 < 60 * 60;
+    if (landed) {
+      const beam = g.createLinearGradient(0, y - 160, 0, y);
+      beam.addColorStop(0, 'rgba(255,255,255,0)'); beam.addColorStop(1, col + '66');
+      g.fillStyle = beam; g.fillRect(x - 10, y - 160, 20, 160);
+      g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x - 14, y + 40 - bob, 28, 4);
+    }
+    const S = hover ? 54 : 46;
+    g.fillStyle = '#10140d'; g.fillRect(x - S / 2 - 2, y - S / 2 - 2, S + 4, S + 4);
+    g.fillStyle = col; g.fillRect(x - S / 2, y - S / 2, S, S);
+    g.fillStyle = '#1b1f18'; g.fillRect(x - S / 2 + 3, y - S / 2 + 3, S - 6, S - 6);
+    const im = SPR.loot[o.kind];
+    if (im) { const k = Math.max(1, Math.floor((S - 12) / Math.max(im.width, im.height))); g.drawImage(im, Math.round(x - im.width * k / 2), Math.round(y - im.height * k / 2), im.width * k, im.height * k); }
+    if (!landed) continue;
+    g.textAlign = 'center'; g.lineJoin = 'round';
+    g.font = `400 13px ${UI_FONT}`;
+    const rn = RARITIES[o.rar].name.toUpperCase();
+    g.strokeStyle = '#10140d'; g.lineWidth = 4; g.strokeText(rn, x, y - S / 2 - 8); g.fillStyle = col; g.fillText(rn, x, y - S / 2 - 8);
+    g.font = `500 14px 'Pixelify Sans', monospace`;
+    g.strokeText(o.name, x, y + S / 2 + 16); g.fillStyle = '#f4ecd2'; g.fillText(o.name, x, y + S / 2 + 16);
   }
 }
