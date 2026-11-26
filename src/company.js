@@ -2,7 +2,7 @@
 import { HEROES, HERO_ORDER } from './data.js';
 import { TREE_ICONS, treeIcons } from './sprites.js';
 import { RARITIES, GEAR_ICONS, ICON_FALLBACK, WEAPONS, KINDS, CHARM_KINDS, SETS, MYTHS, setOf, setCount, mythText, albumKey, albumBonus, ALBUM_STEP, STAT_TEXT, SLOTS, reserveSize, rerollCost, rerollAlt, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText, itemEffects,
-  isBetter, refineCost, refineChance, gearBonus } from './gear.js';
+  isBetter, refineCost, refineChance, gearBonus, FORGE_TITLES, forgeTitles, forgeBest, forgeTitleText } from './gear.js';
 
 const $ = id => document.getElementById(id);
 const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
@@ -56,6 +56,7 @@ const pct = v => String(Math.round(v)).replace('.', ',');
 
 // ---------- État ----------
 let C = null;                       // contexte donné par main.js
+let resFilter = 'all', resSort = 'rarity';
 let line = 'archer', tab = 'equip', refSlot = 'weapon', recycleMode = false, picked = null, open = false;
 const L = id => (C.save.level[id] || 0);
 const owned = () => HERO_ORDER.filter(k => heroCount(k) > 0);
@@ -237,6 +238,7 @@ function renderRefine(g) {
   for (let i = 0; i < REFINE_MAX; i++) dots.append(h('i', i < lv ? 'on' : ''));
   const anvil = h('div', 'cAnvil'); anvil.append(iconEl('anvil', 'anvil'));
   w.append(pick, title, dots, anvil);
+  w.append(forgeTitleBox(g));
   if (lv >= REFINE_MAX) { w.append(h('p', 'cOk', 'Emplacement au maximum !')); return w; }
   const now = h('div', 'cNow', it ? itemText(it, lv) : `Bonus de l'objet ×${(1 + 0.1 * lv).toFixed(1).replace('.', ',')}`);
   const next = h('div', 'cNext', '→ ' + (it ? itemText(it, lv + 1) : `Bonus de l'objet ×${(1 + 0.1 * (lv + 1)).toFixed(1).replace('.', ',')}`));
@@ -255,16 +257,35 @@ function renderRefine(g) {
     C.unlockAudio();
     C.save.coins -= cost.coins; g.shards -= cost.shards;
     const ok = Math.random() < ch;
+    const had = forgeTitles(g).length;
     if (ok) { g.ref[line][s.id] = lv + 1; g.pity[key] = 0; C.play('tier'); }
     else { g.pity[key] = pity + 0.05; C.play('warn'); }
     changed();
     const res = h('div', 'cRefFx ' + (ok ? 'ok' : 'ko'), ok ? `+${lv + 1} !` : 'Échec…');
     $('company').querySelector('.cAnvil')?.append(res);
     $('company').querySelector('.cAnvil .anvil')?.classList.add('hit');
+    const ts = forgeTitles(g);
+    if (ts.length > had) titleBanner(ts[ts.length - 1]);
   };
   w.append(btn);
   if (cost.shards && !L('recycle')) w.append(h('p', 'cHint', 'Il faut des éclats : débloque le Recyclage dans l\'arbre.'));
   return w;
+}
+
+function forgeTitleBox(g) {
+  const box = h('div', 'cTitleBox');
+  const ts = forgeTitles(g), nx = FORGE_TITLES.find(t => !ts.includes(t));
+  const cur = ts[ts.length - 1];
+  box.append(h('div', 'tt', cur ? '⚒ ' + cur.name : '⚒ Aucun titre de forge'));
+  if (ts.length) box.append(h('div', 'tb', ts.map(forgeTitleText).join(' · ')));
+  if (nx) box.append(h('div', 'tn', `Défi : un emplacement à +${nx.lv} (meilleur : +${forgeBest(g)}) → « ${nx.name} », ${forgeTitleText(nx)}`));
+  return box;
+}
+function titleBanner(t) {
+  const b = h('div', 'cTitleBanner');
+  b.append(h('div', 'k', 'Nouveau titre !'), h('div', 'n', t.name), h('div', 'e', forgeTitleText(t)));
+  document.body.append(b); C.play('tier');
+  setTimeout(() => b.remove(), 3200);
 }
 
 // Relance : retire au sort l'effet secondaire de l'objet d'un emplacement, contre des éclats
@@ -315,8 +336,25 @@ function renderReserve(g) {
   const sh = h('span', 'shards num'); sh.append(iconEl('shard', 'mIco'), ' ' + C.fmt(g.shards)); sh.title = 'Éclats : obtenus en recyclant, servent à l\'affinage';
   top.append(sh);
   col.append(top);
+  // tri et filtres
+  const bar = h('div', 'cFilters');
+  const filters = [['all', 'Tout'], ...owned().map(k => [k, HEROES[k].plural]), ['charm', 'Charmes'], ['new', 'Nouveaux'], ['locked', '🔒']];
+  if (!filters.some(f => f[0] === resFilter)) resFilter = 'all';
+  for (const [id, label] of filters) {
+    const b = h('button', 'cChip' + (resFilter === id ? ' on' : ''), label); b.type = 'button';
+    b.onclick = () => { resFilter = id; render(); };
+    bar.append(b);
+  }
+  const SORTS = { rarity: 'Rareté', power: 'Puissance', recent: 'Récents' };
+  const sb = h('button', 'cChip sort', '⇅ ' + SORTS[resSort]); sb.type = 'button'; sb.title = 'Changer le tri';
+  sb.onclick = () => { const k = Object.keys(SORTS); resSort = k[(k.indexOf(resSort) + 1) % k.length]; render(); };
+  bar.append(sb);
+  col.append(bar);
   const grid = h('div', 'cGrid');
-  const sorted = g.inv.slice().sort((a, b) => b.rarity - a.rarity || b.power - a.power);
+  const keep = it => resFilter === 'all' ? true : resFilter === 'charm' ? it.kind !== 'weapon' : resFilter === 'new' ? it.isNew : resFilter === 'locked' ? it.locked : it.kind === 'weapon' && it.line === resFilter;
+  const cmp = { rarity: (a, b) => b.rarity - a.rarity || b.power - a.power, power: (a, b) => b.power - a.power || b.rarity - a.rarity, recent: (a, b) => b.id - a.id }[resSort];
+  const sorted = g.inv.filter(keep).sort(cmp);
+  if (!sorted.length && resFilter !== 'all') grid.append(h('p', 'cHint wide', 'Aucun objet pour ce filtre.'));
   for (const it of sorted) {
     const cell = h('button', 'cItem' + (it.isNew ? ' new' : '') + (picked === it.id ? ' sel' : '') + (recycleMode ? ' rec' : '')); cell.type = 'button';
     cell.style.setProperty('--r', RARITIES[it.rarity].color);
@@ -340,7 +378,7 @@ function renderReserve(g) {
     };
     grid.append(cell);
   }
-  for (let i = g.inv.length; i < reserveSize(C.save.level); i++) grid.append(h('span', 'cItem empty'));
+  if (resFilter === 'all') for (let i = g.inv.length; i < reserveSize(C.save.level); i++) grid.append(h('span', 'cItem empty'));
   col.append(grid);
   col.append(h('div', 'cDetail', 'Survole un objet pour voir ses effets.'));
   const foot = h('div', 'cRecycle');

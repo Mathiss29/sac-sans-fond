@@ -237,8 +237,31 @@ export function refineChance(lv, bless = 0, pity = 0) {
 }
 
 // Bonus de l'équipement, pour computeStats. level : niveaux de l'arbre (emplacements débloqués)
+// Apparence de l'arme en expédition : couleur des tirs et lueur du héros (rare et plus)
+const SET_LOOK = { tempete: '120,205,255', hiver: '205,245,255', rempart: '255,214,110', fete: '255,140,210' };
+export function weaponLook(it) {
+  if (!it || it.rarity < 1) return null;
+  const sid = setOf(it), hex = RARITIES[it.rarity].color;
+  const rgb = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(',');
+  return { r: it.rarity, col: (sid && SET_LOOK[sid]) || rgb, glow: it.rarity >= 2, myth: it.rarity >= 4 };
+}
+
+// Défi de forge : titres permanents selon le meilleur affinage atteint (cumulatifs)
+export const FORGE_TITLES = [
+  { lv: 5, name: 'Apprenti forgeron', st: 'gold', v: 5 },
+  { lv: 10, name: 'Maître forgeron', st: 'dmg', v: 5 },
+  { lv: 15, name: 'Forgeron légendaire', st: 'critDmg', v: 25 },
+];
+export function forgeBest(gear) {
+  let m = 0;
+  for (const k in (gear && gear.ref) || {}) for (const s in gear.ref[k]) m = Math.max(m, gear.ref[k][s] || 0);
+  return m;
+}
+export const forgeTitles = gear => FORGE_TITLES.filter(t => forgeBest(gear) >= t.lv);
+export const forgeTitleText = t => STAT_TEXT[t.st](t.v).replace(' (compagnie)', '') + (GLOBAL_STATS.includes(t.st) ? '' : ' pour toute la compagnie');
+
 export function gearBonus(gear, level) {
-  const out = { dmg: {}, rate: {}, crit: {}, critDmg: {}, range: {}, boss: {}, gold: 0, drop: 0, time: 0, glove: 0, goldWisp: 0, focus: 0, tear: 0, event: 0, coinLife: 0, aoe: 0, stun: 0, myths: {} };
+  const out = { dmg: {}, rate: {}, crit: {}, critDmg: {}, range: {}, boss: {}, gold: 0, drop: 0, time: 0, glove: 0, goldWisp: 0, focus: 0, tear: 0, event: 0, coinLife: 0, aoe: 0, stun: 0, myths: {}, looks: {} };
   if (!gear || !(level.armory > 0)) return out;
   const add = (st, v, k) => { if (GLOBAL_STATS.includes(st)) out[st] += v; else out[st][k] = (out[st][k] || 0) + v; };
   // ensembles
@@ -250,12 +273,16 @@ export function gearBonus(gear, level) {
   // album : +2 % de dégâts pour tous, tous les 10 objets découverts
   const ab = albumBonus(Object.keys(gear.found || {}).length);
   if (ab) for (const k of HERO_ORDER) add('dmg', ab, k);
+  for (const t of forgeTitles(gear)) {
+    if (GLOBAL_STATS.includes(t.st)) add(t.st, t.v); else for (const k of HERO_ORDER) add(t.st, t.v, k);
+  }
   for (const k of HERO_ORDER) {
     for (const s of SLOTS) {
       if (!(level[s.node] > 0)) continue;
       const it = gear.eq[k] && gear.eq[k][s.id];
       if (!it) continue;
       if (it.myth) out.myths[it.myth] = true;
+      if (s.id === 'weapon') out.looks[k] = weaponLook(it);
       for (const [st, v] of itemEffects(it, (gear.ref[k] || {})[s.id] || 0)) add(st, v, k);
     }
   }

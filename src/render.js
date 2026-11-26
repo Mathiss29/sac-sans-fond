@@ -324,6 +324,19 @@ export function render(g, world, dpr) {
     g.strokeStyle = 'rgba(255,230,140,.25)'; g.setLineDash([2, 8]); g.lineWidth = 2; g.lineDashOffset = -t * 10;
     g.beginPath(); g.arc(u.x, u.y + 8, world.stats.bardAura, 0, 7); g.stroke(); g.setLineDash([]);
   }
+  // lueur de l'arme équipée (épique et plus) sous les héros
+  const looks = world.stats.looks || {};
+  for (const u of world.heroes) {
+    const lk = looks[u.type]; if (!lk || !lk.glow || u.drop > 0) continue;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 4 + u.x * 0.05);
+    const gr = g.createRadialGradient(u.x, u.y + 9, 2, u.x, u.y + 9, 24);
+    gr.addColorStop(0, `rgba(${lk.col},${0.28 + 0.18 * pulse})`); gr.addColorStop(1, `rgba(${lk.col},0)`);
+    g.fillStyle = gr; g.beginPath(); g.ellipse(u.x, u.y + 9, 24, 9, 0, 0, 7); g.fill();
+    if (lk.myth) for (let i = 0; i < 2; i++) {
+      const an = t * 3 + i * Math.PI, sx = u.x + Math.cos(an) * 16, sy = u.y - 6 + Math.sin(an) * 5;
+      g.fillStyle = `rgba(${lk.col},.9)`; g.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 3, 3);
+    }
+  }
   const heroes = [...world.heroes].sort((a, b) => a.y - b.y);
   for (const u of heroes) {
     const pose = heroPose(world, u, t);
@@ -343,10 +356,12 @@ export function render(g, world, dpr) {
   // traînées lumineuses derrière les projectiles (flèches blanches, givre bleu, notes dorées)
   g.lineCap = 'round';
   for (const a of world.arrows) {
-    const len = a.kind === 'arrow' ? 46 : 26, col = a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
+    const lk = looks[a.type];
+    const len = (a.kind === 'arrow' ? 46 : 26) * (lk ? 1 + 0.15 * lk.r : 1);
+    const col = lk ? lk.col : a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
     const tr = g.createLinearGradient(a.x, a.y, a.x - a.dx * len, a.y - a.dy * len);
-    tr.addColorStop(0, `rgba(${col},.75)`); tr.addColorStop(1, `rgba(${col},0)`);
-    g.strokeStyle = tr; g.lineWidth = a.kind === 'arrow' ? 2.5 : 4;
+    tr.addColorStop(0, `rgba(${col},${lk ? 0.9 : 0.75})`); tr.addColorStop(1, `rgba(${col},0)`);
+    g.strokeStyle = tr; g.lineWidth = (a.kind === 'arrow' ? 2.5 : 4) + (lk ? 0.5 * lk.r : 0);
     g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * len, a.y - a.dy * len); g.stroke();
   }
   g.lineCap = 'butt';
@@ -360,7 +375,8 @@ export function render(g, world, dpr) {
     } else {
       g.strokeStyle = '#5a3a1a'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * 12, a.y - a.dy * 12); g.stroke();
-      g.fillStyle = '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, 1.6, 0, 7); g.fill();
+      const lk = looks[a.type];
+      g.fillStyle = lk ? `rgb(${lk.col})` : '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, lk ? 2.2 : 1.6, 0, 7); g.fill();
     }
   }
 

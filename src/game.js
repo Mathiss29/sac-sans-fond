@@ -759,7 +759,7 @@ function updateHeroes(world, dt) {
           for (const e of world.enemies) if (!e.dead && d2(e, u) < 100 * 100) damage(world, e, dmg * 1.5, 0, u, u.type);
           world.fx.push({ kind: 'ring', x: u.x, y: u.y + 8, r0: 10, r1: 100, t: 0.4, life: 0.4, color: '#ffcf4a' }); shake(world, 3);
         }
-        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: '#f0f4fa', face: u.face });
+        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: s.looks && s.looks[u.type] ? `rgb(${s.looks[u.type].col})` : '#f0f4fa', face: u.face });
       } else {
         world.arrows.push({ kind: def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target: t, damage: dmg, type: u.type, dx: 0, dy: 0, speed: def.speed,
           aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' ? s.slowTime || HEROES.mage.slowTime : 0 });

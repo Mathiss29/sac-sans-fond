@@ -687,3 +687,18 @@ button[disabled] { cursor: var(--cur) !important; }
 .aCell.miss { border-color: #2f362a; }
 .aCell.miss canvas { filter: brightness(0) opacity(.35); }
 .cItem .lk { position: absolute; left: 1px; top: 0; font-size: 10px; z-index: 3; filter: drop-shadow(0 1px 0 #000); }
+.cFilters { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
+.cChip { font: inherit; font-size: 10px; padding: 3px 7px; background: #1d241c; color: #b9b39a; border: 1px solid #4a4a3a; cursor: pointer; }
+.cChip.on { color: #f2d27a; border-color: #f2d27a; }
+.cChip.sort { margin-left: auto; }
+.cGrid .cHint.wide { grid-column: 1 / -1; }
+.cTitleBox { margin: 4px 0 8px; padding: 6px 8px; border: 1px solid #5a4a2a; background: #241f15; text-align: center; font-size: 11px; }
+.cTitleBox .tt { color: #f2d27a; }
+.cTitleBox .tb { color: #8fd07a; margin-top: 2px; }
+.cTitleBox .tn { color: #a8a28c; margin-top: 3px; font-size: 10px; }
+.cTitleBanner { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); z-index: 60; padding: 14px 28px; text-align: center;
+  background: #1a1610; border: 2px solid #f2d27a; box-shadow: 0 0 30px #f2d27a88; animation: cTB 3.2s ease forwards; pointer-events: none; }
+.cTitleBanner .k { color: #a8a28c; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+.cTitleBanner .n { color: #f2d27a; font-size: 22px; margin: 4px 0; }
+.cTitleBanner .e { color: #8fd07a; font-size: 12px; }
+@keyframes cTB { 0% { opacity: 0; transform: translate(-50%, -12px) scale(.9); } 10%, 80% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; } }
