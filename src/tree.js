@@ -1,0 +1,293 @@
+// Le grand arbre de l'Atelier : une croix qui part du sac.
+// Ligne horizontale = lignées de héros ; branches verticales = thèmes (sac, récolte, combat, arcanes…).
+// Tout l'arbre est là dès le début, caché par le brouillard : un nœud se révèle quand son parent est acheté.
+// Les nœuds « soon » sont visibles mais pas encore achetables (fonctionnalité à venir).
+import { fmtNum } from './data.js';
+
+export const BRANCHES = {
+  depart: ['Départ', '#ffe7a0'], archer: ['Archers', '#ef6f52'], mage: ['Mages de givre', '#7fd0ff'], knight: ['Chevaliers', '#c3cede'],
+  bard: ['Bardes', '#f08cc0'], combat: ['Combat', '#ff9a3d'], army: ['Armée', '#5fd6c0'], sac: ['Sac', '#ffcf4a'],
+  recolte: ['Récolte', '#86d873'], equip: ['Équipement', '#d9a066'], arcanes: ['Arcanes', '#b48cff'], enfers: ['Enfers', '#ff5e4d'], curio: ['Curiosités', '#e7d3a1'],
+};
+export const TREE_LABELS = [['sac', 0, -7.75], ['recolte', -2, -6.75], ['mage', 6, -7.8], ['combat', 2, 4.75], ['archer', 4, 7.8], ['army', 7, 4.75],
+  ['knight', -2, 7.8], ['bard', -6, 7.8], ['arcanes', 1, 1], ['enfers', 0.5, 6.75], ['curio', -7.6, -5.75], ['equip', -4, 5.8],
+  ['recolte', -4.6, -6.75, 'Événements'], ['recolte', -5.5, -1.45, 'Assistants']];
+
+// type : up = amélioration à niveaux, unlock = déblocage, major = nœud majeur, ult = ultime à épreuve, lock = cadenas, secret, cls = classe
+// [id, parent, x, y, nom, branche, icône, type, niveaux, description, en jeu (1/0), condition, badge]
+const RAW = [
+ ['root',null,0,0,'Le Sac du mage','depart','bag0','major',1,'Le vieux mage te confie son sac. Tout part d\'ici.',1],
+
+ // Ligne des héros, à droite : archers puis mages
+ ['arrowDmg','root',1,0,'Flèches aiguisées','archer','arrow','up',10,'+5 % de dégâts des archers par niveau',1],
+ ['archers2','arrowDmg',2,0,'Archers ×2','archer','archer','major',1,'Deux archers sont largués à chaque expédition',1,'','×2'],
+ ['arrowRate','archers2',3,0,'Carquois rapide','archer','quiver','up',6,'+2 % de cadence des archers par niveau',1],
+ ['archers3','arrowRate',4,0,'Archers ×3','archer','archer','major',1,'Trois archers par expédition',1,'','×3'],
+ ['mage','archers3',6,0,'Mage de givre','mage','mage','lock',1,'Un mage rejoint la compagnie : éclats de givre en zone qui ralentissent',1,'Remplis le sac jusqu\'au palier Soie'],
+ ['mage2','mage',7,0,'Mages ×2','mage','mage','major',1,'Deux mages par expédition',1,'','×2'],
+ ['mage3','mage2',8,0,'Mages ×3','mage','mage','major',1,'Trois mages par expédition',1,'','×3'],
+ ['heroR','mage3',9,0,'Héros à venir','depart','helmet','lock',1,'Un nouveau héros (plus tard)',0,'Plus tard dans le développement'],
+ // Ligne des héros, à gauche : chevaliers puis bardes
+ ['knight','root',-1,0,'Chevalier','knight','knight','lock',1,'Un chevalier fonce sur les élémentaires et frappe autour de lui',1,'Bats le Brasier primordial une fois'],
+ ['knight2','knight',-2,0,'Chevaliers ×2','knight','knight','major',1,'Deux chevaliers par expédition',1,'','×2'],
+ ['knightDmg','knight2',-3,0,'Lame trempée','knight','sword','up',8,'+5 % de dégâts des chevaliers par niveau',1],
+ ['knight3','knightDmg',-4,0,'Chevaliers ×3','knight','knight','major',1,'Trois chevaliers par expédition',1,'','×3'],
+ ['bard','knight3',-6,0,'Barde','bard','bard','lock',1,'Un barde fait tirer et frapper plus vite les héros proches',1,'Remplis le sac jusqu\'au palier Céleste'],
+ ['bard2','bard',-7,0,'Bardes ×2','bard','bard','major',1,'Deux bardes par expédition',1,'','×2'],
+ ['heroL','bard3',-9,0,'Héros à venir','depart','helmet','lock',1,'Un nouveau héros (plus tard)',0,'Plus tard dans le développement'],
+
+ // Sac : vers le haut depuis le centre
+ ['tierCuir','root',0,-1,'Cuir tanné','sac','bag1','major',1,'Deuxième palier du sac, ×1,6',1],
+ ['capacity','tierCuir',0,-2,'Coutures solides','sac','needlebag','up',12,'+60 % de place par niveau (4 niveaux par palier)',1],
+ ['tierSoie','capacity',0,-3,'Soie enchantée','sac','bag2','major',1,'Troisième palier, ×2,5',1],
+ ['mouth','tierSoie',0,-4,'Gueule vorace','sac','openbag','up',6,'+50 % de portée d\'aspiration par niveau',1],
+ ['tierCeleste','mouth',0,-5,'Étoffe céleste','sac','bag3','major',1,'Quatrième palier, ×4',1],
+ ['tierDemon','tierCeleste',0,-6,'Cuir de démon','enfers','runebag','lock',1,'Cinquième palier, tanné aux Enfers, ×6',0,'Bats le Seigneur des Enfers'],
+ ['tierVoid','tierDemon',0,-7,'Étoffe du néant','sac','runebag','lock',1,'Dernier palier : le sac n\'a presque plus de fond, ×10',0,'Plus tard dans le développement'],
+ ['seams2','capacity',1,-2,'Coutures doubles','sac','needlebag','up',8,'+25 % de place à tous les paliers par niveau',0],
+ ['falseBottom','seams2',2,-2,'Double fond','sac','needlebag','up',5,'+4 % du surplus sauvé quand le sac déborde, par niveau',0],
+ ['tripleBottom','falseBottom',3,-2,'Triple fond','sac','runebag','unlock',1,'Le surplus qui déborde retombe en pluie à la Déchirure',0],
+ ['goldTear','mouth',1,-4,'Déchirure dorée','sac','openbag','up',5,'+10 % de butin à la Déchirure par niveau',0],
+ ['wave','goldTear',2,-4,'Vague de plus','sac','openbag','up',2,'+1 vague de pièces à la Déchirure par niveau',0],
+ ['tearRain','wave',3,-4,'Pièces qui traînent','sac','coinclock','up',3,'Les pièces de la Déchirure restent +2 s au sol par niveau',0],
+ ['deepMouth','mouth',-1,-4,'Aspiration profonde','sac','openbag','unlock',1,'Le sac aspire aussi les gros butins (lingots, couronnes)',0],
+ ['heavyCoins','tierCeleste',1,-5,'Pièces lourdes','sac','coinclock','up',6,'+5 % de valeur des pièces par niveau',0],
+ ['gems','heavyCoins',2,-5,'Gemmes polies','sac','crystal','up',5,'+15 % de valeur des gemmes par niveau',0],
+ ['crown','gems',3,-5,'Couronne du roi','sac','e_mimicOpen','up',3,'+1 % de chance de couronne (gros butin) par niveau',0],
+
+ // Récolte : vers le haut depuis Chevaliers ×2
+ ['glove','knight2',-2,-1,'Gant élargi','recolte','glove','up',6,'+18 % de rayon du gant par niveau',1],
+ ['coinLife','glove',-2,-2,'Pièces patientes','recolte','coinclock','up',5,'+2 s au sol par niveau',1],
+ ['attraction','coinLife',-2,-3,'Focus tenace','recolte','eye','up',5,'+0,75 s de Focus par niveau',1],
+ ['goldWisp','attraction',-2,-4,'Flair doré','recolte','firewisp','up',5,'Feux follets dorés ×1,6 par niveau',1],
+ ['hunter','goldWisp',-2,-5,'Œil du chasseur','recolte','eye','up',4,'+15 % d\'événements (filon, gobelin, mimique) par niveau',0],
+ ['goldHand','hunter',-2,-6,'Main d\'or','recolte','glove','major',1,'Le gant ramasse les pièces deux fois plus vite',0],
+ ['magnet','coinLife',-3,-2,'Aimant','recolte','glove','up',4,'Les pièces glissent lentement vers le gant',0],
+ ['quickHand','magnet',-4,-2,'Ramassage éclair','recolte','glove','up',4,'Le gant attire +15 % plus vite par niveau',0],
+ ['goldRain','attraction',-3,-3,'Pluie d\'or','recolte','coinclock','up',4,'Les pluies de pièces durent +20 % par niveau',0],
+ ['downpour','goldRain',-4,-3,'Averse','recolte','coinclock','up',3,'+1 pluie de pièces possible par expédition et par niveau',0],
+ ['vein','evVein',-3,-6,'Filon généreux','recolte','e_vein','up',4,'Le filon lâche +20 % de pièces par coup par niveau',0],
+ ['goblin','evGoblin',-4,-6,'Gobelin maladroit','recolte','e_goblin','up',4,'Le gobelin court 10 % moins vite par niveau',0],
+ ['mimic','evMimic',-5,-6,'Mimique apprivoisée','recolte','e_mimic','unlock',1,'La mimique mord moins souvent et garde plus d\'or',0],
+ ['fairyFingers','glove',-1,-1,'Doigts de fée','recolte','glove','secret',1,'Les pièces ramassées pendant la Déchirure valent ×2',0,'Secret : survole le sac à l\'instant exact où il se déchire'],
+
+ // Combat : vers le bas depuis Archers ×2
+ ['training','archers2',2,1,'Entraînement','combat','sword','up',8,'+4 % de dégâts de tous les héros par niveau',0],
+ ['crit','training',2,2,'Coup critique','combat','skull','up',5,'+3 % de chance de coup critique par niveau',0],
+ ['critDmg','crit',2,3,'Critiques dévastateurs','combat','skull','up',5,'+20 % de dégâts critiques par niveau',0],
+ ['veteran','critDmg',2,4,'Vétérans','combat','helmet','up',5,'+10 % de dégâts aux élites et aux boss par niveau',0],
+ ['longbow','crit',3,2,'Arc long','combat','arrow','up',4,'+6 % de portée de tous les tireurs par niveau',0],
+ ['opening','critDmg',3,3,'Volée d\'ouverture','combat','horn','unlock',1,'Cadence doublée pendant les 3 premières secondes',0],
+
+ // Archers : vers le bas depuis Archers ×3
+ ['steel','archers3',4,1,'Pointes d\'acier','archer','arrow','up',8,'+3 dégâts plats par flèche et par niveau',0],
+ ['pierce','steel',4,2,'Flèche perçante','archer','arrow','up',3,'Chaque flèche traverse 1 ennemi de plus par niveau',0],
+ ['double','pierce',4,3,'Tir double','archer','quiver','up',5,'+6 % de chance de tirer 2 flèches par niveau',0],
+ ['rainArrows','double',4,4,'Pluie de flèches','archer','quiver','ult',1,'Ultime : une volée tombe sur le groupe le plus dense',0,'Épreuve (gratuite à accepter) : tue 300 élémentaires en une expédition (0/300)'],
+ ['master','rainArrows',4,5,'Maître archer','archer','archer','major',1,'Les archers visent toujours l\'ennemi le plus riche',0],
+ ['hawk','pierce',5,2,'Œil de faucon','archer','eye','up',5,'+8 % de portée des archers par niveau',0],
+ ['deluge','rainArrows',5,4,'Déluge','archer','arrow','up',4,'+4 flèches dans chaque Pluie de flèches par niveau',0],
+
+ // Mages : vers le haut depuis Mage de givre
+ ['mageDmg','mage',6,-1,'Givre mordant','mage','crystal','up',8,'+5 % de dégâts et +2 % de zone par niveau',1],
+ ['shards','mageDmg',6,-2,'Éclats multiples','mage','crystal','up',4,'+1 éclat secondaire par niveau quand un givre explose',0],
+ ['deepFrost','shards',6,-3,'Gel profond','mage','crystal','up',5,'Le ralentissement dure +0,3 s par niveau',0],
+ ['iceRay','deepFrost',6,-4,'Rayon de glace','mage','crystal','ult',1,'Ultime : un rayon gèle toute une ligne d\'ennemis',0,'Épreuve (gratuite à accepter) : ralentis 150 ennemis en une expédition (0/150)'],
+ ['archmage','iceRay',6,-5,'Archimage','mage','mage','major',1,'Un mage sur trois lance un givre double',0],
+ ['winter','iceRay',7,-4,'Hiver éternel','mage','crystal','up',3,'Les ennemis gelés par le rayon perdent +10 % de PV par niveau',0],
+ ['frostNova','shards',7,-2,'Nova de givre','mage','crystal','unlock',1,'Le mage gèle tout autour de lui quand un ennemi le touche',0],
+
+ // Armée : vers le bas depuis Mages ×2
+ ['reinforce','mage2',7,1,'Renforts','army','helmet','up',3,'+1 héros au choix largué à mi-expédition par niveau',0],
+ ['drop','reinforce',7,2,'Largage précis','army','horn','unlock',1,'Tu choisis où tombent les héros au début de l\'expédition',0],
+ ['ost','drop',7,3,'Grand Ost','army','horn','major',1,'+1 héros de chaque classe à chaque expédition',0],
+
+ // Chevaliers : vers le bas depuis Chevaliers ×2
+ ['whirl','knight2',-2,1,'Grand moulinet','knight','sword','up',5,'+8 % de zone de frappe par niveau',0],
+ ['shield','whirl',-2,2,'Bouclier d\'acier','knight','knight','up',3,'−25 % de durée d\'étourdissement par niveau',0],
+ ['heavy','shield',-2,3,'Armure lourde','knight','helmet','up',3,'Les chevaliers repoussent plus loin les ennemis',0],
+ ['charge','heavy',-2,4,'Charge','knight','knight','ult',1,'Ultime : le chevalier fonce et renverse tout sur sa ligne',0,'Épreuve (gratuite à accepter) : repousse 100 ennemis en une expédition (0/100)'],
+ ['furious','charge',-3,4,'Charge furieuse','knight','sword','up',4,'+20 % de longueur de charge par niveau',0],
+ ['taunt','shield',-3,2,'Provocation','knight','knight','unlock',1,'Les élémentaires proches s\'en prennent au chevalier plutôt qu\'au sac',0],
+
+ // Bardes : vers le bas depuis Barde
+ ['bardAura','bard',-6,1,'Ballade entraînante','bard','lute','up',5,'+2 % de cadence donnée et +4 % de portée par niveau',1],
+ ['choir','bardAura',-6,2,'Chœur','bard','lute','up',4,'+8 % de portée de l\'aura par niveau',0],
+ ['lament','choir',-6,3,'Complainte','bard','lute','up',4,'Les ennemis dans l\'aura avancent 5 % moins vite par niveau',0],
+ ['hymn','lament',-6,4,'Hymne héroïque','bard','lute','ult',1,'Ultime : tous les héros tirent deux fois plus vite pendant 3 s',0,'Épreuve (gratuite à accepter) : garde 3 héros dans l\'aura pendant 20 s (0/20)'],
+ ['recall','hymn',-7,4,'Rappel','bard','lute','up',3,'L\'Hymne dure +1 s par niveau',0],
+ ['encore','choir',-7,2,'Bis !','bard','lute','up',3,'−10 % de recharge des ultimes par niveau',0],
+
+ // Arcanes : vers le bas depuis le centre
+ ['duration','root',0,1,'Longue expédition','arcanes','hourglass','up',6,'+5 s par expédition par niveau',1],
+ ['horde','duration',0,2,'Appel des élémentaires','arcanes','horn','up',5,'+20 % d\'apparitions par niveau',1],
+ ['bossDmg','horde',0,3,'Fléau des primordiaux','arcanes','skull','up',6,'+10 % de dégâts aux boss par niveau',1],
+ ['portal','bossDmg',0,4,'Portail des Enfers','enfers','d_warlock','lock',1,'Ouvre la deuxième région : les Enfers et leurs démons',0,'Bats le Brasier primordial 3 fois'],
+ ['demonBane','portal',0,5,'Fléau des démons','enfers','d_imp','up',6,'+10 % de dégâts aux démons par niveau',0],
+ ['demonLord','demonBane',0,6,'Seigneur des Enfers','enfers','d_blood','lock',1,'Ouvre l\'antre du boss des Enfers',0,'Atteins le palier Céleste aux Enfers'],
+ ['sandglass','duration',-1,1,'Sablier','arcanes','hourglass','up',3,'+5 s par expédition par niveau',0],
+ ['frozenTime','sandglass',-1,2,'Temps suspendu','arcanes','hourglass','unlock',1,'Le chrono s\'arrête pendant la Déchirure',0],
+ ['goldHorde','horde',1,2,'Horde dorée','arcanes','m_gold','up',4,'+1 feu follet doré dans chaque paquet par niveau',0],
+ ['elite','bossDmg',1,3,'Élites','arcanes','m_golem','unlock',1,'Des élites apparaissent : plus de PV, butin ×5',0],
+ ['lantern','bossDmg',-1,3,'Lanterne','arcanes','firewisp','up',3,'La nuit de minuit est plus claire autour des héros',0],
+ ['furBoots','lantern',-1,4,'Bottes fourrées','arcanes','helmet','unlock',1,'Les héros ne glissent plus dans la neige',0],
+ ['embers','portal',1,4,'Braises infernales','enfers','d_skull','up',4,'+10 % de butin aux Enfers par niveau',0],
+ ['pact','demonBane',1,5,'Pacte infernal','enfers','d_hound','unlock',1,'Un chien des Enfers se bat à tes côtés',0],
+
+ // Curiosités : vers le haut depuis Bardes ×2 (étape 5, encore verrouillée)
+ ['cabinet','bard2',-7,-1,'Cabinet de curiosités','curio','e_mimic','unlock',1,'Débloque les cartes : elles tombent des ennemis et s\'équipent avant l\'expédition',0],
+ ['slot','cabinet',-7,-2,'Emplacement de carte','curio','runebag','up',3,'+1 carte équipée par niveau',0],
+ ['shop','cabinet',-8,-1,'Boutique','curio','e_goblin','major',1,'Avant chaque expédition, achète une potion ou un appât',0],
+
+ // Classes : les 3 exemplaires fusionnent en un héros plus fort (rang 2), puis rang 3 au bout de la lignée
+ ['bard3','bard2',-8,0,'Bardes ×3','bard','bard','major',1,'Trois bardes par expédition',0,'','×3'],
+
+ // Équipement : débloqué par l'arbre, sous la lignée des chevaliers
+ ['armory','knight3',-4,1,'Armurerie','equip','sword','major',1,'Débloque l\'équipement : chaque lignée de héros reçoit un emplacement d\'arme et les ennemis lâchent des besaces',0],
+ ['refine','armory',-4,2,'Forge : affinage','equip','sword','unlock',1,'Affine l\'emplacement d\'arme d\'une lignée (le bonus reste si tu changes d\'arme)',0],
+ ['charm1','refine',-4,3,'Emplacement de charme','equip','crystal','unlock',1,'Chaque lignée peut porter un charme',0],
+ ['charm2','charm1',-4,4,'Deuxième charme','equip','crystal','unlock',1,'Un deuxième emplacement de charme par lignée',0],
+ ['looks','charm2',-5,4,'Garde-robe','equip','helmet','unlock',1,'Change l\'apparence de tes héros',0],
+ ['recycle','refine',-5,2,'Recyclage','equip','needlebag','unlock',1,'Recycle les objets en trop contre du minerai pour l\'affinage',0],
+ ['blessed','recycle',-5,3,'Affinage béni','equip','crystal','up',5,'+4 % de chance de réussite de l\'affinage par niveau',0],
+
+ // Événements : chaque type entre dans le tirage par un nœud
+ ['evVein','hunter',-3,-5,'Événement : filon d\'or','recolte','e_vein','unlock',1,'Ajoute le filon d\'or aux événements possibles',1],
+ ['evGoblin','evVein',-4,-5,'Événement : gobelin voleur','recolte','e_goblin','unlock',1,'Ajoute le gobelin voleur aux événements possibles',1],
+ ['evMimic','evGoblin',-5,-5,'Événement : mimique','recolte','e_mimic','unlock',1,'Ajoute la mimique aux événements possibles',1],
+ ['evTwo','evMimic',-6,-5,'Deux événements par expédition','recolte','horn','major',1,'Deux événements tirés au sort à chaque expédition au lieu d\'un',0],
+ ['evBuried','evTwo',-6,-6,'Événement : trésor enterré','recolte','openbag','unlock',1,'Garde le gant 1 s sur une bosse du sol pour déterrer un trésor',0],
+
+ // Assistants qui ramassent à ta place
+ ['sprite','quickHand',-5,-2,'Lutin ramasseur','recolte','firewisp','major',1,'Un lutin ramasse l\'or tombé au sol, même hors de l\'écran, et le rapporte au sac',0],
+ ['spriteFast','sprite',-6,-2,'Lutin pressé','recolte','firewisp','up',5,'+15 % de vitesse du lutin par niveau',0],
+ ['magpie','sprite',-5,-3,'Pie voleuse','recolte','eye','major',1,'Une pie vole des pièces aux élémentaires qu\'elle survole',0],
+ ['magpieBold','magpie',-6,-3,'Pie hardie','recolte','eye','up',4,'La pie vole +1 pièce par passage et par niveau',0],
+
+ // Curiosités : cartes, boutique, quêtes, donjons
+ ['slot2','slot',-7,-3,'Grand album','curio','runebag','unlock',1,'Les doublons de cartes les font monter d\'une étoile',0],
+ ['quests','slot2',-7,-4,'Quêtes','curio','coinclock','major',1,'Une quête à la fois, à remplir pendant les expéditions, contre équipement, cartes ou clés',0],
+ ['dungeon','quests',-7,-5,'Donjons','curio','d_skull','unlock',1,'Une clé de donjon = une tentative de 2 min contre un mini-boss au gros butin',0],
+ ['quest2','quests',-8,-4,'Quête de plus','curio','coinclock','up',2,'+1 quête active par niveau',0],
+ ['shelf','shop',-9,-1,'Étagère de plus','curio','openbag','up',3,'+1 article dans la boutique par niveau',0],
+ ['relics','shop',-8,-2,'Reliques','curio','crystal','unlock',1,'La boutique propose des reliques à tirer au sort',0],
+
+ // Petits nœuds en plus
+ ['shockwave','ost',7,4,'Onde de choc','army','horn','unlock',1,'Les héros atterrissent avec une onde de choc qui repousse les ennemis',0],
+ ['frostLand','archmage',7,-5,'Atterrissage glacé','mage','crystal','unlock',1,'Les mages gèlent le sol là où ils atterrissent',0],
+ ['bounce','rainArrows',3,4,'Flèche rebondissante','archer','arrow','up',3,'Les flèches rebondissent sur 1 ennemi de plus par niveau',0],
+ ['cheapTiers','capacity',-1,-2,'Coutures bon marché','sac','needlebag','up',4,'Les paliers du sac coûtent 8 % de moins par niveau',0],
+ ['suctionWave','tierSoie',-1,-3,'Vague aspirante','sac','openbag','unlock',1,'À chaque palier rempli, le sac aspire tout le butin à l\'écran',0],
+ ['spyglass','furBoots',-1,5,'Longue-vue','arcanes','eye','unlock',1,'La mini-carte montre où sont les ennemis les plus rentables',0],
+ // Évolutions : 3 exemplaires fusionnent, puis choix de voie au rang 2 et au rang 3 (7 classes par lignée)
+ ['archerFork','master',4,6,'Changement de classe','archer','archer','lock',1,'Les 3 exemplaires fusionnent en un seul héros plus fort, qui garde toutes les améliorations. Choisis ta voie !',0,'Bats le Brasier primordial 2 fois'],
+ ['arA','archerFork',3,6,'Tireur d\'élite','archer','archer','cls',1,'Rang 2 : tire en éventail, 3 flèches à la fois',0,'Choix : Tireur d\'élite OU Rôdeur des bois','★★'],
+ ['arB','archerFork',5,6,'Rôdeur des bois','archer','archer','cls',1,'Rang 2 : pose des pièges qui immobilisent',0,'Choix : Rôdeur des bois OU Tireur d\'élite','★★'],
+ ['arA1','arA',3,7,'Œil-de-faucon','archer','archer','cls',1,'Rang 3 : coups critiques énormes sur les ennemis éloignés',0,'Choix : Œil-de-faucon OU Arbalétrier lourd','★★★'],
+ ['arA2','arA',2,6,'Arbalétrier lourd','archer','archer','cls',1,'Rang 3 : carreaux qui transpercent toute une ligne',0,'Choix : Arbalétrier lourd OU Œil-de-faucon','★★★'],
+ ['arB1','arB',5,7,'Maître des vents','archer','archer','cls',1,'Rang 3 : les flèches rebondissent d\'ennemi en ennemi',0,'Choix : Maître des vents OU Chasseur de primes','★★★'],
+ ['arB2','arB',6,6,'Chasseur de primes','archer','archer','cls',1,'Rang 3 : vise les ennemis riches, +50 % d\'or sur eux',0,'Choix : Chasseur de primes OU Maître des vents','★★★'],
+ ['mageFork','archmage',6,-6,'Changement de classe','mage','mage','lock',1,'Les 3 exemplaires fusionnent en un seul héros plus fort, qui garde toutes les améliorations. Choisis ta voie !',0,'Bats le Brasier aux Enfers'],
+ ['maA','mageFork',5,-6,'Mage du blizzard','mage','mage','cls',1,'Rang 2 : chaque givre déclenche une petite tempête',0,'Choix : Mage du blizzard OU Pyromancien','★★'],
+ ['maB','mageFork',7,-6,'Pyromancien','mage','mage','cls',1,'Rang 2 : colonne de feu qui brûle tout sur son passage',0,'Choix : Pyromancien OU Mage du blizzard','★★'],
+ ['maA1','maA',5,-7,'Seigneur de l\'hiver','mage','mage','cls',1,'Rang 3 : le sol gèle, les ennemis glissent et ralentissent',0,'Choix : Seigneur de l\'hiver OU Tisseur de givre','★★★'],
+ ['maA2','maA',4,-6,'Tisseur de givre','mage','mage','cls',1,'Rang 3 : enferme les élites dans des prisons de glace',0,'Choix : Tisseur de givre OU Seigneur de l\'hiver','★★★'],
+ ['maB1','maB',7,-7,'Cœur de braise','mage','mage','cls',1,'Rang 3 : les ennemis brûlés explosent en chaîne',0,'Choix : Cœur de braise OU Phénix','★★★'],
+ ['maB2','maB',8,-6,'Phénix','mage','mage','cls',1,'Rang 3 : se change en oiseau de feu qui traverse l\'écran',0,'Choix : Phénix OU Cœur de braise','★★★'],
+ ['knightFork','charge',-2,5,'Changement de classe','knight','knight','lock',1,'Les 3 exemplaires fusionnent en un seul héros plus fort, qui garde toutes les améliorations. Choisis ta voie !',0,'Remplis le sac jusqu\'au palier Soie'],
+ ['knA','knightFork',-3,5,'Paladin','knight','knight','cls',1,'Rang 2 : soigne et protège les héros proches',0,'Choix : Paladin OU Berserker','★★'],
+ ['knB','knightFork',-2,6,'Berserker','knight','knight','cls',1,'Rang 2 : plus il frappe, plus il frappe vite',0,'Choix : Berserker OU Paladin','★★'],
+ ['knA1','knA',-3,6,'Champion du sac','knight','knight','cls',1,'Rang 3 : repousse les élémentaires qui approchent du sac',0,'Choix : Champion du sac OU Templier','★★★'],
+ ['knA2','knA',-4,5,'Templier','knight','knight','cls',1,'Rang 3 : une aura de lumière brûle les ennemis autour de lui',0,'Choix : Templier OU Champion du sac','★★★'],
+ ['knB1','knB',-2,7,'Seigneur de guerre','knight','knight','cls',1,'Rang 3 : chaque coup lance une onde de choc',0,'Choix : Seigneur de guerre OU Briseur','★★★'],
+ ['knB2','knB',-1,6,'Briseur','knight','knight','cls',1,'Rang 3 : sonne les boss, qui prennent double dégâts',0,'Choix : Briseur OU Seigneur de guerre','★★★'],
+ ['bardFork','hymn',-6,5,'Changement de classe','bard','bard','lock',1,'Les 3 exemplaires fusionnent en un seul héros plus fort, qui garde toutes les améliorations. Choisis ta voie !',0,'Remplis le sac jusqu\'au palier Céleste'],
+ ['baA','bardFork',-6,6,'Troubadour','bard','bard','cls',1,'Rang 2 : son aura couvre tout l\'écran',0,'Choix : Troubadour OU Tambour de guerre','★★'],
+ ['baB','bardFork',-7,5,'Tambour de guerre','bard','bard','cls',1,'Rang 2 : le rythme ralentit les ennemis',0,'Choix : Tambour de guerre OU Troubadour','★★'],
+ ['baA1','baA',-6,7,'Virtuose','bard','bard','cls',1,'Rang 3 : chaque Hymne fait pleuvoir des pièces',0,'Choix : Virtuose OU Chef d\'orchestre','★★★'],
+ ['baA2','baA',-5,6,'Chef d\'orchestre','bard','bard','cls',1,'Rang 3 : tous les héros tirent en même temps, en rafales',0,'Choix : Chef d\'orchestre OU Virtuose','★★★'],
+ ['baB1','baB',-7,6,'Héraut des tempêtes','bard','bard','cls',1,'Rang 3 : des éclairs tombent au rythme du tambour',0,'Choix : Héraut des tempêtes OU Sonneur de cor','★★★'],
+ ['baB2','baB',-8,5,'Sonneur de cor','bard','bard','cls',1,'Rang 3 : son cor appelle un héros en renfort',0,'Choix : Sonneur de cor OU Héraut des tempêtes','★★★'],
+];
+
+const pct = v => `${Math.round(v * 100)} %`;
+const s_ = (n, one, many) => `${n} ${n > 1 ? many : one}`;
+// Ce qui est déjà jouable : coût, croissance, texte de l'effet au niveau l, conditions.
+// need(ctx) : condition d'un cadenas ; ctx = { maxTier, bossWins }.
+const SPEC = {
+  root: [0, 1, () => 'Débloqué'],
+  arrowDmg: [20, 1.75, l => `Dégâts des archers ×${fmtNum(1 + 0.05 * l)}`],
+  archers2: [40, 1, () => '4 archers par expédition'],
+  arrowRate: [60, 1.9, l => `Cadence des archers +${Math.round((1 / Math.pow(0.98, l) - 1) * 100)} %`],
+  archers3: [600, 1, () => '6 archers par expédition'],
+  mage: [900, 1, () => '1 mage par expédition', { need: c => c.maxTier >= 2, cond: 'Remplis le sac jusqu\'au palier Soie pendant une expédition' }],
+  mage2: [2200, 1, () => '2 mages par expédition'],
+  mage3: [6000, 1, () => '3 mages par expédition'],
+  knight: [150, 1, () => '1 chevalier par expédition', { need: c => c.maxTier >= 1, cond: 'Remplis le sac jusqu\'au palier Cuir pendant une expédition' }],
+  knight2: [450, 1, () => '2 chevaliers par expédition'],
+  knightDmg: [220, 1.8, l => `Dégâts des chevaliers ×${fmtNum(1 + 0.05 * l)}`],
+  knight3: [3600, 1, () => '3 chevaliers par expédition'],
+  bard: [700, 1, () => '1 barde par expédition', { need: c => c.maxTier >= 3, cond: 'Remplis le sac jusqu\'au palier Céleste pendant une expédition' }],
+  bard2: [2500, 1, () => '2 bardes par expédition'],
+  bard3: [8000, 1, () => '3 bardes par expédition'],
+  tierCuir: [300, 1, () => 'Palier cuir ×1,6'],
+  capacity: [30, 1.8, l => `${fmtNum(Math.round(120 * Math.pow(1.6, l)))} pièces au premier palier`,
+    { cap: L => 4 * ((L('tierCuir') ? 1 : 0) + (L('tierSoie') ? 1 : 0) + (L('tierCeleste') ? 1 : 0)), capMsg: 'Débloque le palier suivant du sac pour coudre plus loin.' }],
+  tierSoie: [3000, 1, () => 'Palier soie ×2,5'],
+  mouth: [90, 1.9, l => `Aspiration ${Math.round(60 * (1 + 0.5 * l))} px`],
+  tierCeleste: [12000, 1, () => 'Palier céleste ×4'],
+  seams2: [400, 1.9, l => `Place dans le sac ×${fmtNum(Math.pow(1.25, l))}`],
+  goldTear: [500, 2, l => `Butin de la Déchirure +${10 * l} %`],
+  wave: [2500, 3, l => `${4 + l} vagues de pièces à la Déchirure`],
+  tearRain: [1500, 2.2, l => `Pièces de la Déchirure : +${2 * l} s au sol`],
+  heavyCoins: [8000, 1.9, l => `Valeur des pièces +${5 * l} %`],
+  cheapTiers: [250, 2, l => `Paliers du sac −${8 * l} %`],
+  glove: [25, 1.9, l => `Rayon du gant ${Math.round(54 * (1 + 0.18 * l))} px`],
+  coinLife: [60, 1.9, l => `${8 + 2 * l} s au sol`],
+  attraction: [70, 1.9, l => `${fmtNum(3 + 0.75 * l)} s de Focus`],
+  goldWisp: [250, 2, l => `Feux follets dorés ×${fmtNum(1 + 0.6 * l)}`],
+  hunter: [700, 2, l => `Butin des événements +${15 * l} %`],
+  goldRain: [600, 2, l => `Pluies de pièces +${20 * l} % plus longues`],
+  evVein: [1200, 1, () => 'Le filon d\'or peut apparaître'],
+  evGoblin: [2000, 1, () => 'Le gobelin voleur peut apparaître'],
+  evMimic: [3200, 1, () => 'La mimique peut apparaître'],
+  evTwo: [6000, 1, () => '2 événements par expédition'],
+  vein: [1500, 2, l => `Filon +${20 * l} % de pièces`],
+  goblin: [2500, 2, l => `Gobelin −${10 * l} % de vitesse`],
+  training: [150, 1.9, l => `Dégâts de tous les héros ×${fmtNum(1 + 0.04 * l)}`],
+  crit: [400, 2, l => `Critique : ${12 + 3 * l} % de chance`],
+  critDmg: [900, 2, l => `Critique : dégâts ×${fmtNum(2 + 0.2 * l)}`],
+  veteran: [2000, 2, l => `Dégâts aux boss +${10 * l} %`],
+  longbow: [700, 2, l => `Portée des tireurs +${6 * l} %`],
+  hawk: [900, 2, l => `Portée des archers +${8 * l} %`],
+  mageDmg: [120, 1.8, l => `Dégâts ×${fmtNum(1 + 0.05 * l)}, zone +${2 * l} %`],
+  deepFrost: [1500, 2, l => `Ralentissement ${fmtNum(1.6 + 0.3 * l)} s`],
+  whirl: [800, 2, l => `Zone de frappe +${8 * l} %`],
+  bardAura: [400, 1.9, l => `Cadence +${10 + 2 * l} %, portée +${4 * l} %`],
+  choir: [2500, 2, l => `Portée de l'aura +${8 * l} %`],
+  duration: [35, 2, l => `${30 + 5 * l} s par expédition`],
+  sandglass: [600, 2.5, l => `+${3 * l} s par expédition`],
+  horde: [180, 2, l => `Apparitions +${20 * l} %`],
+  bossDmg: [300, 2, l => `Dégâts aux boss ×${fmtNum(1 + 0.1 * l)}`],
+};
+// Descriptions réécrites pour coller à l'effet réel.
+const DESC = {
+  archers2: 'Deux fois plus d\'archers largués à chaque expédition.',
+  archers3: 'Trois fois plus d\'archers qu\'au départ.',
+  hunter: 'Les événements (pluie, filon, gobelin, mimique) rapportent davantage.',
+  sandglass: 'Chaque expédition dure un peu plus longtemps.',
+  heavyCoins: 'Tout le butin des élémentaires vaut un peu plus.',
+  steel: 'Les flèches font plus mal (à venir).',
+};
+
+let depth = {};
+export const NODES = RAW.map(([id, parent, x, y, name, branch, icon, type, max, desc, live, cond, badge]) => {
+  const sp = SPEC[id], o = (sp && sp[3]) || {};
+  return {
+    id, parent, x, y, name, branch, icon, type, max: Math.max(1, max), desc: DESC[id] || desc, badge: badge || '',
+    soon: !sp, cond: o.cond || (sp ? '' : cond || ''), need: o.need, cap: o.cap, capMsg: o.capMsg,
+    cost: sp ? sp[0] : 0, growth: sp ? sp[1] : 1, effect: sp ? sp[2] : () => desc,
+    tier: { tierCuir: 1, tierSoie: 2, tierCeleste: 3 }[id] || 0,
+  };
+});
+export const NODE = Object.fromEntries(NODES.map(n => [n.id, n]));
