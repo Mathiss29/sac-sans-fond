@@ -2,6 +2,7 @@
 import { ZONES, stageFor, TIERS, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
+import { RARITIES } from './game.js';
 import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
 import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
@@ -42,8 +43,9 @@ const bannerQ = []; let bannerBusy = 0;
 function tickBanner(dt) {
   bannerBusy -= dt;
   if (bannerBusy > 0 || !bannerQ.length) return;
-  const { title, sub } = bannerQ.shift();
+  const { title, sub, big } = bannerQ.shift();
   const el = $('banner'); el.textContent = '';
+  el.classList.toggle('big', !!big);
   // les lettres tombent une à une, comme un tampon
   [...title].forEach((ch, i) => { const l = document.createElement('span'); l.className = 'lt'; l.textContent = ch === ' ' ? '\u00a0' : ch; l.style.animationDelay = (i * 0.025) + 's'; el.append(l); });
   if (sub) { const s = document.createElement('small'); s.textContent = sub; el.append(s); }
@@ -190,6 +192,8 @@ function finishExpedition() {
     rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got), '#ff9f7a']);
   }
   if (unlocked) rows.push([world.zone.boss.lair, 'portail ouvert !', '#c8a2ff']);
+  for (const o of r.relicsGot || []) rows.push([`${o.name} (${RARITIES[o.rar].name})`, '+' + fmt(o.value), RARITIES[o.rar].color]);
+  if (r.relics && r.relics.length) rows.push(['Trésors attrapés', `${(r.relicsGot || []).length} / ${r.relics.length}`, '#e9cf86']);
   const dl = $('resList'); dl.innerHTML = '';
   for (const [a, b, c] of rows) {
     const dt = document.createElement('dt'); dt.textContent = a; dt.style.setProperty('--c', c);
@@ -240,7 +244,12 @@ function finishExpedition() {
     $('result').hidden = false;
     $('back').focus();
     const t0 = performance.now(), el = $('resTotal');
-    const tick = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = '+' + fmt(Math.round(gained * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(tick); };
+    let lastTick = 0;
+    const tick = now => {
+      const k = Math.min(1, (now - t0) / 900); el.textContent = '+' + fmt(Math.round(gained * (1 - Math.pow(1 - k, 3))));
+      if (gained > 0 && now - lastTick > 55 && k < 1) { lastTick = now; play('tick', { k }); }
+      if (k < 1) requestAnimationFrame(tick); else if (gained > 0) { play(record ? 'gold' : 'buy'); el.classList.remove('land'); void el.offsetWidth; el.classList.add('land'); }
+    };
     el.textContent = '+0'; requestAnimationFrame(tick);
   }, world.mode === 'arena' ? 200 : 750);
 }
@@ -252,7 +261,17 @@ function toAtelierNow() {
   stats = computeStats(save.level); world.stats = stats;
   $('result').hidden = true; $('atelier').hidden = false;
   renderTree();
-  centerTree();
+  focusCheapest();
+}
+// En revenant au bilan : la vue se pose sur la compétence achetable la moins chère, qui clignote.
+function focusCheapest() {
+  const can = NODES.filter(n => visible(n) && !n.soon && !lockedNow(n) && L(n.id) < capOf(n) && save.coins >= costOf(n, L(n.id)));
+  if (!can.length) { centerTree(); return; }
+  const n = can.reduce((a, b) => costOf(a, L(a.id)) <= costOf(b, L(b.id)) ? a : b);
+  const sc = $('treeScroll'), q = pos(n);
+  sc.scrollTo({ left: q.x * treeZoom - sc.clientWidth / 2, top: q.y * treeZoom - sc.clientHeight / 2, behavior: reduceMotion ? 'auto' : 'smooth' });
+  const el = $('treeInner').querySelector(`[data-id="${n.id}"]`);
+  if (el) { el.classList.remove('beckon'); void el.offsetWidth; el.classList.add('beckon'); setTimeout(() => el.classList.remove('beckon'), 4200); }
 }
 
 // Son : coupé ou non, mémorisé dans la sauvegarde.
@@ -305,6 +324,7 @@ function drainEvents() {
     else if (ev.kind === 'eventIntro') eventIntro(ev.ev);
     else if (ev.kind === 'boss') { save.bosses = save.bosses || {}; save.bosses[world.zone.id] = (save.bosses[world.zone.id] || 0) + 1; writeSave(save); }
     else if (ev.kind === 'arena') { arenaUi(); buildDropBar(); }
+    else if (ev.kind === 'flash') flash();
     else if (ev.kind === 'tierUp') { phaseFill(world.run, ev.tier, 0.5); }
     else if (ev.kind === 'burst') { flash(); phaseShow(ev.title, ev.sub, false); }
     else if (ev.kind === 'tear') {
@@ -318,9 +338,25 @@ function drainEvents() {
 }
 
 // ---------- HUD ----------
+// Compteurs vivants : le chiffre saute et un « +N » monte à côté quand il grimpe.
+const hudPrev = { wallet: null, bag: null };
+const floats = {};
+function bump(id, delta) {
+  const box = $(id);
+  if (!box.classList.contains('bump') || delta > 0) { box.classList.remove('bump'); void box.offsetWidth; box.classList.add('bump'); }
+  const now = performance.now(), f = floats[id];
+  if (f && now - f.t < 400 && f.el.isConnected) { f.v += delta; f.t = now; f.el.textContent = '+' + fmt(Math.round(f.v)); return; }
+  const el = document.createElement('span'); el.className = 'hudPlus num'; el.textContent = '+' + fmt(Math.round(delta));
+  box.append(el); setTimeout(() => el.remove(), 1100);
+  floats[id] = { el, v: delta, t: now };
+}
 function hud() {
   const r = world.run;
-  if (!r || (world.phase !== 'expedition' && world.phase !== 'tear')) return;
+  if (!r || (world.phase !== 'expedition' && world.phase !== 'tear')) { hudPrev.wallet = hudPrev.bag = null; return; }
+  if (hudPrev.wallet !== null && save.coins - hudPrev.wallet >= 1) bump('walletBox', save.coins - hudPrev.wallet);
+  if (hudPrev.bag !== null && r.bag - hudPrev.bag >= 1) bump('bagBox', r.bag - hudPrev.bag);
+  if (hudPrev.wallet === null || save.coins - hudPrev.wallet >= 1) hudPrev.wallet = save.coins;
+  if (hudPrev.bag === null || r.bag - hudPrev.bag >= 1 || r.bag < hudPrev.bag) hudPrev.bag = r.bag;
   $('wallet').textContent = fmt(save.coins);
   const ar = world.mode === 'arena' && r.arena;
   const tier = world.phase === 'tear' ? r.tier : tierOf(r.bag, stats);
