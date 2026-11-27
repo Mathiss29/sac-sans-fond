@@ -1,13 +1,16 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, stageFor, TIERS, HEROES, HERO_ORDER, ARENA, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
-import { loadSave, writeSave, freshSave } from './save.js';
+import { ZONES, LEVELS, levelZone, ENEMIES, stageFor, TIERS, HEROES, HERO_ORDER, ALL_HEROES, ARENA, ULTS, TRIALS, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { loadSave, writeSave, freshSave, exportSave, importSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
-import { createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
-import { render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
+import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
+import { setHeroTints, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
-import { gearOf, gearBonus, reserveSize, albumKey } from './gear.js';
+import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
+import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
+import { initCurio, curioRefresh } from './curio-ui.js';
+import { initEpic, epicRefresh, recordRun, heroTints, applyVolumes } from './epic-ui.js';
 import { initCompany, gearIconCanvas, showLoot, companyRefresh, gearSheetReady } from './company.js';
 let iconSheet = null;
 treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
@@ -15,12 +18,32 @@ treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
 const $ = id => document.getElementById(id);
 const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
 let save = loadSave();
+const heroIcons = {};   // icônes des héros (refaites quand la tenue change)
 // stats du moment : arbre + équipement de la Compagnie
-function calcStats() { return computeStats(save.level, save.gear ? gearBonus(save.gear, save.level) : null); }
+function calcStats() {
+  setHeroTints(heroTints(save));
+  for (const k in heroIcons) delete heroIcons[k];
+  const s = computeStats(save.level, curioBonus(save, gearBonus(save.gear, save.level)));
+  s.eventCount += extraEvents(save);
+  return s;
+}
 let stats = calcStats();
 let dpr = 1;
 const world = createWorld(800, 600);
-world.zone = ZONES[0];
+// ---------- Monde : 20 niveaux (10 régions × normal / II) ----------
+const LV = () => Math.max(0, Math.min(LEVELS.length - 1, save.region || 0));
+const curZone = () => levelZone(LV());
+const winsOf = id => (save.bosses || {})[id] || 0;
+// le niveau suivant s'ouvre quand le boss du précédent est battu ; les Enfers demandent aussi le portail
+function levelOpen(i) {
+  if (i <= 0) return true;
+  if (!(winsOf(LEVELS[i - 1].id) > 0)) return false;
+  return !(ZONES[LEVELS[i].zone].demon && !L('portal'));
+}
+// plus loin niveau atteint sur le chemin (boss précédents battus), pour les conditions de l'arbre
+function reached() { let i = 0; while (i + 1 < LEVELS.length && winsOf(LEVELS[i].id) > 0) i++; return i; }
+const totalWins = () => Object.values(save.bosses || {}).reduce((t, v) => t + (v > 0 ? 1 : 0), 0);
+world.zone = curZone();
 world.stats = stats;
 
 function resize() {
@@ -111,10 +134,92 @@ function wipe(mid) {
   requestAnimationFrame(frame);
 }
 
+// ---------- Carte du monde ----------
+const MECH = { fire: 'Cercles de feu sous les héros', guards: 'Bulle protégée : abats d\'abord ses gardes', copies: 'Fait apparaître de fausses copies', quake: 'Séismes de glace plus larges',
+  armor: 'Armure à briser avant de vraiment le blesser', spores: 'Nuages de spores', imps: 'Appelle des diablotins', dash: 'Fonce à travers la salle (ligne rouge)', final: 'Gardes, copies et ruées : tout à la fois' };
+const FAMILY = { king: 'Rois des élémentaires (se divisent)', puffer: 'Boursouflés (gonflent avec le temps)', healer: 'Soigneurs', bandit: 'Bandits (volent tes pièces)', mvp: 'Lapin d\'or (rare et très rapide)' };
+let wmSel = 0;
+function wmPos(i) { const row = Math.floor(i / 5), c = i % 5, col = row % 2 ? 4 - c : c; return { x: 10 + col * 20, y: 13 + row * 24.5 }; }
+function openWorld() { wmSel = LV(); $('worldMap').hidden = false; renderWorld(); }
+function renderWorld() {
+  const box = $('wmPath'), svg = $('wmLines');
+  box.querySelectorAll('.wmNode,.wmRegion').forEach(e => e.remove());
+  const done = LEVELS.filter(l => winsOf(l.id) > 0).length;
+  $('wmSub').textContent = `${done} / ${LEVELS.length} boss vaincus`;
+  let d = '';
+  LEVELS.forEach((lv, i) => { const p = wmPos(i); d += (i ? ' L' : 'M') + p.x + ' ' + p.y; });
+  svg.setAttribute('viewBox', '0 0 100 100'); svg.setAttribute('preserveAspectRatio', 'none');
+  const open = LEVELS.map((_, i) => levelOpen(i));
+  let lit = ''; LEVELS.forEach((lv, i) => { if (!open[i]) return; const p = wmPos(i); lit += (lit ? ' L' : 'M') + p.x + ' ' + p.y; });
+  svg.innerHTML = `<path d="${d}" fill="none" stroke="#1a1410" stroke-width="1.6" vector-effect="non-scaling-stroke" style="stroke-width:10px"/><path d="${d}" fill="none" stroke="#4a4030" stroke-dasharray="2 2" vector-effect="non-scaling-stroke" style="stroke-width:4px"/><path d="${lit}" fill="none" stroke="#e6c875" vector-effect="non-scaling-stroke" style="stroke-width:4px"/>`;
+  LEVELS.forEach((lv, i) => {
+    const z = ZONES[lv.zone], p = wmPos(i), b = document.createElement('button');
+    const won = winsOf(lv.id) > 0;
+    b.type = 'button';
+    b.className = 'wmNode' + (open[i] ? '' : ' locked') + (won ? ' won' : '') + (i === LV() ? ' cur' : '') + (i === wmSel ? ' sel' : '') + (lv.hard ? ' hard' : '');
+    b.style.left = p.x + '%'; b.style.top = p.y + '%';
+    b.style.setProperty('--g', z.ground[0]); b.style.setProperty('--g2', z.ground[1]); b.style.setProperty('--bc', z.boss.color || '#ff9a46');
+    b.innerHTML = `<span class="wmNum">${i + 1}</span>${won ? '<span class="wmCrown">♛</span>' : open[i] ? '' : '<span class="wmLock">🔒</span>'}<span class="wmName">${lv.name}</span>`;
+    b.onclick = () => { wmSel = i; renderWorld(); };
+    b.ondblclick = () => { if (open[i]) travel(i); };
+    box.append(b);
+  });
+  // panneau d'aperçu
+  const lv = LEVELS[wmSel], z = levelZone(wmSel), info = $('wmInfo'); info.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = lv.name; h.style.color = z.boss.color || '#e6c875';
+  const bl = document.createElement('p'); bl.className = 'wmBlurb'; bl.textContent = z.blurb || 'Là où tout commence : l\'ambiance change à chaque expédition';
+  const foes = document.createElement('div'); foes.className = 'wmFoes';
+  for (const k of Object.keys(z.spawn)) { const c = document.createElement('canvas'); c.width = c.height = 22; c.getContext('2d').drawImage(enemyIcon(k), 0, 0); c.title = ENEMIES[k].name; foes.append(c); }
+  const dl = document.createElement('dl');
+  const row = (a, v) => { const dt = document.createElement('dt'); dt.textContent = a; const dd = document.createElement('dd'); dd.textContent = v; dl.append(dt, dd); };
+  row('Boss', z.boss.name + (lv.hard ? ' (plus rapide)' : ''));
+  row('Combat', MECH[z.boss.mech] || '');
+  row('Ennemis', 'PV ×' + fmt(lv.hp));
+  row('Butin', '×' + fmt(lv.value));
+  if (z.mods && z.mods.speed) row('Climat', 'Tout le monde avance ' + Math.round((1 - z.mods.speed) * 100) + ' % moins vite');
+  if (z.demon) row('Démons', 'Frappés plus fort avec « Fléau des démons »');
+  const news = Object.keys(lv.families).filter(k => lv.families[k] && !(wmSel > 0 && LEVELS[wmSel - 1].families[k]));
+  if (news.length) row('Nouveau', news.map(k => FAMILY[k]).join(', '));
+  const best = (save.zoneTier || {})[z.id.replace(/2$/, '')];
+  if (best !== undefined) row('Meilleur sac', TIERS[best].name);
+  row('Boss vaincu', winsOf(lv.id) ? winsOf(lv.id) + ' fois' : 'pas encore');
+  const btn = document.createElement('button'); btn.className = 'btn'; btn.type = 'button';
+  if (open[wmSel]) { btn.textContent = wmSel === LV() ? 'Tu es ici' : 'Partir ici'; btn.disabled = wmSel === LV(); btn.onclick = () => travel(wmSel); }
+  else {
+    btn.disabled = true;
+    btn.textContent = '🔒 ' + (wmSel > 0 && !(winsOf(LEVELS[wmSel - 1].id) > 0) ? `Bats ${levelZone(wmSel - 1).boss.name} (${LEVELS[wmSel - 1].name})` : 'Achète « Portail des Enfers » dans l\'arbre');
+  }
+  info.append(h, bl, foes, dl, btn);
+}
+function randOpen() { const l = LEVELS.map((_, i) => i).filter(levelOpen); return l[Math.floor(Math.random() * l.length)] || 0; }
+function goDungeon() {
+  const c = curioOf(save);
+  if (!(c.keys > 0)) return;
+  c.keys--; writeSave(save);
+  wipe(() => {
+    $('phase').hidden = true;
+    stats = calcStats(); world.gearCtx = gearCtx();
+    startLair(world, stats, dungeonZone(curZone()), { first: false, dungeon: true });
+    showRunUi();
+  });
+}
+function travel(i) {
+  if (!levelOpen(i)) return;
+  save.region = i; writeSave(save);
+  world.zone = curZone();
+  $('worldMap').hidden = true;
+  renderTree(); play('buy');
+}
+
 // ---------- Expédition ----------
 // Portail de l'antre : ouvert une fois le palier Soie atteint (ou le boss déjà battu).
-const lairOpen = () => !!save.lairOpen || ((save.bosses || {})[ZONES[0].id] || 0) > 0;
-const lairInfo = () => ({ open: lairOpen(), first: !((save.bosses || {})[ZONES[0].id] > 0) });
+function lairOpen() {
+  const z = curZone();
+  if (winsOf(z.id) > 0) return true;
+  if (z.demon && !L('demonLord')) return false;
+  return !!((save.lairs || {})[z.id] || (z.id === 'clairiere' && save.lairOpen));
+}
+const lairInfo = () => ({ open: lairOpen(), first: !(winsOf(curZone().id) > 0) });
 function showRunUi() {
   $('atelier').hidden = true; $('result').hidden = true;
   $('hud').hidden = false; $('dropBar').hidden = false; $('hint').hidden = false; $('mapUi').hidden = false;
@@ -125,13 +230,13 @@ function go() { wipe(goNow); }
 function goNow() {
   $('phase').hidden = true;
   stats = calcStats(); world.gearCtx = gearCtx();
-  startExpedition(world, stats, ZONES[0], lairInfo(), stageFor(save.expeditions));
+  const z = curZone(); startExpedition(world, stats, z, lairInfo(), stageFor(save.expeditions, z));
   showRunUi();
 }
 function goLair() {
   if (!lairOpen()) return;
   stats = calcStats(); world.gearCtx = gearCtx();
-  startLair(world, stats, ZONES[0], lairInfo());
+  startLair(world, stats, curZone(), lairInfo());
   showRunUi();
 }
 // Ce qu'il faut pour tirer un objet : lignées possédées, charmes débloqués, niveau des objets.
@@ -139,8 +244,8 @@ function gearCtx() {
   if (!(save.level.armory > 0)) return null;
   const g = gearOf(save);
   return { lines: HERO_ORDER.filter(k => stats.heroes[k] > 0), charms: save.level.charm1 > 0,
-    ilvl: Math.min(8, (save.maxTier || 0) + ((save.bosses || {})[ZONES[0].id] || 0)), first: !g.firstDone,
-    mythic: ((save.bosses || {})[ZONES[0].id] || 0) >= 2 };
+    ilvl: Math.min(8, (save.maxTier || 0) + Math.min(4, totalWins()) + Math.floor(LV() / 4)), first: !g.firstDone,
+    mythic: winsOf('clairiere') >= 2 || totalWins() >= 3, found: g.found || {} };
 }
 // Dans l'antre : pas de sac ni de mini-carte ; flèches seulement si la salle dépasse de l'écran.
 function arenaUi() {
@@ -152,7 +257,6 @@ function arenaUi() {
 }
 
 // Cartes des héros à larguer : un clic (ou 1, 2, 3, 4) choisit lequel tombera au prochain clic sur la carte.
-const heroIcons = {};
 function heroIcon(type) {
   if (heroIcons[type]) return heroIcons[type];
   const c = document.createElement('canvas'); c.width = c.height = 68;
@@ -162,7 +266,8 @@ function heroIcon(type) {
 function buildDropBar() {
   const box = $('dropBar'); box.innerHTML = '';
   const r = world.run;
-  const types = HERO_ORDER.filter(k => stats.heroes[k] > 0);
+  const types = ALL_HEROES.filter(k => stats.heroes[k] > 0);
+  box.classList.toggle('many', types.length > 5);
   types.forEach((type, i) => {
     const n = r.toDrop[type];
     const b = document.createElement('button');
@@ -189,10 +294,33 @@ function finishExpedition() {
   const record = save.expeditions > 1 && gained > save.best;
   save.best = Math.max(save.best, gained);
   if (!r.lair.only) save.maxTier = Math.max(save.maxTier || 0, r.tier);
-  const unlocked = !lairOpen() && r.tier >= ARENA.unlockTier;
-  if (unlocked) save.lairOpen = true;
+  const wasOpen = lairOpen(), zid = world.zone.id, base = ZONES[LEVELS[LV()].zone].id;
+  if (!r.lair.only) { save.zoneTier = save.zoneTier || {}; save.zoneTier[base] = Math.max(save.zoneTier[base] || 0, r.tier); }
+  if (!r.lair.only && r.tier >= ARENA.unlockTier) { save.lairs = save.lairs || {}; save.lairs[zid] = true; if (zid === 'clairiere') save.lairOpen = true; }
+  const unlocked = !wasOpen && lairOpen();
+  const lairWait = !lairOpen() && world.zone.demon && (save.lairs || {})[zid];
   // objets trouvés : rangés dans la réserve (ceux qui ne rentrent pas sont recyclés en éclats)
-  const found = storeItems(r.items || []);
+  // Curiosités : cartes trouvées, donjon, quêtes ; les potions sont bues
+  const extra = [], gc = gearCtx(), news = [];
+  if (r.lair.dungeon && r.bossKilled) {
+    curioOf(save).dungeons++;
+    if (gc) for (let i = 0; i < 2; i++) extra.push(rollItem(gc, 0, Math.random, 1));
+    const pool = Object.keys(world.zone.spawn); (r.cards = r.cards || []).push(pool[Math.floor(Math.random() * pool.length)]);
+    gearOf(save).shards += 20 + 5 * LV();
+  }
+  const qDone = save.curio ? progressQuests(save, { zone: world.zone.dungeon ? null : world.zone.id, kills: r.kills, events: r.eventsGot || 0, tier: r.tier || 0, gained, boss: r.bossKilled && !world.zone.dungeon, lairOnly: r.lair.only }) : [];
+  for (const q of qDone) {
+    news.push(['Quête accomplie', questText(q) + ' → ' + REWARD_TEXT[q.reward], '#e7d3a1']);
+    if (q.reward === 'shards') gearOf(save).shards += 15 + 5 * q.lv;
+    else if (q.reward === 'key') curioOf(save).keys++;
+    else if (q.reward === 'card') (r.cards = r.cards || []).push(CARD_IDS.filter(id => !(save.curio.cards[id]))[0] || CARD_IDS[Math.floor(Math.random() * CARD_IDS.length)]);
+    else if (q.reward === 'gear' && gc) extra.push(rollItem(gc, 0, Math.random, 1));
+  }
+  const cardsGot = r.cards && r.cards.length && L('cabinet') ? addCards(save, r.cards, gearOf) : [];
+  if (save.curio) { save.curio.active = []; fillQuests(save, randOpen()); }
+  const found = storeItems([...(r.items || []), ...extra]);
+  recordRun(save, r, gained);
+  const trialsDone = checkTrials(r);
   writeSave(save);
   const rows = [['Élémentaires vaincus', fmt(r.kills), '#c4c8b2']];
   if (!r.lair.only) {
@@ -206,7 +334,12 @@ function finishExpedition() {
     rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got), '#ff9f7a']);
   }
   if (unlocked) rows.push([world.zone.boss.lair, 'portail ouvert !', '#c8a2ff']);
+  if (lairWait) rows.push([world.zone.boss.lair, 'demande « Seigneur des Enfers »', '#ff7a5a']);
+  if (r.bossKilled && winsOf(zid) === 1 && LV() + 1 < LEVELS.length) rows.push(['Nouveau niveau', LEVELS[LV() + 1].name + (levelOpen(LV() + 1) ? ' ouvert !' : ' (portail des Enfers requis)'), '#9fe07a']);
   if (found.length) rows.push(['Besaces d\'équipement', String(found.length), '#c07aff']);
+  for (const c of cardsGot) rows.push(['Carte : ' + ENEMIES[c.id].name, c.isNew ? 'nouvelle !' : c.up ? `${c.stars} ★` : '+2 éclats', '#e7d3a1']);
+  if (r.lair.dungeon) rows.push([world.zone.boss.lair, r.bossKilled ? 'pillé : 2 besaces, une carte, des éclats' : 'raté…', '#c8a2ff']);
+  rows.push(...news);
   for (const o of r.relicsGot || []) rows.push([`${o.name} (${RARITIES[o.rar].name})`, '+' + fmt(o.value), RARITIES[o.rar].color]);
   if (r.relics && r.relics.length) rows.push(['Trésors attrapés', `${(r.relicsGot || []).length} / ${r.relics.length}`, '#e9cf86']);
   const dl = $('resList'); dl.innerHTML = '';
@@ -216,7 +349,7 @@ function finishExpedition() {
     dl.append(dt, dd);
   }
   // en-tête : numéro d'expédition, palier du sac atteint et multiplicateur
-  $('resSub').textContent = r.lair.only ? world.zone.boss.lair : `Expédition ${save.expeditions} · ${world.zone.stage || world.zone.name}`;
+  $('resSub').textContent = r.lair.only ? world.zone.boss.lair : `Expédition ${save.expeditions} · ${world.zone.levelName || world.zone.stage || world.zone.name}${world.zone.amb ? '' : ' · ' + world.zone.stage}`;
   const tier = r.tier || 0, [lo, hi] = tierRange(tier, stats);
   $('resTierIco').style.background = TIERS[tier].color;
   $('resTierIco').title = TIERS[tier].name;
@@ -227,10 +360,10 @@ function finishExpedition() {
   $('resGot').textContent = r.lair.only ? fmt(r.lair.got) : `${fmt(r.tearGot)} / ${fmt(r.tearTotal)}`;
   // objectif suivant
   const bossDone = ((save.bosses || {})[world.zone.id] || 0) > 0;
-  $('resGoal').textContent = lairOpen() && !bossDone ? `${world.zone.boss.name} t'attend dans son antre !`
+  $('resGoal').textContent = world.zone.dungeon ? `Clés de donjon restantes : ${curioOf(save).keys}` : lairOpen() && !bossDone ? `${world.zone.boss.name} t'attend dans son antre !`
     : tier < stats.tiers - 1 ? `Prochain palier : ${TIERS[tier + 1].name}` : 'Sac au palier maximal !';
   // dégâts par héros, à gauche
-  const dmg = r.dmg || {}, types = HERO_ORDER.filter(k => dmg[k] > 0);
+  const dmg = r.dmg || {}, types = ALL_HEROES.filter(k => dmg[k] > 0);
   const top = Math.max(1, ...types.map(k => dmg[k])), sum = types.reduce((t, k) => t + dmg[k], 0);
   const ul = $('dmgList'); ul.innerHTML = '';
   for (const k of types.sort((x, y) => dmg[y] - dmg[x])) {
@@ -250,8 +383,9 @@ function finishExpedition() {
   if (sum > 0) { save.lastDmg = sum; writeSave(save); }
   $('resRecord').hidden = !record;
   const can = NODES.filter(n => visible(n) && !n.soon && !lockedNow(n) && L(n.id) < capOf(n) && save.coins >= costOf(n, L(n.id))).length;
-  $('resNews').textContent = can ? `${can} compétence${can > 1 ? 's' : ''} à acheter !` : '';
-  $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true; $('attrBox').hidden = true;
+  $('resNews').textContent = (trialsDone.length ? `Épreuve réussie : ${trialsDone.map(id => NODE[id].name).join(', ')} débloqué ! ` : '') + (can ? `${can} compétence${can > 1 ? 's' : ''} à acheter !` : '');
+  $('resNews').classList.toggle('trialWin', trialsDone.length > 0);
+  $('hud').hidden = true; $('dropBar').hidden = true; $('hint').hidden = true; $('mapUi').hidden = true; $('attrBox').hidden = true; $('ultBar').hidden = true;
   $('phase').hidden = true;
   // la scène s'assombrit d'abord sur le sac, puis le bilan glisse depuis la droite et le total compte
   const showResult = () => {
@@ -269,6 +403,19 @@ function finishExpedition() {
   };
   // écran « Sers-toi ! » d'abord s'il y a des objets, puis le bilan
   setTimeout(() => { if (world.phase !== 'done') return; if (found.length) showLoot(found, showResult); else showResult(); }, world.mode === 'arena' ? 200 : 750);
+}
+// Épreuves d'ultime : on garde le meilleur essai ; réussie = l'ultime est débloqué.
+function checkTrials(r) {
+  const done = [];
+  if (!save.trials || !r.cnt) return done;
+  for (const id of Object.keys(save.trials)) {
+    if (L(id)) continue;
+    const tr = TRIALS[id], v = r.cnt[tr.stat] || 0;
+    save.trials[id] = Math.max(save.trials[id] || 0, Math.min(tr.goal, v));
+    if (v >= tr.goal) { save.level[id] = 1; done.push(id); }
+  }
+  if (done.length) stats = calcStats();
+  return done;
 }
 function storeItems(items) {
   if (!items.length || !(save.level.armory > 0)) return [];
@@ -292,7 +439,7 @@ function toAtelierNow() {
   world.phase = 'idle'; world.run = null; world.heroes = []; world.coins = [];
   stats = calcStats(); world.stats = stats;
   $('result').hidden = true; $('atelier').hidden = false;
-  renderTree(); companyRefresh();
+  renderTree(); companyRefresh(); curioRefresh(); epicRefresh();
   focusCheapest();
 }
 // En revenant au bilan : la vue se pose sur la compétence achetable la moins chère, qui clignote.
@@ -323,6 +470,13 @@ const EVENT_HELP = {
   vein: ['Filon d\'or !', 'Un rocher veiné d\'or. Chaque coup de tes héros en fait jaillir des pièces : largue-les près de lui !', 'vein'],
   goblin: ['Gobelin voleur !', 'Il file avec un sac d\'or. Rattrape-le avec tes héros avant qu\'il ne s\'échappe : il lâche tout son butin.', 'goblin'],
   mimic: ['Un coffre ?', 'Méfie-toi, c\'est une mimique. Frappe-la pour la réveiller, puis abats-la pour son trésor. Attention, elle mord !', 'mimic'],
+  buried: ['Trésor enterré !', 'Une bosse est apparue dans l\'herbe. Garde le gant posé dessus une seconde pour déterrer le trésor.', 'coin'],
+  wanted: ['Avis de recherche !', 'Un élémentaire marqué d\'une cible porte une prime. Elle fond chaque seconde : abats-le vite !', 'golem'],
+  lucky: ['Sac chanceux !', 'Pendant quelques secondes, chaque coup de tes héros fait tomber de l\'or. Frappe tout ce qui bouge !', 'coin'],
+  skyfall: ['Pluie d\'élémentaires !', 'Une horde tombe du ciel près de tes héros. Ils valent deux fois et demie plus que d\'habitude.', 'wisp'],
+  rush: ['Ruée dorée !', 'Une file de feux follets dorés traverse la carte sans s\'arrêter. Place tes héros sur leur chemin !', 'gold'],
+  mirage: ['Mirage doré !', 'Pendant 8 s, les ennemis vaincus près du gant valent le triple. Promène-le au milieu des combats.', 'coin'],
+  treasure: ['Gobelin des trésors !', 'Il est chargé d\'or : chaque coup lui fait perdre des pièces. Frappe-le le plus possible avant qu\'il ne file.', 'goblin'],
 };
 function eventIntro(kind) {
   save.eventsSeen = save.eventsSeen || {};
@@ -354,8 +508,15 @@ function drainEvents() {
     else if (ev.kind === 'coins') save.coins += ev.value;
     else if (ev.kind === 'done') finishExpedition();
     else if (ev.kind === 'eventIntro') eventIntro(ev.ev);
+    else if (ev.kind === 'boss' && world.zone.dungeon) { /* gardien de donjon : ne compte pas comme boss de région */ }
     else if (ev.kind === 'boss') { save.bosses = save.bosses || {}; save.bosses[world.zone.id] = (save.bosses[world.zone.id] || 0) + 1; writeSave(save); }
     else if (ev.kind === 'arena') { arenaUi(); buildDropBar(); }
+    else if (ev.kind === 'reinforce') buildDropBar();
+    else if (ev.kind === 'secret' && !L(ev.id)) {
+      save.level[ev.id] = 1; writeSave(save); stats = calcStats();
+      bannerQ.push({ kind: 'banner', big: true, title: 'Secret découvert !', sub: NODE[ev.id].name + ' : ' + NODE[ev.id].desc });
+      play('gold');
+    }
     else if (ev.kind === 'flash') flash();
     else if (ev.kind === 'tierUp') { phaseFill(world.run, ev.tier, 0.5); }
     else if (ev.kind === 'burst') { flash(); phaseShow(ev.title, ev.sub, false); }
@@ -419,9 +580,44 @@ function hud() {
   $('attrTxt').textContent = r.focusLock ? 'recharge…' : r.attraction.toFixed(1).replace('.', ',') + ' s';
   screenCount();
   $('attrFill').style.width = (r.attraction / stats.attraction * 100) + '%';
+  ultHud(r);
   const boss = r.boss;
   $('bossBar').hidden = !(boss && ar && world.phase === 'expedition' && !boss.dead);
   if (boss && !boss.dead) { $('bossName').textContent = boss.def.name; $('bossFill').style.width = Math.max(0, boss.hp / boss.max * 100) + '%'; }
+}
+
+// Ultimes : un bouton par lignée qui en a un, avec sa jauge ; épreuve en cours affichée dessous.
+let ultSig = '';
+function ultHud(r) {
+  const box = $('ultBar');
+  const types = HERO_ORDER.filter(k => stats.ults && stats.ults[k]);
+  const trials = Object.keys(save.trials || {}).filter(id => !L(id));
+  box.hidden = world.phase !== 'expedition' || (!types.length && !trials.length);
+  if (box.hidden) return;
+  const sig = types.join() + '|' + trials.join();
+  if (sig !== ultSig) {
+    ultSig = sig; box.innerHTML = '';
+    for (const k of types) {
+      const b = document.createElement('button'); b.className = 'ult'; b.dataset.k = k; b.type = 'button';
+      b.title = `${ULTS[k].name} (touche ${ULTS[k].label}) : vise le gant, sinon le groupe le plus dense`;
+      const c = document.createElement('canvas'); c.width = c.height = 68; c.getContext('2d').drawImage(heroIcon(k), 0, 0);
+      b.append(c, Object.assign(document.createElement('span'), { className: 'nm', textContent: ULTS[k].name }),
+        Object.assign(document.createElement('span'), { className: 'key', textContent: ULTS[k].label }), Object.assign(document.createElement('i'), { className: 'fill' }));
+      b.onpointerdown = e => { e.stopPropagation(); useUlt(world, k); };
+      box.append(b);
+    }
+    for (const id of trials) box.append(Object.assign(document.createElement('div'), { className: 'trial', id: 'tr_' + id }));
+  }
+  for (const b of box.querySelectorAll('.ult')) {
+    const k = b.dataset.k, v = r.ult ? r.ult[k] : 0;
+    b.querySelector('.fill').style.height = (v * 100) + '%';
+    b.classList.toggle('ready', ultReady(world, k));
+  }
+  for (const id of trials) {
+    const el = $('tr_' + id); if (!el) continue;
+    const tr = TRIALS[id], v = Math.min(tr.goal, Math.floor((r.cnt && r.cnt[tr.stat]) || 0));
+    el.textContent = `Épreuve ${NODE[id].name} : ${v}/${tr.goal}`; el.classList.toggle('ok', v >= tr.goal);
+  }
 }
 
 // Compteur « À l'écran » : élémentaires visibles par famille, avec leurs PV.
@@ -459,7 +655,9 @@ const visible = n => !n.parent || L(n.parent) > 0 || L(n.id) > 0;
 const teaser = () => false; // pas de « ? » : on ne voit que les nœuds révélés
 const colorOf = n => (BRANCHES[n.branch] || BRANCHES.depart)[1];
 const branchName = n => (BRANCHES[n.branch] || BRANCHES.depart)[0];
-const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: (save.bosses || {})[ZONES[0].id] || 0 });
+const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: winsOf('clairiere'), L, reached: reached(), bosses: save.bosses || {}, zoneTier: save.zoneTier || {} });
+// épreuves d'ultime : acceptée (meilleur score enregistré) mais pas encore réussie
+const trialOn = n => n.type === 'ult' && !L(n.id) && save.trials && save.trials[n.id] !== undefined;
 // niveau maximum achetable pour l'instant (certains nœuds se débloquent par étapes)
 const capOf = n => n.cap ? Math.min(n.max, n.cap(L)) : n.max;
 const lockedNow = n => n.soon || (n.need && !n.need(ctx()) && !L(n.id));
@@ -499,9 +697,12 @@ function renderTree() {
   $('atelierWallet').textContent = fmt(save.coins);
   const lb = $('lairBtn'), open = lairOpen();
   lb.disabled = !open;
-  $('zoneBoss').textContent = (open ? '♛ ' : '🔒 ') + ZONES[0].boss.lair;
+  const z = curZone();
+  $('zoneName').textContent = z.levelName;
+  $('zoneBoss').textContent = (open ? '♛ ' : '🔒 ') + z.boss.lair;
+  document.querySelector('#lairBtn').style.setProperty('--zc', z.boss.color || '#ff9a46');
   $('runsChip').textContent = `Expéditions : ${save.expeditions}`;
-  lb.title = open ? `Affronter ${ZONES[0].boss.name} directement` : `Remplis le sac jusqu'au palier « ${TIERS[ARENA.unlockTier].name} » pour ouvrir le portail`;
+  lb.title = open ? `Affronter ${z.boss.name} directement` : z.demon && (save.lairs || {})[z.id] ? 'Achète « Seigneur des Enfers » dans l\'arbre pour ouvrir son antre' : `Remplis le sac jusqu'au palier « ${TIERS[ARENA.unlockTier].name} » ici pour ouvrir le portail`;
   const inner = $('treeInner'), svg = $('treeLines');
   const W = PAD * 2 + (maxX - minX) * G, H = PAD * 2 + (maxY - minY) * G;
   inner.style.width = W + 'px'; inner.style.height = H + 'px';
@@ -542,7 +743,7 @@ function renderTree() {
     const shown = visible(n), tz = !shown && teaser(n);
     if (!shown && !tz) continue;
     const p = pos(n), lv = L(n.id), isMax = lv >= n.max, capped = !isMax && lv >= capOf(n), locked = shown && lockedNow(n);
-    const afford = !tz && !isMax && !locked && !capped && save.coins >= costOf(n, lv);
+    const afford = !tz && !isMax && !locked && !capped && !trialOn(n) && save.coins >= costOf(n, lv);
     const b = document.createElement('button');
     b.className = 'node t-' + n.type + (tz ? ' teaser' : '') + (lv ? ' owned' : '') + (n.soon && shown ? ' soon' : '') + (locked && !n.soon ? ' locked' : '')
       + (isMax ? ' max' : '') + (afford ? ' afford' : '') + (selected === n.id ? ' sel' : '') + (n.id === 'root' ? ' root' : '');
@@ -558,6 +759,7 @@ function renderTree() {
       if (afford) b.append(Object.assign(document.createElement('span'), { className: 'dot' }));
       if (!seen.has(n.id) && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'newTag', textContent: 'Nouveau' }));
       if (lv && n.id !== 'root') b.append(Object.assign(document.createElement('span'), { className: 'ok', textContent: '✓' }));
+      if (trialOn(n)) b.append(Object.assign(document.createElement('span'), { className: 'trialTag', textContent: `${Math.floor(save.trials[n.id])}/${TRIALS[n.id].goal}` }));
     }
     // un clic achète (comme une caisse enregistreuse) ; survol ou clic montrent la fiche
     b.onclick = () => { selected = n.id; if (!tz && afford) buy(n); else renderTree(); };
@@ -592,6 +794,18 @@ function renderInfo() {
   const eff = add('div', 'eff', isMax ? n.effect(lv) : lv ? n.effect(lv) + '  →  ' : '');
   if (!isMax) eff.append(Object.assign(document.createElement('b'), { textContent: n.effect(lv + 1) }));
   if (lockedNow(n)) { add('p', 'locked', '🔒 ' + n.cond); return; }
+  if (n.type === 'ult' && !lv) {
+    const tr = TRIALS[n.id];
+    add('p', 'cond', 'Épreuve : ' + tr.text + '.');
+    if (trialOn(n)) {
+      add('p', '', `Meilleur essai : ${Math.floor(save.trials[n.id])} / ${tr.goal}. L'épreuve compte pendant tes expéditions.`);
+    } else {
+      const pr = document.createElement('div'); pr.className = 'price';
+      pr.append(Object.assign(document.createElement('span'), { textContent: 'Gratuit' }), Object.assign(document.createElement('span'), { className: 'go', textContent: 'Clique pour accepter l\'épreuve' }));
+      box.append(pr);
+    }
+    return;
+  }
   if (!isMax && lv >= capOf(n)) { add('p', 'locked', '🔒 ' + (n.capMsg || 'Pas encore disponible.')); return; }
   if (isMax) return;
   const c = costOf(n, lv), pr = document.createElement('div'); pr.className = 'price';
@@ -617,6 +831,13 @@ function placeInfo(n) {
 function buy(n) {
   const lv = L(n.id);
   if (n.soon || lockedNow(n) || !visible(n) || lv >= capOf(n)) return;
+  if (n.type === 'ult') {
+    if (trialOn(n) || lv) return;
+    save.trials = save.trials || {}; save.trials[n.id] = 0;
+    unlockAudio(); play('buy'); writeSave(save); renderTree();
+    buyFx(n, 0, []);
+    return;
+  }
   const c = costOf(n, lv);
   if (save.coins < c) return;
   const hidden = new Set(NODES.filter(m => !visible(m)).map(m => m.id));
@@ -626,6 +847,31 @@ function buy(n) {
   stats = calcStats();
   renderTree(); companyRefresh();
   buyFx(n, c, NODES.filter(m => hidden.has(m.id) && visible(m)));
+  if (n.type === 'cls' || /Fork$/.test(n.id)) classChange(n);
+}
+
+// Écran « Changement de classe ! » : les exemplaires tournent en cercle puis fusionnent.
+function classChange(n) {
+  const line = { archer: 'archer', mage: 'mage', knight: 'knight', bard: 'bard' }[n.branch] || 'archer';
+  const fork = /Fork$/.test(n.id);
+  const ov = document.createElement('div'); ov.className = 'classOv';
+  const ring = document.createElement('div'); ring.className = 'ring';
+  for (let i = 0; i < 3; i++) {
+    const c = document.createElement('canvas'); c.width = c.height = 68; c.className = 'mini';
+    c.getContext('2d').drawImage(heroIcon(line), 0, 0); c.style.setProperty('--i', i); ring.append(c);
+  }
+  const big = document.createElement('canvas'); big.width = big.height = 68; big.className = 'big';
+  big.getContext('2d').drawImage(heroIcon(line), 0, 0);
+  const rk = fork ? 2 : n.id.length === 4 ? 3 : 2;
+  const t = document.createElement('h2'); t.textContent = 'Changement de classe !';
+  const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = (fork ? HEROES[line].plural + ' fusionnés' : n.name) + '  ' + '★'.repeat(rk);
+  const d = document.createElement('p'); d.textContent = fork ? 'Les exemplaires fusionnent en un seul héros plus fort, qui garde toutes les améliorations. Choisis maintenant sa voie dans l\'arbre.' : n.desc;
+  const ok = document.createElement('button'); ok.className = 'btn'; ok.textContent = 'Super !';
+  ov.append(ring, big, t, nm, d, ok); $('app').append(ov);
+  play('tier'); setTimeout(() => play('gold'), 1200);
+  const close = () => { ov.remove(); removeEventListener('keydown', key, true); };
+  const key = e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); close(); } };
+  ok.onclick = close; addEventListener('keydown', key, true);
 }
 
 // Effets d'achat : le nœud rebondit, des étincelles jaillissent, le prix s'envole, les nœuds révélés éclosent.
@@ -677,9 +923,10 @@ const held = new Set();
 const playing = () => world.phase === 'expedition' || world.phase === 'tear';
 window.addEventListener('keydown', e => {
   if (CAM_KEYS[e.code] && playing()) { held.add(e.code); e.preventDefault(); }
-  const m = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
+  for (const k of HERO_ORDER) if (e.code === ULTS[k].key && world.phase === 'expedition') useUlt(world, k);
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
   if (m && world.phase === 'expedition') {
-    const type = HERO_ORDER.filter(k => stats.heroes[k] > 0)[+m[1] - 1];
+    const type = ALL_HEROES.filter(k => stats.heroes[k] > 0)[+m[1] - 1];
     if (type) { selectHero(world, type); buildDropBar(); }
   }
 });
@@ -713,9 +960,17 @@ function drawMinimap() {
   mg.setTransform(dpr, 0, 0, dpr, 0, 0);
   mg.imageSmoothingEnabled = true;
   mg.drawImage(map.c, 0, 0, W, H);
+  for (const a of world.zone.areaList || []) { mg.strokeStyle = 'rgba(255,240,200,.6)'; mg.lineWidth = 1; mg.setLineDash([2, 2]); mg.beginPath(); mg.ellipse(a.x * k, a.y * k, a.r * k, a.r / 1.4 * k, 0, 0, 7); mg.stroke(); mg.setLineDash([]); }
   const dot = (x, y, r, col) => { mg.fillStyle = col; mg.fillRect(Math.round(x * k - r / 2), Math.round(y * k - r / 2), r, r); };
   for (const c of world.coins) dot(c.x, c.y, 2, '#ffd34d');
   for (const e of world.enemies) if (!e.boss) dot(e.x, e.y, e.gold ? 4 : 3, e.gold ? '#ffe14a' : '#ff6b4a');
+  // Longue-vue : feux follets dorés, créatures d'événement et butin rare mis en évidence
+  if (stats.spyglass) {
+    const pulse = 5 + 2 * Math.sin(performance.now() / 200);
+    for (const e of world.enemies) if (e.gold || e.event) { mg.strokeStyle = e.event ? '#ff5a5a' : '#ffe14a'; mg.lineWidth = 1.5; mg.strokeRect(e.x * k - pulse / 2, e.y * k - pulse / 2, pulse, pulse); }
+    for (const m of (world.run && world.run.mounds) || []) dot(m.x, m.y, 5, '#c9a06a');
+  }
+  for (const h of (world.run && world.run.helpers) || []) dot(h.x, h.y, 3, h.kind === 'sprite' ? '#9bf06b' : h.kind === 'hound' ? '#ff7a3c' : '#e8eef8');
   const b = bagPos(world); dot(b.x, b.y, 6, '#fff2c8');
   for (const u of world.heroes) dot(u.x, u.y, 4, '#7ee06b');
   const lr = world.run && world.run.lair, pp = portalPos(world);
@@ -737,7 +992,16 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { if (e.code === 'Space') world.holdKey = false; });
 
 $('go').onclick = go;
+$('worldBtn').onclick = () => openWorld();
+$('wmClose').onclick = () => { $('worldMap').hidden = true; };
 $('lairBtn').onclick = goLair;
+addEventListener('keydown', e => {
+  if ($('atelier').hidden || !$('result').hidden || e.target.closest && e.target.closest('input,textarea')) return;
+  if (e.code === 'KeyM') { e.preventDefault(); if ($('worldMap').hidden) openWorld(); else $('worldMap').hidden = true; }
+  else if (e.code === 'Escape' && !$('worldMap').hidden) $('worldMap').hidden = true;
+});
+// Tab : grande mini-carte pendant l'expédition
+addEventListener('keydown', e => { if (e.code === 'Tab' && playing() && world.mode === 'map') { e.preventDefault(); mm.classList.toggle('big'); } });
 $('back').onclick = toAtelier;
 $('again').onclick = () => go();
 addEventListener('keydown', e => {
@@ -757,7 +1021,9 @@ $('reset').onclick = () => {
 
 // Musique du moment : Atelier, expédition, ou boss dans son antre.
 // musique d'expédition : propre à l'ambiance quand elle en a une (matin, minuit), sinon le thème commun
-const stageTrack = () => ({ matin: 'matin', minuit: 'minuit' }[world.stage && world.stage.id] || 'expedition');
+// les régions qui ont leur propre morceau (niveau normal et niveau II)
+const REGION_TRACKS = { marais: 'marais' };
+const stageTrack = () => REGION_TRACKS[((world.zone && world.zone.id) || '').replace(/2$/, '')] || ({ matin: 'matin', minuit: 'minuit' }[world.stage && world.stage.id] || 'expedition');
 function musicFor() {
   if (world.phase === 'expedition') return world.mode === 'arena' ? 'boss' : stageTrack();
   if (world.phase === 'done' && world.mode === 'arena') return 'boss';
@@ -835,9 +1101,17 @@ heroSheetsReady.then(() => { for (const k in heroIcons) delete heroIcons[k]; ren
 
 initCompany({ get save() { return save; }, write: () => writeSave(save), fmt, heroIcon, play, unlockAudio,
   onChange: () => { stats = calcStats(); renderTree(); } });
+initCurio({ get save() { return save; }, write: () => writeSave(save), fmt, play, enemyIcon, gearCtx, goDungeon, open: () => randOpen(),
+  onChange: () => { stats = calcStats(); renderTree(); },
+  storeAndShow: items => { const f = storeItems(items.filter(Boolean)); writeSave(save); if (f.length) showLoot(f, () => { companyRefresh(); }); } });
+applyVolumes(save);
+initEpic({ get save() { return save; }, write: () => writeSave(save), fmt, enemyIcon, enemyFrameIcon, enemyFrameCount, stats: () => stats,
+  exportSave: () => exportSave(save), importSave: txt => { const err = importSave(txt); if (!err) location.reload(); return err; },
+  drawHeroIcon: (cg, k) => { cg.imageSmoothingEnabled = false; drawHero(cg, k, 34, 64, 1, 0, 1, HERO_SHEETS[k] ? 2 : 3); },
+  onChange: () => { stats = calcStats(); renderTree(); } });
 gearSheetReady.then(() => renderTree());
 
 // Accès pour les tests automatisés
-window.__game = { world, get save() { return save; }, go, goLair, toAtelier, lairOpen,
+window.__game = { world, get save() { return save; }, go, goLair, goDungeon, toAtelier, lairOpen, travel, openWorld, region: i => { save.region = i; world.zone = curZone(); }, useUlt: k => useUlt(world, k),
   buyable: () => NODES.filter(n => visible(n) && !lockedNow(n) && L(n.id) < capOf(n)).map(n => ({ id: n.id, cost: costOf(n, L(n.id)) })),
   buy: id => buy(NODE[id]) };

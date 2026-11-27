@@ -139,6 +139,21 @@ export const KINDS = {
   egg: { icon: 'egg', stat: 'dmg', per: 4, bonus: ['boss', 0.6], names: ['Œuf de caille', 'Œuf de griffon', 'Œuf de wyverne', 'Œuf de dragon'] },
   potion: { icon: 'potion', stat: 'gold', per: 2, bonus: ['drop', 0.6], names: ['Fiole trouble', 'Potion de chance', 'Élixir du marchand', 'Élixir du roi'] },
 };
+// Trophées : un charme unique lâché par chaque boss la première fois qu'on le bat (légendaire, jamais tiré au hasard)
+export const TROPHY_RARITY = 3;
+const trophy = (icon, name, stat, per, bonus) => ({ icon, stat, per, bonus, trophy: true, names: [name, name, name, name, name] });
+Object.assign(KINDS, {
+  tr_clairiere: trophy('crystal', 'Cœur du Brasier', 'dmg', 6, ['boss', 0.8]),
+  tr_marais: trophy('clover', 'Couronne de nénuphar', 'gold', 3, ['drop', 0.8]),
+  tr_automne: trophy('blade', 'Faux rouillée', 'critDmg', 10, ['crit', 0.8]),
+  tr_gel: trophy('fang', 'Croc du Yéti', 'stun', 8, ['dmg', 0.6]),
+  tr_desert: trophy('shard', 'Dard de cuivre', 'crit', 2, ['critDmg', 0.8]),
+  tr_grotte: trophy('crystal', 'Cœur de géode', 'aoe', 6, ['dmg', 0.6]),
+  tr_lumi: trophy('potion', 'Spore royale', 'goldWisp', 15, ['gold', 0.6]),
+  tr_enfers: trophy('sword', 'Lame ardente', 'dmg', 6, ['rate', 0.6]),
+  tr_ciel: trophy('feather', 'Plume tempête', 'rate', 4, ['range', 0.8]),
+  tr_neant: trophy('rune', 'Fil du sac sans fond', 'time', 0.8, ['tear', 0.8]),
+});
 export const CHARM_KINDS = ['ring', 'feather', 'moon', 'skull', 'eye', 'seal', 'purse', 'satchel', 'hourglass', 'glovecharm',
   'clover', 'candle', 'bell', 'compass', 'rune', 'fang', 'totem', 'tear', 'mask', 'bracelet', 'egg', 'potion'];
 export const SLOTS = [

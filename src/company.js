@@ -1,7 +1,7 @@
 // Onglet Compagnie : équipement des lignées, forge (affinage), réserve et recyclage ; écran « Sers-toi ! ».
 import { HEROES, HERO_ORDER } from './data.js';
 import { TREE_ICONS, treeIcons } from './sprites.js';
-import { RARITIES, GEAR_ICONS, ICON_FALLBACK, WEAPONS, KINDS, CHARM_KINDS, SETS, MYTHS, setOf, setCount, mythText, albumKey, albumBonus, ALBUM_STEP, STAT_TEXT, SLOTS, reserveSize, rerollCost, rerollAlt, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText, itemEffects,
+import { TROPHY_RARITY, RARITIES, GEAR_ICONS, ICON_FALLBACK, WEAPONS, KINDS, CHARM_KINDS, SETS, MYTHS, setOf, setCount, mythText, albumKey, albumBonus, ALBUM_STEP, STAT_TEXT, SLOTS, reserveSize, rerollCost, rerollAlt, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText, itemEffects,
   isBetter, refineCost, refineChance, gearBonus, FORGE_TITLES, forgeTitles, forgeBest, forgeTitleText } from './gear.js';
 
 const $ = id => document.getElementById(id);
@@ -71,7 +71,7 @@ export function initCompany(ctx) {
   C = ctx;
   const tabs = document.querySelector('#atelier .tabs');
   const [tree, book] = tabs.querySelectorAll('.tab');
-  tree.dataset.view = 'tree';
+  tree.dataset.view = 'tree'; tree.id = 'tabTree';
   const comp = h('button', 'tab', 'Compagnie'); comp.type = 'button'; comp.id = 'tabCompany'; comp.dataset.view = 'company';
   comp.append(h('span', 'tabBang', '!'));
   tree.after(comp);
@@ -85,12 +85,15 @@ export function initCompany(ctx) {
   });
   companyRefresh();
 }
+export function showView(v) { show(v); }
 function show(v) {
-  if (v !== 'tree' && !L('armory')) return;
+  if (v !== 'tree' && v !== 'curio' && v !== 'epic' && !L('armory')) return;
   view = v; open = v === 'company';
   $('treeWrap').hidden = v !== 'tree'; $('company').hidden = v !== 'company'; $('album').hidden = v !== 'album';
+  if ($('curio')) $('curio').hidden = v !== 'curio';
+  if ($('epic')) $('epic').hidden = v !== 'epic';
   document.querySelectorAll('#atelier .tabs .tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
-  $('atelier').querySelector('.hintTxt').innerHTML = v === 'company' ? 'Clique un objet pour l\'équiper<br>Survole pour comparer'
+  $('atelier').querySelector('.hintTxt').innerHTML = v === 'curio' ? 'Clique une carte pour l\'équiper<br>Achète avant de partir' : v === 'company' ? 'Clique un objet pour l\'équiper<br>Survole pour comparer'
     : v === 'album' ? 'Trouve des objets en expédition<br>pour remplir l\'album' : 'Clique une compétence pour l\'acheter<br>Glisse pour voir, molette pour zoomer';
   const g = gearOf(C.save);
   if (v === 'company') { g.news = 0; C.write(); }
@@ -107,7 +110,7 @@ export function companyRefresh() {
   const bk = $('tabBook');
   bk.disabled = !on; bk.title = on ? 'Album des objets' : 'Bientôt';
   bk.classList.toggle('bang', on && view !== 'album' && !!(g && g.albumNews > 0));
-  if (!on && view !== 'tree') show('tree');
+  if (!on && view !== 'tree' && view !== 'curio' && view !== 'epic') show('tree');
   if (view === 'album') renderAlbum();
   if (open) render();
 }
@@ -487,6 +490,11 @@ function renderAlbum() {
   };
   for (const k of HERO_ORDER) section(`Armes des ${HEROES[k].plural.toLowerCase()}`, WEAPONS[k].map((m, mi) => ({ icon: m.icon, name: m.names[0], names: m.names, key: i => `w:${k}:${mi}:${i}` })));
   section('Charmes', CHARM_KINDS.map(c => ({ icon: KINDS[c].icon, name: KINDS[c].names[1], names: KINDS[c].names, key: i => `c:${c}:${i}` })));
+  // trophées de boss : un seul exemplaire chacun, légendaire
+  const tsec = h('section', 'aSec'); tsec.append(h('h3', '', 'Trophées de boss'));
+  const tgrid = h('div', 'aRow');
+  for (const c of Object.keys(KINDS).filter(k => KINDS[k].trophy)) tgrid.append(cell({ icon: KINDS[c].icon, rarity: TROPHY_RARITY }, `c:${c}:${TROPHY_RARITY}`, KINDS[c].names[0]));
+  tsec.append(tgrid); box.append(tsec);
   box.append(h('p', 'cHint', 'Bestiaire et événements : bientôt dans le Livre d\'aventure.'));
 }
 

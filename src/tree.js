@@ -8,6 +8,7 @@ export const BRANCHES = {
   depart: ['Départ', '#ffe7a0'], archer: ['Archers', '#ef6f52'], mage: ['Mages de givre', '#7fd0ff'], knight: ['Chevaliers', '#c3cede'],
   bard: ['Bardes', '#f08cc0'], combat: ['Combat', '#ff9a3d'], army: ['Armée', '#5fd6c0'], sac: ['Sac', '#ffcf4a'],
   recolte: ['Récolte', '#86d873'], equip: ['Équipement', '#d9a066'], arcanes: ['Arcanes', '#b48cff'], enfers: ['Enfers', '#ff5e4d'], curio: ['Curiosités', '#e7d3a1'],
+  thief: ['Voleurs', '#9fb4c8'], druid: ['Druides', '#6fd08a'], engineer: ['Ingénieurs', '#e0a040'], alchemist: ['Alchimistes', '#d0f060'], summoner: ['Invocateurs', '#d080ff'],
 };
 export const TREE_LABELS = [['sac', 0, -7.75], ['recolte', -2, -6.75], ['mage', 6, -7.8], ['combat', 2, 4.75], ['archer', 4, 7.8], ['army', 7, 4.75],
   ['knight', -2, 7.8], ['bard', -6, 7.8], ['arcanes', 1, 1], ['enfers', 0.5, 6.75], ['curio', -7.6, -5.75], ['equip', -4, 5.8],
@@ -26,7 +27,12 @@ const RAW = [
  ['mage','archers3',6,0,'Mage de givre','mage','mage','lock',1,'Un mage rejoint la compagnie : éclats de givre en zone qui ralentissent',1,'Remplis le sac jusqu\'au palier Soie'],
  ['mage2','mage',7,0,'Mages ×2','mage','mage','major',1,'Deux mages par expédition',1,'','×2'],
  ['mage3','mage2',8,0,'Mages ×3','mage','mage','major',1,'Trois mages par expédition',1,'','×3'],
- ['heroR','mage3',9,0,'Héros à venir','depart','helmet','lock',1,'Un nouveau héros (plus tard)',0,'Plus tard dans le développement'],
+ ['thief','mage3',9,0,'Voleur','thief','thief','lock',1,'Un voleur rejoint la compagnie : rapide au contact, ses coups font tomber des pièces',0],
+ ['thief2','thief',10,0,'Voleurs ×2','thief','thief','major',1,'Deux voleurs par expédition',0,'','×2'],
+ ['thiefDmg','thief2',11,0,'Dagues empoisonnées','thief','sword','up',8,'+5 % de dégâts des voleurs par niveau',0],
+ ['engineer','thiefDmg',12,0,'Ingénieur','engineer','engineer','lock',1,'Un ingénieur tire des carreaux et pose des tourelles',0],
+ ['engineer2','engineer',13,0,'Ingénieurs ×2','engineer','engineer','major',1,'Deux ingénieurs, deux tourelles de plus',0,'','×2'],
+ ['engineerDmg','engineer2',14,0,'Carreaux d\'acier','engineer','arrow','up',8,'+5 % de dégâts des ingénieurs et tourelles par niveau',0],
  // Ligne des héros, à gauche : chevaliers puis bardes
  ['knight','root',-1,0,'Chevalier','knight','knight','lock',1,'Un chevalier fonce sur les élémentaires et frappe autour de lui',1,'Bats le Brasier primordial une fois'],
  ['knight2','knight',-2,0,'Chevaliers ×2','knight','knight','major',1,'Deux chevaliers par expédition',1,'','×2'],
@@ -34,7 +40,15 @@ const RAW = [
  ['knight3','knightDmg',-4,0,'Chevaliers ×3','knight','knight','major',1,'Trois chevaliers par expédition',1,'','×3'],
  ['bard','knight3',-6,0,'Barde','bard','bard','lock',1,'Un barde fait tirer et frapper plus vite les héros proches',1,'Remplis le sac jusqu\'au palier Céleste'],
  ['bard2','bard',-7,0,'Bardes ×2','bard','bard','major',1,'Deux bardes par expédition',1,'','×2'],
- ['heroL','bard3',-9,0,'Héros à venir','depart','helmet','lock',1,'Un nouveau héros (plus tard)',0,'Plus tard dans le développement'],
+ ['druid','bard3',-9,0,'Druide','druid','druid','lock',1,'Un druide fait jaillir des ronces qui immobilisent',0],
+ ['druid2','druid',-10,0,'Druides ×2','druid','druid','major',1,'Deux druides par expédition',0,'','×2'],
+ ['druidDmg','druid2',-11,0,'Épines','druid','firewisp','up',8,'+5 % de dégâts des druides par niveau',0],
+ ['alchemist','druidDmg',-12,0,'Alchimiste','alchemist','alchemist','lock',1,'Un alchimiste lance des fioles explosives',0],
+ ['alchemist2','alchemist',-13,0,'Alchimistes ×2','alchemist','alchemist','major',1,'Deux alchimistes par expédition',0,'','×2'],
+ ['alchemistDmg','alchemist2',-14,0,'Acide concentré','alchemist','crystal','up',8,'+5 % de dégâts des alchimistes par niveau',0],
+ ['summoner','alchemistDmg',-15,0,'Invocateur','summoner','summoner','lock',1,'Un invocateur appelle des esprits qui explosent',0],
+ ['summoner2','summoner',-16,0,'Invocateurs ×2','summoner','summoner','major',1,'Deux invocateurs par expédition',0,'','×2'],
+ ['summonerDmg','summoner2',-17,0,'Pacte des esprits','summoner','eye','up',8,'+5 % de dégâts des invocateurs par niveau',0],
 
  // Sac : vers le haut depuis le centre
  ['tierCuir','root',0,-1,'Cuir tanné','sac','bag1','major',1,'Deuxième palier du sac, ×1,6',1],
@@ -158,6 +172,13 @@ const RAW = [
  ['evMimic','evGoblin',-5,-5,'Événement : mimique','recolte','e_mimic','unlock',1,'Ajoute la mimique aux événements possibles',1],
  ['evTwo','evMimic',-6,-5,'Deux événements par expédition','recolte','horn','major',1,'Deux événements tirés au sort à chaque expédition au lieu d\'un',0],
  ['evBuried','evTwo',-6,-6,'Événement : trésor enterré','recolte','openbag','unlock',1,'Garde le gant 1 s sur une bosse du sol pour déterrer un trésor',0],
+ ['evWanted','evBuried',-7,-6,'Événement : avis de recherche','recolte','eye','unlock',1,'Un élémentaire marqué porte une prime qui fond chaque seconde',0],
+ ['evLucky','evWanted',-8,-6,'Événement : sac chanceux','recolte','coinclock','unlock',1,'Pendant 6 s, chaque coup fait tomber de l\'or',0],
+ ['evSkyfall','evLucky',-8,-7,'Événement : pluie d\'élémentaires','recolte','horn','unlock',1,'Une horde tombe du ciel près de tes héros et vaut ×2,5',0],
+ ['evRush','evSkyfall',-7,-7,'Événement : ruée dorée','recolte','m_gold','unlock',1,'Une file de feux follets dorés traverse la carte',0],
+ ['evMirage','evRush',-6,-7,'Événement : mirage doré','recolte','glove','unlock',1,'Pendant 8 s, les ennemis vaincus sous le gant valent ×3',0],
+ ['evTreasure','evMirage',-5,-7,'Événement : gobelin des trésors','recolte','e_goblin','unlock',1,'Un gobelin chargé d\'or : chaque coup lui fait perdre des pièces',0],
+ ['evThree','evTreasure',-4,-7,'Trois événements par expédition','recolte','horn','major',1,'Trois événements tirés au sort à chaque expédition',0],
 
  // Assistants qui ramassent à ta place
  ['sprite','quickHand',-5,-2,'Lutin ramasseur','recolte','firewisp','major',1,'Un lutin ramasse l\'or tombé au sol, même hors de l\'écran, et le rapporte au sac',0],
@@ -214,7 +235,7 @@ const RAW = [
 const pct = v => `${Math.round(v * 100)} %`;
 const s_ = (n, one, many) => `${n} ${n > 1 ? many : one}`;
 // Ce qui est déjà jouable : coût, croissance, texte de l'effet au niveau l, conditions.
-// need(ctx) : condition d'un cadenas ; ctx = { maxTier, bossWins }.
+// need(ctx) : condition d'un cadenas ; ctx = { maxTier, bossWins, L, reached (niveau du monde atteint), bosses, zoneTier }.
 const SPEC = {
   root: [0, 1, () => 'Débloqué'],
   arrowDmg: [20, 1.75, l => `Dégâts des archers ×${fmtNum(1 + 0.05 * l)}`],
@@ -277,7 +298,118 @@ const SPEC = {
   chest: [4000, 2.5, l => `Réserve : ${30 + 10 * l} places`],
   charm1: [6000, 1, () => '1 charme par lignée'],
   charm2: [20000, 1, () => '2 charmes par lignée'],
+
+  // Récolte, sac, arcanes, événements (lot B)
+  evBuried: [9000, 1, () => 'Le trésor enterré peut apparaître'],
+  evWanted: [14000, 1, () => 'L\'avis de recherche peut apparaître'],
+  evLucky: [20000, 1, () => 'Le sac chanceux peut arriver'],
+  evSkyfall: [30000, 1, () => 'La pluie d\'élémentaires peut arriver'],
+  evRush: [45000, 1, () => 'La ruée dorée peut arriver'],
+  evMirage: [65000, 1, () => 'Le mirage doré peut arriver'],
+  evTreasure: [90000, 1, () => 'Le gobelin des trésors peut apparaître'],
+  evThree: [150000, 1, () => '3 événements par expédition'],
+  sprite: [8000, 1, () => 'Un lutin ramasse l\'or au sol'],
+  spriteFast: [5000, 2, l => `Lutin +${15 * l} % plus rapide`],
+  magpie: [15000, 1, () => 'Une pie vole des pièces aux élémentaires'],
+  magpieBold: [9000, 2, l => `La pie vole ${1 + l} pièces par passage`],
+  goldHand: [20000, 1, () => 'Gant +25 % et attraction ×2'],
+  magnet: [1500, 2, l => `Les pièces glissent vers le gant (${25 * l} px/s)`],
+  quickHand: [2500, 2, l => `Attraction du gant +${15 * l} %`],
+  downpour: [4000, 2.5, l => `+${s_(l, 'pluie', 'pluies')} de pièces par expédition`],
+  mimic: [6000, 1, () => 'Mimique moins mordante, trésor ×1,5'],
+  fairyFingers: [0, 1, () => 'Pièces de la Déchirure ×2', { need: () => false, cond: 'Secret : survole le sac à l\'instant exact où il se déchire' }],
+  falseBottom: [3000, 2, l => `Surplus sauvé : ${10 + 4 * l} %`],
+  tripleBottom: [25000, 1, () => 'La moitié du surplus perdu retombe à la Déchirure'],
+  deepMouth: [7000, 1, () => 'Le sac aspire aussi gemmes et couronnes'],
+  gems: [15000, 2, l => `Gemmes +${15 * l} %`],
+  crown: [30000, 2.5, l => `${l} % de chance de couronne par ennemi`],
+  suctionWave: [12000, 1, () => 'À chaque palier, tout le butin à l\'écran file au sac'],
+  frozenTime: [10000, 1, () => 'Déchirure +50 % plus longue'],
+  goldHorde: [9000, 2.2, l => `+${s_(l, 'feu follet doré', 'feux follets dorés')} par paquet`],
+  lantern: [3000, 2, l => `Lumière de nuit +${30 * l} %`],
+  furBoots: [6000, 1, () => 'Pleine vitesse dans la neige'],
+  spyglass: [8000, 1, () => 'Butin rare visible sur la mini-carte'],
+
+  // Lignées (lot A)
+  steel: [1200, 2, l => `+${l} dégât de base par flèche`],
+  pierce: [2500, 2.5, l => `Chaque flèche traverse ${s_(l, 'ennemi', 'ennemis')}`],
+  double: [3000, 2, l => `${6 * l} % de chance de tir double`],
+  master: [15000, 1, () => 'Les archers visent l\'ennemi le plus riche'],
+  deluge: [8000, 2, l => `${16 + 4 * l} flèches par Pluie`],
+  bounce: [6000, 2.2, l => `Rebondit sur ${s_(l, 'ennemi', 'ennemis')}`],
+  shards: [2500, 2, l => `${s_(l, 'éclat secondaire', 'éclats secondaires')} par explosion`],
+  archmage: [20000, 1, () => 'Un givre sur trois est doublé'],
+  winter: [10000, 2, l => `Le rayon retire ${10 * l} % des PV restants`],
+  frostNova: [6000, 1, () => 'Nova de givre au contact'],
+  frostLand: [9000, 1, () => 'Le sol gèle à l\'atterrissage des mages'],
+  reinforce: [5000, 2.5, l => `+${s_(l, 'héros', 'héros')} à mi-expédition`],
+  drop: [8000, 1, () => 'Dégâts ×2 pendant 3 s après l\'atterrissage'],
+  ost: [60000, 1, () => '+1 héros de chaque lignée'],
+  shockwave: [12000, 1, () => 'Onde de choc à l\'atterrissage'],
+  shield: [1500, 2, l => `Étourdissements −${25 * l} %`],
+  heavy: [2500, 2, l => `Recul des coups +${30 * l} %`],
+  furious: [6000, 2, l => `Charge +${20 * l} % plus longue`],
+  taunt: [5000, 1, () => 'Les élémentaires proches foncent sur le chevalier'],
+  lament: [3000, 2, l => `Ennemis dans l'aura −${5 * l} % de vitesse`],
+  recall: [8000, 2, l => `Hymne : ${3 + l} s`],
+  encore: [10000, 2.5, l => `Recharge des ultimes −${Math.round((1 - Math.pow(0.9, l)) * 100)} %`],
+  opening: [5000, 1, () => 'Cadence ×2 pendant 3 s au départ'],
+  // Ultimes : l'épreuve est gratuite à accepter (voir TRIALS)
+  rainArrows: [0, 1, () => 'Ultime débloqué (touche E)'],
+  iceRay: [0, 1, () => 'Ultime débloqué (touche R)'],
+  charge: [0, 1, () => 'Ultime débloqué (touche T)'],
+  hymn: [0, 1, () => 'Ultime débloqué (touche Y)'],
+  // Changements de classe
+  archerFork: [30000, 1, () => 'Les archers fusionnent (puissance ×1,5)', { need: c => c.bossWins >= 2, cond: 'Bats le Brasier primordial 2 fois' }],
+  mageFork: [60000, 1, () => 'Les mages fusionnent (puissance ×1,5)', { need: c => c.bossWins >= 3 && c.L('mage3') > 0, cond: 'Bats le Brasier primordial 3 fois et recrute 3 mages' }],
+  knightFork: [40000, 1, () => 'Les chevaliers fusionnent (puissance ×1,5)', { need: c => c.maxTier >= 2 && c.L('knight3') > 0, cond: 'Remplis le sac jusqu\'au palier Soie et recrute 3 chevaliers' }],
+  looks: [20000, 1, () => 'Garde-robe ouverte (onglet Épopée)'],
+  // Lot E : les 5 nouveaux héros
+  thief: [30000, 1, () => '1 voleur par expédition', { need: c => c.reached >= 3, cond: 'Bats la Reine des crapauds (Marais brumeux)' }],
+  thief2: [90000, 1, () => '2 voleurs par expédition'],
+  thiefDmg: [20000, 1.8, l => `Dégâts des voleurs ×${fmtNum(1 + 0.05 * l)}`],
+  druid: [60000, 1, () => '1 druide par expédition', { need: c => c.reached >= 5, cond: 'Bats l\'Épouvantail géant (Bois d\'automne)' }],
+  druid2: [180000, 1, () => '2 druides par expédition'],
+  druidDmg: [40000, 1.8, l => `Dégâts des druides ×${fmtNum(1 + 0.05 * l)}`],
+  engineer: [250000, 1, () => '1 ingénieur par expédition', { need: c => c.reached >= 9, cond: 'Bats le Scorpion de cuivre (Désert de cuivre)' }],
+  engineer2: [750000, 1, () => '2 ingénieurs, 4 tourelles'],
+  engineerDmg: [150000, 1.8, l => `Dégâts des ingénieurs ×${fmtNum(1 + 0.05 * l)}`],
+  alchemist: [1e6, 1, () => '1 alchimiste par expédition', { need: c => c.reached >= 13, cond: 'Bats le Champignon-roi (Forêt luminescente)' }],
+  alchemist2: [3e6, 1, () => '2 alchimistes par expédition'],
+  alchemistDmg: [6e5, 1.8, l => `Dégâts des alchimistes ×${fmtNum(1 + 0.05 * l)}`],
+  summoner: [4e6, 1, () => '1 invocateur par expédition', { need: c => (c.bosses.enfers || 0) > 0, cond: 'Bats le Seigneur des Enfers' }],
+  summoner2: [1.2e7, 1, () => '2 invocateurs par expédition'],
+  summonerDmg: [2.5e6, 1.8, l => `Dégâts des invocateurs ×${fmtNum(1 + 0.05 * l)}`],
+  // Lot D : curiosités
+  cabinet: [6000, 1, () => 'Les ennemis lâchent parfois des cartes (onglet Curiosités)'],
+  slot: [15000, 3, l => `${1 + l} cartes équipées`],
+  slot2: [30000, 1, () => 'Les doublons ajoutent une étoile (5 au plus)'],
+  shop: [10000, 1, () => 'Boutique ouverte (onglet Curiosités)'],
+  shelf: [12000, 2.5, l => `${3 + l} articles en boutique`],
+  relics: [40000, 1, () => 'Relique mystère en boutique (25 éclats)'],
+  quests: [25000, 1, () => '1 quête active'],
+  quest2: [60000, 3, l => `${1 + l} quêtes actives`],
+  dungeon: [50000, 1, () => 'Les quêtes peuvent donner des clés de donjon'],
+  // Lot C : le monde
+  portal: [20000, 1, () => 'Les Enfers sont accessibles sur la carte du monde', { need: c => c.reached >= 14, cond: 'Atteins les Enfers sur la carte du monde (bats le boss des Champignons II)' }],
+  demonBane: [25000, 2, l => `Dégâts aux démons +${10 * l} %`],
+  demonLord: [60000, 1, () => 'Antre du Seigneur des Enfers ouverte', { need: c => (c.zoneTier.enfers || 0) >= 3, cond: 'Remplis le sac jusqu\'au palier Céleste aux Enfers' }],
+  embers: [30000, 2, l => `Butin aux Enfers +${10 * l} %`],
+  pact: [80000, 1, () => 'Un chien des Enfers t\'accompagne'],
+  elite: [15000, 1, () => 'Élites : 3 % des ennemis, PV ×6, butin ×5'],
+  tierDemon: [150000, 1, () => 'Palier cuir de démon ×6', { need: c => (c.bosses.enfers || 0) > 0, cond: 'Bats le Seigneur des Enfers' }],
+  tierVoid: [2000000, 1, () => 'Palier étoffe du néant ×10', { need: c => c.reached >= 18, cond: 'Atteins le Néant sur la carte du monde' }],
+  bardFork: [80000, 1, () => 'Les bardes fusionnent (puissance ×1,5)', { need: c => c.maxTier >= 3 && c.L('bard3') > 0, cond: 'Remplis le sac jusqu\'au palier Céleste et recrute 3 bardes' }],
 };
+// Voies de classe : on n'en prend qu'une par fourche.
+const PAIRS = [['arA', 'arB'], ['arA1', 'arA2'], ['arB1', 'arB2'], ['maA', 'maB'], ['maA1', 'maA2'], ['maB1', 'maB2'],
+  ['knA', 'knB'], ['knA1', 'knA2'], ['knB1', 'knB2'], ['baA', 'baB'], ['baA1', 'baA2'], ['baB1', 'baB2']];
+for (const [a, b] of PAIRS) for (const [me, other] of [[a, b], [b, a]]) {
+  const r3 = me.length === 4;
+  SPEC[me] = [r3 ? 250000 : 50000, 1, () => (r3 ? 'Rang 3 · ' : 'Rang 2 · ') + 'puissance ×' + (r3 ? '2,2' : '1,5'),
+    { need: c => !c.L(other), cond: 'Tu as déjà choisi l\'autre voie à cette fourche' }];
+}
+export const CLASS_PAIRS = PAIRS;
 // Descriptions réécrites pour coller à l'effet réel.
 const DESC = {
   archers2: 'Deux fois plus d\'archers largués à chaque expédition.',
@@ -285,9 +417,26 @@ const DESC = {
   hunter: 'Les événements (pluie, filon, gobelin, mimique) rapportent davantage.',
   sandglass: 'Chaque expédition dure un peu plus longtemps.',
   heavyCoins: 'Tout le butin des élémentaires vaut un peu plus.',
-  steel: 'Les flèches font plus mal (à venir).',
+  frozenTime: 'Le temps s\'étire pendant la Déchirure : elle dure 50 % plus longtemps.',
+  furBoots: 'Dans la neige, les héros marchent à pleine vitesse (sans bottes, ils avancent 20 % moins vite).',
+  steel: '+1 dégât de base à chaque flèche, par niveau (multiplié par tous les bonus).',
+  drop: 'Les héros arrivent prêts au combat : ils frappent deux fois plus fort pendant 3 s après l\'atterrissage.',
+  knA1: 'Rang 3 : toutes les 3 s, un coup de bouclier repousse et blesse tout ce qui l\'entoure.',
+  knA: 'Rang 2 : les héros proches du paladin ne peuvent plus être étourdis.',
+  taunt: 'Les élémentaires proches foncent sur le chevalier : ils se groupent sous ses coups.',
+  rainArrows: 'Ultime : une volée de flèches s\'abat sur le groupe visé.',
+  iceRay: 'Ultime : un rayon gèle et blesse toute une ligne d\'ennemis.',
+  charge: 'Ultime : les chevaliers foncent et renversent tout sur leur passage.',
+  hymn: 'Ultime : tous les héros tirent deux fois plus vite pendant 3 s.',
   armory: 'Débloque la Compagnie : chaque lignée de héros reçoit un emplacement d\'arme, et les ennemis lâchent parfois des besaces d\'équipement.',
   refine: 'À la forge, affine l\'emplacement d\'une lignée : son objet devient plus fort. Le bonus reste si tu changes d\'objet.',
+  cabinet: 'Ouvre l\'onglet Curiosités. Chaque créature a sa carte : elles tombent rarement des ennemis (plus souvent des élites et des boss) et donnent un petit bonus une fois équipées.',
+  shop: 'Le vieux crapaud ouvre boutique : avant chaque expédition, achète une potion ou un appât qui ne dure qu\'une expédition.',
+  quests: 'Des quêtes à remplir pendant les expéditions, contre des éclats, des cartes, des besaces ou des clés de donjon.',
+  dungeon: 'Une clé de donjon = une tentative de 2 minutes contre un gardien au gros butin (2 besaces, une carte, des éclats).',
+  portal: 'Le chemin de la carte du monde passe par les Enfers : ce portail les ouvre. Les démons y valent plus, mais tapent fort.',
+  elite: 'Des élites apparaissent dans les hordes : plus grosses, six fois plus de PV, cinq fois plus de butin.',
+  tierVoid: 'Dernier palier : le sac n\'a presque plus de fond, ×10.',
   recycle: 'Recycle les objets en trop contre des éclats, nécessaires aux affinages avancés.',
 };
 
@@ -298,7 +447,7 @@ export const NODES = RAW.map(([id, parent, x, y, name, branch, icon, type, max, 
     id, parent, x, y, name, branch, icon, type, max: Math.max(1, max), desc: DESC[id] || desc, badge: badge || '',
     soon: !sp, cond: o.cond || (sp ? '' : cond || ''), need: o.need, cap: o.cap, capMsg: o.capMsg,
     cost: sp ? sp[0] : 0, growth: sp ? sp[1] : 1, effect: sp ? sp[2] : () => desc,
-    tier: { tierCuir: 1, tierSoie: 2, tierCeleste: 3 }[id] || 0,
+    tier: { tierCuir: 1, tierSoie: 2, tierCeleste: 3, tierDemon: 4, tierVoid: 5 }[id] || 0,
   };
 });
 export const NODE = Object.fromEntries(NODES.map(n => [n.id, n]));
