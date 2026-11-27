@@ -146,8 +146,8 @@ export function drawEnemy(g, e, t, px = 3) {
   // boss dessiné : 4 images de repos, puis 4 de coup de poing quand il frappe
   // planche de boss à 12 images : repos ×4, attaque ×4, blessé ×2, endormi ×2 (il se réveille en arrivant dans l'antre)
   if (drawn && e.boss && frames.length >= 8) {
-    const F = frames, wake = F.length >= 12 && !e.fake && (e.age || 0) < 1.6;
-    frames = wake ? ((e.age || 0) < 1.1 ? [F[10], F[11]] : [F[8], F[9]]) : F.length >= 12 && e.hp <= 0 ? [F[8], F[9]] : e.atk > 0 ? F.slice(4, 8) : F.slice(0, 4);
+    const F = frames, sleepy = !e.woke && e.home, wake = F.length >= 12 && !e.fake && (sleepy || (e.age || 0) - (e.wokeAt || 1.1) < 0.5);
+    frames = wake ? (sleepy ? [F[10], F[11]] : [F[8], F[9]]) : F.length >= 12 && e.hp <= 0 ? [F[8], F[9]] : e.atk > 0 ? F.slice(4, 8) : F.slice(0, 4);
   }
   const f = drawn && e.boss && e.atk > 0 && frames.length >= 4 ? frames[Math.min(3, Math.floor((1 - e.atk / 0.7) * 4))] : e.type === 'mimic' ? (frames.length >= 6 ? (e.awake ? frames[2 + Math.floor(e.ph * 4) % 4] : frames[Math.floor(e.ph * 0.9) % 2]) : frames[e.awake ? 1 : 0]) : frames[Math.floor(e.ph * (e.type === 'goblin' ? 4 : e.type === 'vein' ? 2 : 0.9)) % frames.length];
   // le boss est frappé sans arrêt : un bref éclair seulement, sinon il resterait blanc
@@ -260,6 +260,17 @@ function edgeArrows(g, world, t, camX, camY) {
 let heroTints = {};
 const tintSheets = new Map();
 export function setHeroTints(m) { heroTints = m || {}; }
+// Classes : planche propre à la classe choisie (ex. arA1 = Œil-de-faucon), sinon celle de sa voie (arA), sinon le héros de base.
+let heroSkins = {};
+export function setHeroSkins(cls) { heroSkins = cls || {}; }
+function sheetOf(type) {
+  const S = SPR.sheets; if (!S) return null;
+  const c = heroSkins[type];
+  const ok = id => S[id] && S[id].img.idle && S[id].img.idle.naturalWidth;
+  if (c && ok(c)) return S[c];
+  if (c && c.length > 3 && ok(c.slice(0, 3))) return S[c.slice(0, 3)];
+  return S[type] || null;
+}
 function tintOf(src, color) {
   if (!color) return src;
   let byCol = tintSheets.get(src);
@@ -271,11 +282,29 @@ function tintOf(src, color) {
   return (byCol[color] = c);
 }
 
+function drawChest(g, c, t) {
+  const x = Math.round(c.x), y = Math.round(c.y);
+  if (!c.open) {
+    g.fillStyle = 'rgba(60,40,24,.45)'; g.beginPath(); g.ellipse(x, y + 4, 16, 6, 0, 0, 7); g.fill();
+    g.fillStyle = 'rgba(120,84,48,.55)'; g.fillRect(x - 8, y - 2, 16, 6);
+    const ph = (t * 0.7 + (c.x % 7) / 7) % 2.5;
+    if (ph < 0.35) { const a = 1 - ph / 0.35; g.fillStyle = `rgba(255,240,170,${a})`; g.fillRect(x + 3, y - 10, 2, 8); g.fillRect(x, y - 7, 8, 2); }
+    return;
+  }
+  if (c.t > 4) return;
+  g.globalAlpha = Math.min(1, 4 - c.t);
+  g.fillStyle = '#24161e'; g.fillRect(x - 11, y - 9, 22, 14);
+  g.fillStyle = '#8a5a2e'; g.fillRect(x - 10, y - 4, 20, 8);
+  g.fillStyle = '#5a3418'; g.fillRect(x - 10, y - 16, 20, 6);
+  g.fillStyle = '#ffd246'; g.fillRect(x - 8, y - 8, 16, 3); g.fillRect(x - 2, y - 3, 4, 3);
+  g.globalAlpha = 1;
+}
+
 // Héros : pieds posés en (x, y), regard vers la droite si face = 1.
 // pose = { anim, k } pour les héros qui ont une planche dessinée (sinon ancien sprite à 2 images).
 export function drawHero(g, type, x, y, face, bob, alpha = 1, px = 3, pose = null) {
   const tint = heroTints[type];
-  const sheet = SPR.sheets && SPR.sheets[type];
+  const sheet = sheetOf(type);
   const anim = pose ? pose.anim : 'idle';
   if (sheet && sheet.img[anim] && sheet.img[anim].complete && sheet.img[anim].naturalWidth) {
     const [cw, ch] = sheet.cell, n = sheet.anims[anim];
@@ -302,7 +331,7 @@ export function drawHero(g, type, x, y, face, bob, alpha = 1, px = 3, pose = nul
 // Le tir est découpé en deux : on bande l'arc pendant la fin du temps de recharge,
 // puis la flèche part (images 3 à 5) au moment exact où le jeu la crée.
 function heroPose(world, u, t) {
-  const sheet = SPR.sheets && SPR.sheets[u.type];
+  const sheet = sheetOf(u.type);
   if (!sheet) return null;
   if (u.stun > 0) return { anim: 'hurt', k: t * sheet.fps.hurt };
   if (u.drop > 0) return { anim: 'idle', k: 0 };
@@ -548,6 +577,7 @@ export function render(g, world, dpr) {
       g.restore();
       continue;
     }
+    if (k.kind === 'dagger') continue;
     if (k.kind === 'phoenix') {
       g.fillStyle = '#ff7a3c'; g.beginPath(); g.arc(k.x, k.y, 10, 0, 7); g.fill();
       g.fillStyle = '#fff0b0'; g.beginPath(); g.arc(k.x, k.y, 5, 0, 7); g.fill();
@@ -557,6 +587,8 @@ export function render(g, world, dpr) {
     g.strokeStyle = 'rgba(36,22,30,.6)'; g.lineWidth = 2; g.beginPath(); g.ellipse(k.x, k.y, k.r * (0.4 + q), k.r * 0.5 * (0.4 + q), 0, 0, 7); g.stroke();
     if (q < 0.5) { const yy = k.y - q * 400; g.strokeStyle = '#5a3a1a'; g.lineWidth = 2; g.beginPath(); g.moveTo(k.x, yy); g.lineTo(k.x, yy - 14); g.stroke(); g.fillStyle = '#d8d8d8'; g.fillRect(k.x - 1, yy, 3, 3); }
   }
+  // coffres cachés : une petite bosse qui scintille de temps en temps, ouverte quand on passe dessus
+  if (world.mode === 'map') for (const c of (world.run && world.run.chests) || []) drawChest(g, c, t);
   for (const d of world.deaths || []) drawDeath(g, d, t, px);
   for (const e of world.enemies) drawEnemy(g, e, t, px);
   for (const q of world.particles) {

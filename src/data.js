@@ -209,6 +209,12 @@ export const ULTS = {
   mage: { id: 'iceRay', name: 'Rayon de glace', key: 'KeyR', label: 'R' },
   knight: { id: 'charge', name: 'Charge', key: 'KeyT', label: 'T' },
   bard: { id: 'hymn', name: 'Hymne héroïque', key: 'KeyY', label: 'Y' },
+  // nouveaux héros : achetés directement dans l'arbre (pas d'épreuve)
+  thief: { id: 'thiefUlt', name: 'Razzia', key: 'KeyU', label: 'U' },
+  druid: { id: 'druidUlt', name: 'Forêt vivante', key: 'KeyI', label: 'I' },
+  engineer: { id: 'engineerUlt', name: 'Barrage d\'artillerie', key: 'KeyO', label: 'O' },
+  alchemist: { id: 'alchemistUlt', name: 'Grand chaudron', key: 'KeyP', label: 'P' },
+  summoner: { id: 'summonerUlt', name: 'Légion spectrale', key: 'KeyJ', label: 'J' },
 };
 // Épreuves : stat comptée pendant une expédition (voir run.cnt dans game.js) et objectif.
 export const TRIALS = {
@@ -222,6 +228,26 @@ export const ULT_CD = 30;   // s de recharge d'un ultime
 export const FORKS = { archer: 'archerFork', mage: 'mageFork', knight: 'knightFork', bard: 'bardFork' };
 export const CLASS_LINE = { ar: 'archer', ma: 'mage', kn: 'knight', ba: 'bard' };
 export const MERGE_MULT = [1, 1, 1.5, 2.2];   // multiplicateur de puissance par rang (×nombre d'exemplaires fusionnés)
+
+// Maîtrise des régions (nœud « Maîtrise ») : une région dont le boss de niveau II est battu
+// donne un bonus permanent partout. [stat, valeur, texte] ; stat par héros (dmg, crit…) ou de compagnie.
+export const MASTERY = {
+  clairiere: ['dmg', 5, 'Dégâts +5 %'], marais: ['gold', 5, 'Butin +5 %'], automne: ['critDmg', 10, 'Dégâts critiques +10 %'],
+  gel: ['stun', 10, 'Étourdissements −10 %'], desert: ['crit', 2, 'Critique +2 %'], grotte: ['aoe', 6, 'Zones d\'effet +6 %'],
+  lumi: ['goldWisp', 15, 'Feux follets dorés +15 %'], enfers: ['boss', 10, 'Dégâts aux boss +10 %'], ciel: ['rate', 4, 'Cadence +4 %'],
+  neant: ['time', 3, '+3 s par expédition'],
+};
+export const mastered = save => Object.keys(MASTERY).filter(id => ((save.bosses || {})[id + '2'] || 0) > 0);
+export function masteryBonus(save, out) {
+  if (!(save.level.mastery > 0)) return out;
+  const k = 1 + 0.25 * (save.level.masteryUp || 0);
+  for (const id of mastered(save)) {
+    const [st, v] = MASTERY[id];
+    if (typeof out[st] === 'object') for (const h of HERO_ORDER) out[st][h] = (out[st][h] || 0) + v * k;
+    else out[st] = (out[st] || 0) + v * k;
+  }
+  return out;
+}
 
 // Taille d'une région, en pixels d'écran (environ 3 × 3 écrans d'ordinateur).
 export const MAP = { w: 2700, h: 1800 };
@@ -288,13 +314,22 @@ export function computeStats(level, gb = null) {
   // nouveaux héros : un exemplaire, deux avec le nœud ×2, dégâts +5 % par niveau
   const nd = {}, ncd = {};
   for (const k of NEW_HEROES) {
-    heroes[k] = L(k) + L(k + '2') + (has('ost') && L(k) ? 1 : 0);
+    heroes[k] = L(k) + L(k + '2') + L(k + '3') + (has('ost') && L(k) ? 1 : 0);
     nd[k] = HEROES[k].damage * (1 + 0.05 * L(k + 'Dmg')) * all;
-    ncd[k] = HEROES[k].cooldown / conductor;
+    ncd[k] = HEROES[k].cooldown * Math.pow(0.97, L(k + 'Rate')) / conductor;
   }
   return {
     rank, cls, has: Object.fromEntries(['arA', 'arB', 'arA1', 'arA2', 'arB1', 'arB2', 'maA', 'maB', 'maA1', 'maA2', 'maB1', 'maB2', 'knA', 'knB', 'knA1', 'knA2', 'knB1', 'knB2', 'baA', 'baB', 'baA1', 'baA2', 'baB1', 'baB2'].map(id => [id, C(id)])),
-    ults: Object.fromEntries(HERO_ORDER.map(k => [k, has(ULTS[k].id) && base[k] > 0])),
+    ults: Object.fromEntries(ALL_HEROES.map(k => [k, has(ULTS[k].id) && (NEW_HEROES.includes(k) ? heroes[k] : base[k]) > 0])),
+    ultPow: Object.fromEntries(NEW_HEROES.map(k => [k, 1 + 0.3 * L(k + 'Ult2')])),
+    // pouvoirs des nouveaux héros
+    steal: 1 + 0.25 * L('thiefPow'), stealValue: 1 + 0.3 * L('thiefPow'), thorns: L('druidPow'),
+    turretDouble: L('engineerPow') > 0, turretDmg: 1 + 0.2 * L('engineerPow'), acid: L('alchemistPow'), spirits: 1 + L('summonerPow'),
+    // chasse aux boss
+    bossNap: 1.5 * L('bossNap'), rageAt: has('lateRage') ? 0.2 : 0.33, lootTime: 3 * L('lairLoot'), bossGold: 1 + 0.2 * L('bossGold'),
+    // cartographie, maîtrise, élites
+    carto: has('carto'), fullMap: has('fullMap'), chests: L('chests'), daily: has('daily'), masteryHome: 0.1 * L('masteryHome'),
+    eliteChance: 0.03 + 0.015 * L('eliteMore'), eliteLoot: has('eliteLoot'),
     ultCd: ULT_CD * Math.pow(0.9, L('encore')),
     rainN: 16 + 4 * L('deluge'), winter: 0.1 * L('winter'), chargeLen: 260 * (1 + 0.2 * L('furious')), hymnTime: 3 + L('recall'),
     pierce: L('pierce') + (C('arA2') ? 99 : 0), doubleShot: 0.06 * L('double'), master: has('master') || C('arB2'),
@@ -318,7 +353,7 @@ export function computeStats(level, gb = null) {
       archer: HEROES.archer.cooldown * Math.pow(0.98, L('arrowRate')) / G('rate', 'archer') / conductor,
       mage: HEROES.mage.cooldown / G('rate', 'mage') / conductor, knight: HEROES.knight.cooldown / G('rate', 'knight') / conductor, bard: HEROES.bard.cooldown / G('rate', 'bard') / conductor, ...ncd,
     },
-    turrets: 2 + L('engineer2') * 2,
+    turrets: 2 + L('engineer2') * 2 + L('engineer3') * 2,
     critMultBy: { archer: G('critDmg', 'archer'), mage: G('critDmg', 'mage'), knight: G('critDmg', 'knight'), bard: G('critDmg', 'bard') },
     dropMult: 1 + ((gb && gb.drop) || 0) / 100,
     critBy: { archer: (G('crit', 'archer') - 1) + (C('arA1') ? 0.15 : 0), mage: (G('crit', 'mage') - 1), knight: (G('crit', 'knight') - 1), bard: (G('crit', 'bard') - 1) },

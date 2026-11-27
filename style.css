@@ -848,3 +848,9 @@ button[disabled] { cursor: var(--cur) !important; }
 .epJournal { padding: 8px 12px; background: #202a1a; border: 2px solid #3c4830; border-radius: 3px; font: 400 14px var(--body); color: var(--ink); max-width: 760px; }
 .epJournal b { font-weight: 400; color: #e7d3a1; }
 .epJournal ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* Maîtrise des régions (frise de l'Épopée) */
+.epReg .epMast { display: block; font-style: normal; font-size: 11px; opacity: .55; margin-top: 2px; }
+.epReg .epMast.ok { opacity: 1; color: #ffd27a; }
+/* Cartographe : choix du paysage */
+#layoutPick { display: block; margin-top: 6px; font: inherit; font-size: 13px; background: #2a2030; color: #f4ead2; border: 2px solid #120c14; padding: 4px 6px; margin-right: 8px; }

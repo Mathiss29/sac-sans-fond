@@ -1,10 +1,10 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, LEVELS, levelZone, ENEMIES, stageFor, TIERS, HEROES, HERO_ORDER, ALL_HEROES, ARENA, ULTS, TRIALS, computeStats, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { ZONES, LEVELS, levelZone, ENEMIES, stageFor, TIERS, HEROES, HERO_ORDER, ALL_HEROES, ARENA, ULTS, TRIALS, computeStats, masteryBonus, mastered, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave, exportSave, importSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
-import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
-import { setHeroTints, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
+import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos, LAYOUTS, LAYOUT_NAMES, dailyLayout } from './game.js';
+import { setHeroTints, setHeroSkins, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
@@ -24,8 +24,9 @@ const heroIcons = {};   // icônes des héros (refaites quand la tenue change)
 function calcStats() {
   setHeroTints(heroTints(save));
   for (const k in heroIcons) delete heroIcons[k];
-  const s = computeStats(save.level, curioBonus(save, gearBonus(save.gear, save.level)));
+  const s = computeStats(save.level, curioBonus(save, masteryBonus(save, gearBonus(save.gear, save.level))));
   s.eventCount += extraEvents(save);
+  setHeroSkins(s.cls);
   return s;
 }
 let stats = calcStats();
@@ -231,7 +232,9 @@ function go() { wipe(goNow); }
 function goNow() {
   $('phase').hidden = true;
   stats = calcStats(); world.gearCtx = gearCtx();
-  const z = curZone(); startExpedition(world, stats, z, lairInfo(), stageFor(save.expeditions, z));
+  const z = curZone();
+  stats.layoutPick = save.layoutPick; stats.masteredHere = mastered(save).includes(String(z.id).replace(/2$/, ''));
+  startExpedition(world, stats, z, lairInfo(), stageFor(save.expeditions, z));
   showRunUi();
 }
 function goLair() {
@@ -591,7 +594,7 @@ function hud() {
 let ultSig = '';
 function ultHud(r) {
   const box = $('ultBar');
-  const types = HERO_ORDER.filter(k => stats.ults && stats.ults[k]);
+  const types = ALL_HEROES.filter(k => stats.ults && stats.ults[k]);
   const trials = Object.keys(save.trials || {}).filter(id => !L(id));
   box.hidden = world.phase !== 'expedition' || (!types.length && !trials.length);
   if (box.hidden) return;
@@ -694,7 +697,23 @@ function nodeIcon(n) {
   return c;
 }
 
+// Cartographe : choix du paysage à côté du bouton d'expédition (★ = paysage du jour)
+function layoutUi() {
+  let sel = $('layoutPick');
+  if (!L('carto')) { if (sel) sel.remove(); return; }
+  if (!sel) {
+    sel = document.createElement('select'); sel.id = 'layoutPick'; sel.title = 'Paysage de la prochaine expédition';
+    sel.onchange = () => { save.layoutPick = sel.value || null; writeSave(save); };
+    document.querySelector('.footLeft').append(sel);
+  }
+  const day = L('daily') ? dailyLayout() : null;
+  const opts = [['', 'Paysage au hasard'], ...LAYOUTS.map(k => [k, LAYOUT_NAMES[k].replace('Carte : ', '') + (k === day ? ' ★ +30 %' : '')])];
+  const sig = opts.map(o => o[1]).join();
+  if (sel.dataset.sig !== sig) { sel.dataset.sig = sig; sel.innerHTML = ''; for (const [v, t] of opts) sel.append(Object.assign(document.createElement('option'), { value: v, textContent: t })); }
+  sel.value = save.layoutPick || '';
+}
 function renderTree() {
+  layoutUi();
   $('atelierWallet').textContent = fmt(save.coins);
   const lb = $('lairBtn'), open = lairOpen();
   lb.disabled = !open;
@@ -924,7 +943,7 @@ const held = new Set();
 const playing = () => world.phase === 'expedition' || world.phase === 'tear';
 window.addEventListener('keydown', e => {
   if (CAM_KEYS[e.code] && playing()) { held.add(e.code); e.preventDefault(); }
-  for (const k of HERO_ORDER) if (e.code === ULTS[k].key && world.phase === 'expedition') useUlt(world, k);
+  for (const k of ALL_HEROES) if (e.code === ULTS[k].key && world.phase === 'expedition') useUlt(world, k);
   const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
   if (m && world.phase === 'expedition') {
     const type = ALL_HEROES.filter(k => stats.heroes[k] > 0)[+m[1] - 1];
@@ -970,6 +989,11 @@ function drawMinimap() {
     const pulse = 5 + 2 * Math.sin(performance.now() / 200);
     for (const e of world.enemies) if (e.gold || e.event) { mg.strokeStyle = e.event ? '#ff5a5a' : '#ffe14a'; mg.lineWidth = 1.5; mg.strokeRect(e.x * k - pulse / 2, e.y * k - pulse / 2, pulse, pulse); }
     for (const m of (world.run && world.run.mounds) || []) dot(m.x, m.y, 5, '#c9a06a');
+  }
+  // Carte annotée : coffres cachés (fermés) et créatures d'événement
+  if (stats.fullMap) {
+    for (const c of (world.run && world.run.chests) || []) if (!c.open) { dot(c.x, c.y, 6, '#24161e'); dot(c.x, c.y, 4, '#ffd246'); }
+    for (const e of world.enemies) if (e.event) dot(e.x, e.y, 5, '#ff5a5a');
   }
   for (const h of (world.run && world.run.helpers) || []) dot(h.x, h.y, 3, h.kind === 'sprite' ? '#9bf06b' : h.kind === 'hound' ? '#ff7a3c' : '#e8eef8');
   const b = bagPos(world); dot(b.x, b.y, 6, '#fff2c8');

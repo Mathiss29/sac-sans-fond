@@ -1,5 +1,5 @@
 // Onglet « Épopée » de l'Atelier : ton épopée (chiffres de la partie), bestiaire et garde-robe.
-import { ENEMIES, ZONES, LEVELS, HEROES, ALL_HEROES, COSTUMES, TIERS } from './data.js';
+import { ENEMIES, ZONES, LEVELS, HEROES, ALL_HEROES, COSTUMES, TIERS, MASTERY } from './data.js';
 import { NODES } from './tree.js';
 import { showView } from './company.js';
 import { setVolumes } from './audio.js';
@@ -80,7 +80,9 @@ function renderEpic(body) {
     const d = h('div', 'epReg' + (a ? ' a' : '') + (b ? ' b' : ''));
     d.style.setProperty('--g', z.ground[0]); d.style.setProperty('--bc', z.boss.color || '#ff9a46');
     d.append(h('b', '', z.name), h('span', '', (a ? '♛' : '·') + ' ' + (b ? '♛' : '·')));
-    d.title = `${z.boss.name} : ${a ? 'vaincu' : 'pas encore'} · niveau II : ${b ? 'vaincu' : 'pas encore'}`;
+    const ms = MASTERY[z.id], on = L('mastery') > 0;
+    if (ms && on) d.append(h('i', 'epMast' + (b ? ' ok' : ''), (b ? '★ ' : '☆ ') + ms[2]));
+    d.title = `${z.boss.name} : ${a ? 'vaincu' : 'pas encore'} · niveau II : ${b ? 'vaincu' : 'pas encore'}` + (ms && on ? ` · maîtrise : ${ms[2]}${b ? ' (acquise)' : ''}` : '');
     fr.append(d);
   }
   body.append(h('h3', '', 'Régions'), fr);
