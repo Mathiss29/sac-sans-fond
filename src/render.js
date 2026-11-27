@@ -684,8 +684,9 @@ export function render(g, world, dpr) {
   g.lineCap = 'round';
   for (const a of world.arrows) {
     const lk = looks[a.type];
-    const len = (a.kind === 'arrow' ? 46 : 26) * (lk ? 1 + 0.15 * lk.r : 1);
-    const col = a.kind === 'fire' ? '255,122,60' : lk ? lk.col : a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
+    const cf = a.cfx || {};
+    const len = (a.kind === 'arrow' ? 46 : 26) * (lk ? 1 + 0.15 * lk.r : 1) * (cf.len || 1);
+    const col = a.kind === 'fire' ? cf.tint || '255,122,60' : lk ? lk.col : cf.tint ? cf.tint : a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
     const tr = g.createLinearGradient(a.x, a.y, a.x - a.dx * len, a.y - a.dy * len);
     tr.addColorStop(0, `rgba(${col},${lk ? 0.9 : 0.75})`); tr.addColorStop(1, `rgba(${col},0)`);
     g.strokeStyle = tr; g.lineWidth = (a.kind === 'arrow' ? 2.5 : 4) + (lk ? 0.5 * lk.r : 0);
@@ -702,10 +703,12 @@ export function render(g, world, dpr) {
       g.fillStyle = '#ff7a3c'; g.fillRect(Math.round(a.x) - px * 1.5, Math.round(a.y) - px * 1.5, px * 3, px * 3);
       g.fillStyle = '#fff0b0'; g.fillRect(Math.round(a.x) - px * 0.5, Math.round(a.y) - px * 0.5, px, px);
     } else if (a.kind === 'note') {
-      g.fillStyle = '#ffe68a'; g.font = `700 ${px * 6}px system-ui, sans-serif`; g.textAlign = 'center'; g.fillText('♪', a.x, a.y + px * 2);
+      const cf = a.cfx || {};
+      g.fillStyle = cf.tint ? `rgb(${cf.tint})` : '#ffe68a'; g.font = `700 ${px * (cf.size || 6)}px system-ui, sans-serif`; g.textAlign = 'center'; g.fillText(cf.glyph || '♪', a.x, a.y + px * 2);
     } else {
-      g.strokeStyle = '#5a3a1a'; g.lineWidth = 2;
-      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * 12, a.y - a.dy * 12); g.stroke();
+      const bolt = a.cfx && a.cfx.bolt;   // Arbalétrier lourd : carreau court et épais
+      g.strokeStyle = bolt ? '#3a2a1a' : '#5a3a1a'; g.lineWidth = bolt ? 3.5 : 2;
+      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * (bolt ? 9 : 12), a.y - a.dy * (bolt ? 9 : 12)); g.stroke();
       const lk = looks[a.type];
       g.fillStyle = lk ? `rgb(${lk.col})` : '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, lk ? 2.2 : 1.6, 0, 7); g.fill();
     }

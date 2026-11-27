@@ -932,3 +932,6 @@ button[disabled] { cursor: var(--cur) !important; }
 .pmChalN { font: 400 12px var(--ui); color: var(--ink); }
 .pmAcc.chal.own .pmChalN { color: #9fe07a; }
 .pmSp.secret { border-color: #6f5f34; box-shadow: 0 0 8px rgba(255, 207, 74, .35); }
+
+/* Bilan : la compagnie en pose de victoire */
+#resParty { display: block; width: 100%; max-width: 480px; height: auto; margin: 2px auto 6px; image-rendering: pixelated; }

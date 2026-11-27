@@ -405,6 +405,7 @@ function finishExpedition() {
   const showResult = () => {
     if (world.phase !== 'done') return;
     $('result').hidden = false;
+    partyDance();
     $('back').focus();
     const t0 = performance.now(), el = $('resTotal');
     let lastTick = 0;
@@ -598,6 +599,27 @@ function hud() {
   const boss = r.boss;
   $('bossBar').hidden = !(boss && ar && world.phase === 'expedition' && !boss.dead);
   if (boss && !boss.dead) { $('bossName').textContent = boss.def.name; $('bossFill').style.width = Math.max(0, boss.hp / boss.max * 100) + '%'; }
+}
+
+// Bilan : la compagnie (une figure par lignée, avec sa tenue de classe) fait sa pose de victoire.
+function partyDance() {
+  const cv = $('resParty'); if (!cv) return;
+  const lines = ALL_HEROES.filter(k => stats.heroes[k] > 0).slice(0, 9);
+  cv.hidden = !lines.length;
+  const x = cv.getContext('2d'), t0 = performance.now();
+  const step = now => {
+    if ($('result').hidden) return;
+    const t = (now - t0) / 1000;
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cv.width, cv.height); x.imageSmoothingEnabled = false;
+    const gap = Math.min(64, cv.width / (lines.length + 1));
+    lines.forEach((k, i) => {
+      const px0 = cv.width / 2 + (i - (lines.length - 1) / 2) * gap;
+      const kk = Math.max(0, t * 6 - i * 0.7);   // ils sautent l'un après l'autre
+      drawHero(x, k, px0, cv.height - 6, -1, 0, 1, 3, { anim: kk > 0 ? 'victory' : 'idle', k: kk });
+    });
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 // Ultimes : un bouton par lignée qui en a un, avec sa jauge ; épreuve en cours affichée dessous.
