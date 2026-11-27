@@ -223,7 +223,20 @@ export const TRIALS = {
   charge: { stat: 'knocked', goal: 100, text: 'Repousse 100 ennemis avec tes chevaliers en une seule expédition' },
   hymn: { stat: 'auraT', goal: 20, text: 'Garde 3 héros dans l\'aura d\'un barde pendant 20 s en une seule expédition' },
 };
-export const ULT_CD = 30;   // s de recharge d'un ultime
+export const ULT_CD = 30;
+// Ultimes de classe : une voie (rang 2) change l'ultime de sa lignée, une fois l'épreuve faite
+// (lancer l'ultime CLASS_ULT_GOAL fois avec cette voie). Le rang 3 de la voie le rend 50 % plus fort.
+export const CLASS_ULT_GOAL = 8;
+export const CLASS_ULTS = {
+  arA: ['Volée en éventail', 'Trois volées de plus tombent autour de la cible'],
+  arB: ['Champ de pièges', 'Six pièges à ronces immobilisent la zone'],
+  maA: ['Blizzard', 'Une tempête de neige ralentit et blesse toute la zone pendant 5 s'],
+  maB: ['Envol du phénix', 'Un phénix géant traverse tout l\'écran en brûlant tout'],
+  knA: ['Rempart sacré', 'Chaque chevalier repousse et blesse tout autour de lui'],
+  knB: ['Furie', 'Les chevaliers frappent deux fois plus fort pendant 6 s'],
+  baA: ['Grand concert', 'L\'Hymne dure 3 s de plus'],
+  baB: ['Tonnerre des tambours', '12 éclairs frappent les ennemis autour de la cible'],
+};   // s de recharge d'un ultime
 // Changement de classe : le nœud de fourche fusionne les exemplaires d'une lignée.
 export const FORKS = { archer: 'archerFork', mage: 'mageFork', knight: 'knightFork', bard: 'bardFork' };
 export const CLASS_LINE = { ar: 'archer', ma: 'mage', kn: 'knight', ba: 'bard' };
@@ -318,13 +331,19 @@ export function computeStats(level, gb = null) {
     nd[k] = HEROES[k].damage * (1 + 0.05 * L(k + 'Dmg')) * all;
     ncd[k] = HEROES[k].cooldown * Math.pow(0.97, L(k + 'Rate')) / conductor;
   }
+  // voies des nouveaux héros (rang 2)
+  if (C('drB')) { nd.druid *= 1.6; ncd.druid /= 1.2; }
+  if (C('alB')) nd.alchemist *= 1.4;
+  for (const [k, id] of [['thief', 'th'], ['druid', 'dr'], ['engineer', 'en'], ['alchemist', 'al'], ['summoner', 'su']]) cls[k] = [id + 'A', id + 'B'].find(has) || null;
   return {
     rank, cls, has: Object.fromEntries(['arA', 'arB', 'arA1', 'arA2', 'arB1', 'arB2', 'maA', 'maB', 'maA1', 'maA2', 'maB1', 'maB2', 'knA', 'knB', 'knA1', 'knA2', 'knB1', 'knB2', 'baA', 'baB', 'baA1', 'baA2', 'baB1', 'baB2'].map(id => [id, C(id)])),
     ults: Object.fromEntries(ALL_HEROES.map(k => [k, has(ULTS[k].id) && (NEW_HEROES.includes(k) ? heroes[k] : base[k]) > 0])),
     ultPow: Object.fromEntries(NEW_HEROES.map(k => [k, 1 + 0.3 * L(k + 'Ult2')])),
     // pouvoirs des nouveaux héros
-    steal: 1 + 0.25 * L('thiefPow'), stealValue: 1 + 0.3 * L('thiefPow'), thorns: L('druidPow'),
-    turretDouble: L('engineerPow') > 0, turretDmg: 1 + 0.2 * L('engineerPow'), acid: L('alchemistPow'), spirits: 1 + L('summonerPow'),
+    steal: (1 + 0.25 * L('thiefPow')) * (C('thB') ? 2 : 1), stealValue: (1 + 0.3 * L('thiefPow')) * (C('thB') ? 2 : 1), thorns: L('druidPow') + (C('drA') ? 2 : 0),
+    turretDouble: L('engineerPow') > 0, turretDmg: (1 + 0.2 * L('engineerPow')) * (C('enA') ? 1.5 : 1), turretRate: C('enB') ? 1.6 : 1, turretLife: C('enB') ? 40 : 25,
+    acid: L('alchemistPow') + (C('alA') ? 2 : 0), acidPow: C('alA') ? 2 : 1, flaskAoe: C('alB') ? 1.4 : 1,
+    spirits: 1 + L('summonerPow') + (C('suA') ? 2 : 0), spiritPow: C('suB') ? 1.5 : 1,
     // chasse aux boss
     bossNap: 1.5 * L('bossNap'), rageAt: has('lateRage') ? 0.2 : 0.33, lootTime: 3 * L('lairLoot'), bossGold: 1 + 0.2 * L('bossGold'),
     // cartographie, maîtrise, élites
@@ -353,11 +372,11 @@ export function computeStats(level, gb = null) {
       archer: HEROES.archer.cooldown * Math.pow(0.98, L('arrowRate')) / G('rate', 'archer') / conductor,
       mage: HEROES.mage.cooldown / G('rate', 'mage') / conductor, knight: HEROES.knight.cooldown / G('rate', 'knight') / conductor, bard: HEROES.bard.cooldown / G('rate', 'bard') / conductor, ...ncd,
     },
-    turrets: 2 + L('engineer2') * 2 + L('engineer3') * 2,
+    turrets: 2 + L('engineer2') * 2 + L('engineer3') * 2 + (C('enA') ? 2 : 0),
     critMultBy: { archer: G('critDmg', 'archer'), mage: G('critDmg', 'mage'), knight: G('critDmg', 'knight'), bard: G('critDmg', 'bard') },
     dropMult: 1 + ((gb && gb.drop) || 0) / 100,
-    critBy: { archer: (G('crit', 'archer') - 1) + (C('arA1') ? 0.15 : 0), mage: (G('crit', 'mage') - 1), knight: (G('crit', 'knight') - 1), bard: (G('crit', 'bard') - 1) },
-    bossBy: { archer: G('boss', 'archer'), mage: G('boss', 'mage'), knight: G('boss', 'knight') * (C('knB2') ? 2 : 1), bard: G('boss', 'bard') },
+    critBy: { thief: C('thA') ? 0.25 : 0, archer: (G('crit', 'archer') - 1) + (C('arA1') ? 0.15 : 0), mage: (G('crit', 'mage') - 1), knight: (G('crit', 'knight') - 1), bard: (G('crit', 'bard') - 1) },
+    bossBy: { thief: C('thA') ? 1.5 : 1, archer: G('boss', 'archer'), mage: G('boss', 'mage'), knight: G('boss', 'knight') * (C('knB2') ? 2 : 1), bard: G('boss', 'bard') },
     gearOn: L('armory') > 0,
     myths: (gb && gb.myths) || {},
     looks: (gb && gb.looks) || {},
