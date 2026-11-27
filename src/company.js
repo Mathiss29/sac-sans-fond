@@ -1,7 +1,7 @@
 // Onglet Compagnie : équipement des lignées, forge (affinage), réserve et recyclage ; écran « Sers-toi ! ».
 import { HEROES, HERO_ORDER } from './data.js';
 import { TREE_ICONS, treeIcons } from './sprites.js';
-import { RARITIES, GEAR_ICONS, ICON_FALLBACK, WEAPONS, KINDS, CHARM_KINDS, SETS, MYTHS, setOf, setCount, mythText, albumKey, albumBonus, ALBUM_STEP, STAT_TEXT, SLOTS, reserveSize, rerollCost, rerollAlt, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText, itemEffects,
+import { TROPHY_RARITY, RARITIES, GEAR_ICONS, ICON_FALLBACK, WEAPONS, KINDS, CHARM_KINDS, SETS, MYTHS, setOf, setCount, mythText, albumKey, albumBonus, ALBUM_STEP, STAT_TEXT, SLOTS, reserveSize, rerollCost, rerollAlt, REFINE_MAX, CATALOG_SIZE, gearOf, itemName, itemIcon, itemText, itemEffects,
   isBetter, refineCost, refineChance, gearBonus, FORGE_TITLES, forgeTitles, forgeBest, forgeTitleText } from './gear.js';
 
 const $ = id => document.getElementById(id);
@@ -490,6 +490,11 @@ function renderAlbum() {
   };
   for (const k of HERO_ORDER) section(`Armes des ${HEROES[k].plural.toLowerCase()}`, WEAPONS[k].map((m, mi) => ({ icon: m.icon, name: m.names[0], names: m.names, key: i => `w:${k}:${mi}:${i}` })));
   section('Charmes', CHARM_KINDS.map(c => ({ icon: KINDS[c].icon, name: KINDS[c].names[1], names: KINDS[c].names, key: i => `c:${c}:${i}` })));
+  // trophées de boss : un seul exemplaire chacun, légendaire
+  const tsec = h('section', 'aSec'); tsec.append(h('h3', '', 'Trophées de boss'));
+  const tgrid = h('div', 'aRow');
+  for (const c of Object.keys(KINDS).filter(k => KINDS[k].trophy)) tgrid.append(cell({ icon: KINDS[c].icon, rarity: TROPHY_RARITY }, `c:${c}:${TROPHY_RARITY}`, KINDS[c].names[0]));
+  tsec.append(tgrid); box.append(tsec);
   box.append(h('p', 'cHint', 'Bestiaire et événements : bientôt dans le Livre d\'aventure.'));
 }
 

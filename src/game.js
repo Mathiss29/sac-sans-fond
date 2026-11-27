@@ -1,6 +1,6 @@
 // Logique d'une expédition : entités, combat, récolte, sac et Déchirure.
 import { ENEMIES, HEROES, HERO_ORDER, ALL_HEROES, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, ULTS, bagMax, tierOf } from './data.js';
-import { rollItem, RARITIES as GEAR_RARITIES, DROP } from './gear.js';
+import { rollItem, RARITIES as GEAR_RARITIES, DROP, KINDS, TROPHY_RARITY } from './gear.js';
 import { CARD_DROP } from './curio.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -364,8 +364,9 @@ function spawnCopies(world, bo) {
 }
 
 function bossMechanics(world, dt) {
-  const r = world.run, a = r.arena, bo = r.boss, b = world.zone.boss, mech = b.mech || 'fire', fast = b.faster || 1;
+  const r = world.run, a = r.arena, bo = r.boss, b = world.zone.boss, mech = b.mech || 'fire';
   if (!bo || bo.dead) return;
+  const fast = (b.faster || 1) * (bo.rage ? 1.5 : 1);
   // le boss dort à notre arrivée : il se réveille en grondant, puis le combat commence
   if (!bo.woke) {
     if ((bo.age || 0) < 1.1) return;
@@ -381,6 +382,14 @@ function bossMechanics(world, dt) {
   // armure qui repousse
   if (mech === 'armor' && bo.armor <= 0 && bo.armorT > 0) { bo.armorT -= dt; if (bo.armorT <= 0) { bo.armor = bo.armorMax; world.events.push({ kind: 'banner', title: 'L\'armure se reforme', sub: '' }); } }
   const ratio = bo.hp / bo.max;
+  // colère : sous 33 % de vie, le boss rougit et frappe 1,5 fois plus vite
+  if (!bo.rage && ratio <= 0.33) {
+    bo.rage = true; shake(world, 10); sfx(world, 'warn');
+    world.events.push({ kind: 'banner', title: b.name + ' entre en colère !', sub: 'Il frappe plus vite : finis-le !' });
+    world.fx.push({ kind: 'ring', x: bo.x, y: bo.y, r0: bo.r, r1: bo.r * 4, t: 0.7, life: 0.7, color: '#ff3a2a' });
+    burst(world, bo.x, bo.y, 40, ['#ff3a2a', '#ff9a3c', '#ffffff'], 260, 2, 0, 0.8);
+  }
+  if (bo.rage && Math.random() < dt * 14) burst(world, bo.x + rnd(-30, 30), bo.y - rnd(10, 50), 1, ['#ff3a2a', '#ff7a3c'], 40, 2, -60, 0.6);
   // paliers de vie : 66 % et 33 %
   if (a.summoned < b.summonAt.length && ratio <= b.summonAt[a.summoned]) {
     a.summoned++;
@@ -719,6 +728,13 @@ function killEnemy(world, e) {
   if (e.boss) {
     const r = world.run;
     r.bossKilled = true;
+    // trophée : la première fois, chaque boss lâche un objet unique à son image
+    const gc = world.gearCtx, tk = 'tr_' + String(world.zone.id).replace(/2$/, '');
+    if (world.stats.gearOn && gc && KINDS[tk] && !(gc.found || {})['c:' + tk + ':' + TROPHY_RARITY] && !r.trophy) {
+      r.trophy = true;
+      dropPouch(world, e, { kind: tk, rarity: TROPHY_RARITY, power: Math.round(10 * GEAR_RARITIES[TROPHY_RARITY].mult * (1 + 0.2 * (gc.ilvl || 0))), trophy: true }, true);
+      world.events.push({ kind: 'banner', title: 'Trophée : ' + KINDS[tk].names[0], sub: 'Un objet unique, une seule fois par boss' });
+    }
     if (r.arena) { r.arena.won = true; r.arena.loot = ARENA.lootTime; r.attraction = world.stats.attraction; world.hazards = []; for (const m of world.enemies) if (!m.boss && !m.dead) { m.dead = true; burst(world, m.x, m.y, 8, pal, 120, 2, 0, 0.4); } }
     world.events.push({ kind: 'boss', name: e.def.name });
     world.slowT = 1.1; // ralenti au coup de grâce

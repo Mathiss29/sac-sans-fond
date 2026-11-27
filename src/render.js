@@ -74,6 +74,7 @@ function enemyFrames(e) {
   if (e.def && e.def.tint && !own && !(e.boss && key !== 'boss')) frames = tinted(key, e.def.tint, frames);
   if (hardZone && !e.boss && !e.gold && !e.event) frames = hardened(key + (own ? '' : (e.def && e.def.tint) || ''), frames);
   if (e.elite) frames = tinted(key + 'elite' + (hardZone ? 'II' : ''), '#ffd246', frames);
+  if (e.boss && e.rage) frames = tinted(key + 'rage', '#ff2a1a', frames);   // boss en colère : il rougit
   return { key, frames };
 }
 const hardCache = {};
@@ -164,7 +165,7 @@ export function drawEnemy(g, e, t, px = 3) {
   }
   if (e.type === 'wisp' || e.gold || e.boss) {
     const halo = g.createRadialGradient(e.x, e.y + hover, 2, e.x, e.y + hover, w * 0.9);
-    halo.addColorStop(0, e.gold ? 'rgba(255,230,120,.45)' : 'rgba(255,170,80,.35)'); halo.addColorStop(1, 'rgba(255,170,80,0)');
+    halo.addColorStop(0, e.gold ? 'rgba(255,230,120,.45)' : e.rage ? `rgba(255,50,30,${0.4 + 0.15 * Math.sin(t * 8)})` : 'rgba(255,170,80,.35)'); halo.addColorStop(1, 'rgba(255,170,80,0)');
     g.fillStyle = halo; g.beginPath(); g.arc(e.x, e.y + hover, w * 0.9, 0, 7); g.fill();
   }
   if (drawn && !e.boss && Math.cos(e.a) > 0.2) {

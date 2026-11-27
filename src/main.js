@@ -245,7 +245,7 @@ function gearCtx() {
   const g = gearOf(save);
   return { lines: HERO_ORDER.filter(k => stats.heroes[k] > 0), charms: save.level.charm1 > 0,
     ilvl: Math.min(8, (save.maxTier || 0) + Math.min(4, totalWins()) + Math.floor(LV() / 4)), first: !g.firstDone,
-    mythic: winsOf('clairiere') >= 2 || totalWins() >= 3 };
+    mythic: winsOf('clairiere') >= 2 || totalWins() >= 3, found: g.found || {} };
 }
 // Dans l'antre : pas de sac ni de mini-carte ; flèches seulement si la salle dépasse de l'écran.
 function arenaUi() {
