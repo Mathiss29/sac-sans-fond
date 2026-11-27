@@ -298,7 +298,7 @@ export function gearBonus(gear, level) {
       if (!it) continue;
       if (it.myth) out.myths[it.myth] = true;
       if (s.id === 'weapon') out.looks[k] = weaponLook(it);
-      for (const [st, v] of itemEffects(it, (gear.ref[k] || {})[s.id] || 0)) add(st, v, k);
+      for (const [st, v] of itemEffects(it, (gear.ref[k] || {})[s.id] || 0)) add(st, v * (it.trophy ? 1 + 0.25 * (level.trophyRank || 0) : 1), k);
     }
   }
   return out;
