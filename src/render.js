@@ -201,7 +201,17 @@ export function drawEnemy(g, e, t, px = 3) {
       g.fillStyle = i % 2 ? '#aee6ff' : '#f0fbff'; g.fillRect(ix - px + 1, iy - px + 1, px * 3 - 2, px * 3 - 2);
     }
   }
-  if (e.hp < e.max && !e.boss) {
+  if (e.type === 'vein') {
+    // filon : jauge dorée de l'or qu'il lui reste, avec le montant
+    const bw = Math.max(34, w * 0.9), x0 = Math.round(e.x - bw / 2), y = Math.round(e.y - h / 2 + hover - 9), k = Math.max(0, Math.min(1, e.value / (e.total || 1)));
+    g.fillStyle = '#24161e'; g.fillRect(x0 - 1, y - 1, bw + 2, 6);
+    g.fillStyle = '#5a4614'; g.fillRect(x0, y, bw, 4);
+    g.fillStyle = '#ffd246'; g.fillRect(x0, y, Math.round(bw * k), 4);
+    g.fillStyle = '#fff3a8'; g.fillRect(x0, y, Math.round(bw * k), 1);
+    g.font = `700 ${px * 5}px ${UI_FONT}`; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = '#24161e';
+    const txt = veinFmt(e.value); g.strokeText(txt, e.x, y - 4); g.fillStyle = '#ffd246'; g.fillText(txt, e.x, y - 4);
+    g.textAlign = 'start';
+  } else if (e.hp < e.max && !e.boss) {
     const bw = Math.max(18, w * 0.7), y = Math.round(e.y - h / 2 + hover - 7);
     g.fillStyle = '#24161e'; g.fillRect(Math.round(e.x - bw / 2) - 1, y - 1, bw + 2, 5);
     g.fillStyle = '#9be36b'; g.fillRect(Math.round(e.x - bw / 2), y, bw * Math.max(0, e.hp / e.max), 3);
@@ -1012,3 +1022,4 @@ function tinted(key, color, frames) {
   };
   return (tintCache[id] = frames.map(f => ({ ...f, c: tint(f.c), white: f.white })));
 }
+function veinFmt(v) { return v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') + ' M' : v >= 1e4 ? Math.round(v / 1e3) + ' k' : String(Math.round(v)); }

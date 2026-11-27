@@ -10,7 +10,8 @@ import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
 import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
 import { initCurio, curioRefresh } from './curio-ui.js';
-import { initEpic, epicRefresh, recordRun, heroTints, applyVolumes } from './epic-ui.js';
+import { initEpic, epicRefresh, recordRun, heroTints, applyVolumes, VERSION } from './epic-ui.js';
+import { initBugReport, copyReport } from './bugreport.js';
 import { initCompany, gearIconCanvas, showLoot, companyRefresh, gearSheetReady } from './company.js';
 let iconSheet = null;
 treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
@@ -1105,6 +1106,8 @@ initCurio({ get save() { return save; }, write: () => writeSave(save), fmt, play
   onChange: () => { stats = calcStats(); renderTree(); },
   storeAndShow: items => { const f = storeItems(items.filter(Boolean)); writeSave(save); if (f.length) showLoot(f, () => { companyRefresh(); }); } });
 applyVolumes(save);
+initBugReport({ get save() { return save; }, world, fmt, version: VERSION });
+$('bugBtn').addEventListener('click', e => copyReport(e.currentTarget));
 initEpic({ get save() { return save; }, write: () => writeSave(save), fmt, enemyIcon, enemyFrameIcon, enemyFrameCount, stats: () => stats,
   exportSave: () => exportSave(save), importSave: txt => { const err = importSave(txt); if (!err) location.reload(); return err; },
   drawHeroIcon: (cg, k) => { cg.imageSmoothingEnabled = false; drawHero(cg, k, 34, 64, 1, 0, 1, HERO_SHEETS[k] ? 2 : 3); },
