@@ -187,6 +187,8 @@ const RAW = [
  ['spriteFast','sprite',-6,-2,'Lutin pressé','recolte','firewisp','up',5,'+15 % de vitesse du lutin par niveau',0],
  ['magpie','sprite',-5,-3,'Pie voleuse','recolte','eye','major',1,'Une pie vole des pièces aux élémentaires qu\'elle survole',0],
  ['magpieBold','magpie',-6,-3,'Pie hardie','recolte','eye','up',4,'La pie vole +1 pièce par passage et par niveau',0],
+ ['bigNest','magpie',-5,-4,'Grand nid','recolte','p_owl','major',1,'Une place de plus au nid de la Ménagerie : un familier de plus donne son bonus passif',0],
+ ['cozyNest','bigNest',-6,-4,'Nid douillet','recolte','p_ferret','up',2,'Les familiers grandissent 50 % plus vite par niveau',0],
 
  // Curiosités : cartes, boutique, quêtes, donjons
  ['slot2','slot',-7,-3,'Grand album','curio','runebag','unlock',1,'Les doublons de cartes les font monter d\'une étoile',0],
@@ -367,6 +369,8 @@ const SPEC = {
   spriteFast: [5000, 2, l => `Lutin +${15 * l} % plus rapide`],
   magpie: [15000, 1, () => 'Une pie vole des pièces aux élémentaires'],
   magpieBold: [9000, 2, l => `La pie vole ${1 + l} pièces par passage`],
+  bigNest: [25000, 1, () => '3 places au nid de la Ménagerie'],
+  cozyNest: [12000, 2.5, l => `Croissance des familiers ×${String(1 + 0.5 * l).replace('.', ',')}`],
   goldHand: [20000, 1, () => 'Gant +25 % et attraction ×2'],
   magnet: [1500, 2, l => `Les pièces glissent vers le gant (${25 * l} px/s)`],
   quickHand: [2500, 2, l => `Attraction du gant +${15 * l} %`],

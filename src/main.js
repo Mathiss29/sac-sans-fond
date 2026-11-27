@@ -12,6 +12,8 @@ import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests,
 import { initCurio, curioRefresh } from './curio-ui.js';
 import { initEpic, epicRefresh, recordRun, heroTints, applyVolumes, VERSION } from './epic-ui.js';
 import { initBugReport, copyReport } from './bugreport.js';
+import { applyPets, petsOf, petsAfterRun, petSprite } from './pets.js';
+import { initPets, petsRefresh } from './pets-ui.js';
 import { initCompany, gearIconCanvas, showLoot, companyRefresh, gearSheetReady } from './company.js';
 let iconSheet = null;
 treeIcons.then(im => { iconSheet = im; if (im) renderTree(); });
@@ -26,6 +28,7 @@ function calcStats() {
   for (const k in heroIcons) delete heroIcons[k];
   const s = computeStats(save.level, curioBonus(save, masteryBonus(save, gearBonus(save.gear, save.level))));
   s.eventCount += extraEvents(save);
+  applyPets(s, save); s.petsOn = petsOf(save).list.some(p => p.stage > 0);
   s.clsUltCount = save.clsUlt || {};
   s.clsUltOn = Object.fromEntries(Object.entries(s.clsUltCount).map(([v, n]) => [v, n >= CLASS_ULT_GOAL]));
   setHeroSkins(s.cls);
@@ -325,6 +328,9 @@ function finishExpedition() {
   const cardsGot = r.cards && r.cards.length && L('cabinet') ? addCards(save, r.cards, gearOf) : [];
   if (save.curio) { save.curio.active = []; fillQuests(save, randOpen()); }
   const found = storeItems([...(r.items || []), ...extra]);
+  const firstWin = r.bossKilled && !world.zone.dungeon && winsOf(zid) === 1;
+  news.push(...petsAfterRun(save, r, { bossFirst: firstWin, zoneId: zid, hard: /2$/.test(zid), dungeon: !!world.zone.dungeon, zonesOpen: LEVELS.filter((_, i) => levelOpen(i)).map(l => ZONES[l.zone].id) }));
+  stats = calcStats();
   recordRun(save, r, gained);
   for (const [v, n] of Object.entries(r.clsUses || {})) (save.clsUlt = save.clsUlt || {})[v] = (save.clsUlt[v] || 0) + n;
   const trialsDone = checkTrials(r);
@@ -336,6 +342,7 @@ function finishExpedition() {
     if (r.golds) rows.push(['Feux follets dorés', fmt(r.golds), '#ffd246']);
     if (r.eventsGot) rows.push(['Événements réussis', fmt(r.eventsGot), '#7fd0ff']);
   }
+  if (r.dmg && r.dmg.pet > 0 && world.stats.pet) rows.push([world.stats.pet.name + ' (familier)', fmt(Math.round(r.dmg.pet)) + ' dégâts', '#ffb0d8']);
   if (r.boss) {
     rows.push([world.zone.boss.name, r.bossKilled ? 'vaincu !' : `${Math.round((1 - Math.max(0, r.boss.hp) / r.boss.max) * 100)} % de dégâts`, '#ff9f7a']);
     rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got), '#ff9f7a']);
@@ -446,7 +453,7 @@ function toAtelierNow() {
   world.phase = 'idle'; world.run = null; world.heroes = []; world.coins = [];
   stats = calcStats(); world.stats = stats;
   $('result').hidden = true; $('atelier').hidden = false;
-  renderTree(); companyRefresh(); curioRefresh(); epicRefresh();
+  renderTree(); companyRefresh(); curioRefresh(); epicRefresh(); petsRefresh();
   focusCheapest();
 }
 // En revenant au bilan : la vue se pose sur la compétence achetable la moins chère, qui clignote.
@@ -688,6 +695,7 @@ function nodeIcon(n) {
   const c = document.createElement('canvas'); c.width = c.height = 92;
   const ig = c.getContext('2d'); ig.imageSmoothingEnabled = false;
   const key = n.icon || '', ii = TREE_ICONS.indexOf(key);
+  if (key.startsWith('p_')) { const im = petSprite(key.slice(2)), k = Math.floor(64 / Math.max(im.width, im.height)); ig.drawImage(im, Math.round(46 - im.width * k / 2), Math.round(46 - im.height * k / 2), im.width * k, im.height * k); return c; }
   if (key.startsWith('g_')) { const gi = gearIconCanvas(key.slice(2)); if (gi) ig.drawImage(gi, 0, 0, 64, 64, 6, 6, 80, 80); return c; }
   if (iconSheet && ii >= 0) { ig.drawImage(iconSheet, ii * 64, 0, 64, 64, 6, 6, 80, 80); return c; }
   if (HEROES[key]) { drawHero(ig, key, 46, 84, 1, 0, 1, 4); return c; }
@@ -1142,6 +1150,7 @@ initEpic({ get save() { return save; }, write: () => writeSave(save), fmt, enemy
   exportSave: () => exportSave(save), importSave: txt => { const err = importSave(txt); if (!err) location.reload(); return err; },
   drawHeroIcon: (cg, k) => { cg.imageSmoothingEnabled = false; drawHero(cg, k, 34, 64, 1, 0, 1, HERO_SHEETS[k] ? 2 : 3); },
   onChange: () => { stats = calcStats(); renderTree(); } });
+initPets({ get save() { return save; }, write: () => writeSave(save), play, onChange: () => { stats = calcStats(); } });
 gearSheetReady.then(() => renderTree());
 
 // Accès pour les tests automatisés
