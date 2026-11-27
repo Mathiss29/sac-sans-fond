@@ -366,6 +366,13 @@ function spawnCopies(world, bo) {
 function bossMechanics(world, dt) {
   const r = world.run, a = r.arena, bo = r.boss, b = world.zone.boss, mech = b.mech || 'fire', fast = b.faster || 1;
   if (!bo || bo.dead) return;
+  // le boss dort à notre arrivée : il se réveille en grondant, puis le combat commence
+  if (!bo.woke) {
+    if ((bo.age || 0) < 1.1) return;
+    bo.woke = true; shake(world, 12); sfx(world, 'rumble');
+    burst(world, bo.x, bo.y + 24, 34, ['#8a7a6a', '#c8b8a0', '#ffffff'], 220, 2, 0, 0.8);
+    world.texts.push({ x: bo.x, y: bo.y - 80, text: '!', color: '#ff5e4d', size: 30, life: 1.1 });
+  }
   if (bo.stunned > 0) { bo.stunned -= dt; bo.slow = 0.2; }
   // bulle : tombe quand les gardes sont morts
   if (bo.shield && !world.enemies.some(e => e.guard && !e.dead)) { bo.shield = false; world.events.push({ kind: 'banner', title: 'La bulle éclate !', sub: '' }); shake(world, 8); sfx(world, 'burst'); }

@@ -123,7 +123,7 @@ export function enemyFrameIcon(type, k, n = 44) {
   if (def && def.tint && !own) fr = tinted(look, def.tint, fr);
   const f = fr[k % fr.length].c, c = document.createElement('canvas'); c.width = c.height = n;
   const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
-  const s = Math.max(1, Math.round(n / Math.max(f.width, f.height) * 2) / 2);
+  const s = Math.max(1, Math.floor(n / Math.max(f.width, f.height) * 2) / 2);
   x.drawImage(f, Math.round((n - f.width * s) / 2), Math.round((n - f.height * s) / 2), f.width * s, f.height * s);
   return (iconCache[ck] = c);
 }
@@ -145,7 +145,7 @@ export function drawEnemy(g, e, t, px = 3) {
   // boss dessiné : 4 images de repos, puis 4 de coup de poing quand il frappe
   // planche de boss à 12 images : repos ×4, attaque ×4, blessé ×2, endormi ×2 (il se réveille en arrivant dans l'antre)
   if (drawn && e.boss && frames.length >= 8) {
-    const F = frames, wake = F.length >= 12 && (e.age || 0) < 1.6;
+    const F = frames, wake = F.length >= 12 && !e.fake && (e.age || 0) < 1.6;
     frames = wake ? ((e.age || 0) < 1.1 ? [F[10], F[11]] : [F[8], F[9]]) : F.length >= 12 && e.hp <= 0 ? [F[8], F[9]] : e.atk > 0 ? F.slice(4, 8) : F.slice(0, 4);
   }
   const f = drawn && e.boss && e.atk > 0 && frames.length >= 4 ? frames[Math.min(3, Math.floor((1 - e.atk / 0.7) * 4))] : e.type === 'mimic' ? (frames.length >= 6 ? (e.awake ? frames[2 + Math.floor(e.ph * 4) % 4] : frames[Math.floor(e.ph * 0.9) % 2]) : frames[e.awake ? 1 : 0]) : frames[Math.floor(e.ph * (e.type === 'goblin' ? 4 : e.type === 'vein' ? 2 : 0.9)) % frames.length];

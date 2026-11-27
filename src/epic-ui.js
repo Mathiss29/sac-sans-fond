@@ -89,7 +89,7 @@ let anim = [], animTimer = null;
 function animate() {
   if (!anim.length || $('epic').hidden || sub !== 'beasts' || !anim[0].cv.isConnected) { animTimer = null; return; }
   const f = Math.floor(performance.now() / 160);
-  for (const a of anim) { const x = a.cv.getContext('2d'); x.clearRect(0, 0, 44, 44); x.drawImage(C.enemyFrameIcon(a.k, f % a.n), 0, 0); }
+  for (const a of anim) { const x = a.cv.getContext('2d'), z = a.size || 44; x.clearRect(0, 0, z, z); x.drawImage(C.enemyFrameIcon(a.k, a.seq ? a.seq[f % a.seq.length] : f % a.n, z), 0, 0); }
   animTimer = setTimeout(animate, 160);
 }
 function renderBeasts(body) {
@@ -119,6 +119,14 @@ function renderBeasts(body) {
     const n = (b['boss:' + z.id] || 0) + (b['boss:' + z.id + '2'] || 0);
     const d = h('div', 'epBeast boss' + (n ? '' : ' unknown'));
     d.style.setProperty('--bc', z.boss.color || '#ff9a46');
+    // portrait : en boucle (repos puis attaque) une fois vaincu, silhouette endormie avant
+    const look = z.boss.look || 'boss', cv = h('canvas'); cv.width = cv.height = 104;
+    if (C.enemyFrameCount(look) >= 8) {
+      const x = cv.getContext('2d'); x.drawImage(C.enemyFrameIcon(look, n || C.enemyFrameCount(look) < 12 ? 0 : 10, 104), 0, 0);
+      if (n) anim.push({ cv, k: look, size: 104, seq: [0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 6, 7] });
+      else { x.globalCompositeOperation = 'source-in'; x.fillStyle = 'rgba(20,14,24,.85)'; x.fillRect(0, 0, 104, 104); }
+      d.append(cv);
+    }
     d.append(h('b', '', n ? z.boss.name : '???'), h('span', '', n ? `${n} fois · ${z.boss.lair}` : z.name));
     bossGrid.append(d);
   }

@@ -829,6 +829,7 @@ button[disabled] { cursor: var(--cur) !important; }
 .epBeast.unknown { opacity: .5; }
 .epBeast.unknown canvas { filter: brightness(0); }
 .epBeast.boss { grid-template-columns: 1fr; border-left: 6px solid var(--bc); }
+.epBeast.boss canvas { grid-row: auto; width: 88px; height: 88px; justify-self: center; }
 .epLookRow { display: flex; align-items: center; gap: 12px; padding: 6px 10px; background: #202a1a; border: 2px solid #3c4830; border-radius: 3px; }
 .epLookRow canvas { width: 52px; height: 52px; image-rendering: pixelated; }
 .epLookRow > b { width: 110px; font: 400 14px var(--ui); color: #ecebd8; }
