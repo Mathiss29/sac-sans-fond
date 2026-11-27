@@ -245,6 +245,16 @@ const RAW = [
  // Élites : depuis Vétérans
  ['eliteMore','veteran',2,5,'Chasse aux élites','combat','m_golem','up',3,'+1,5 % d\'élites par niveau',0],
  ['eliteLoot','eliteMore',3,5,'Butin couronné','combat','e_mimicOpen','unlock',1,'Les élites lâchent une couronne d\'or, et parfois une besace',0],
+ ['thA','thiefUlt2',10,5,'Assassin','thief','thief','cls',1,'Rang 2 : +25 % de critique, dégâts ×1,5 sur les élites et les boss',0,'Choix : Assassin OU Pickpocket','★★'],
+ ['thB','thiefUlt2',12,5,'Pickpocket','thief','thief','cls',1,'Rang 2 : chipe deux fois plus souvent, et deux fois plus',0,'Choix : Pickpocket OU Assassin','★★'],
+ ['drA','druidUlt2',-12,5,'Gardien des bois','druid','druid','cls',1,'Rang 2 : ronces bien plus larges et plus longues',0,'Choix : Gardien des bois OU Métamorphe','★★'],
+ ['drB','druidUlt2',-10,5,'Métamorphe','druid','druid','cls',1,'Rang 2 : dégâts ×1,6 et cadence +20 %',0,'Choix : Métamorphe OU Gardien des bois','★★'],
+ ['enA','engineerUlt2',13,5,'Artilleur','engineer','engineer','cls',1,'Rang 2 : 2 tourelles de plus, dégâts des tourelles ×1,5',0,'Choix : Artilleur OU Mécanicien','★★'],
+ ['enB','engineerUlt2',15,5,'Mécanicien','engineer','engineer','cls',1,'Rang 2 : tourelles 60 % plus rapides, qui durent 40 s',0,'Choix : Mécanicien OU Artilleur','★★'],
+ ['alA','alchemistUlt2',-15,5,'Empoisonneur','alchemist','alchemist','cls',1,'Rang 2 : flaques acides deux fois plus fortes et plus longues',0,'Choix : Empoisonneur OU Transmutateur','★★'],
+ ['alB','alchemistUlt2',-13,5,'Transmutateur','alchemist','alchemist','cls',1,'Rang 2 : fioles +40 % de zone et de dégâts',0,'Choix : Transmutateur OU Empoisonneur','★★'],
+ ['suA','summonerUlt2',-18,5,'Nécromant','summoner','summoner','cls',1,'Rang 2 : 2 esprits de plus à chaque invocation',0,'Choix : Nécromant OU Lieur d\'âmes','★★'],
+ ['suB','summonerUlt2',-16,5,'Lieur d\'âmes','summoner','summoner','cls',1,'Rang 2 : esprits ×1,5 plus forts et plus larges',0,'Choix : Lieur d\'âmes OU Nécromant','★★'],
  ['cheapTiers','capacity',-1,-2,'Coutures bon marché','sac','needlebag','up',4,'Les paliers du sac coûtent 8 % de moins par niveau',0],
  ['suctionWave','tierSoie',-1,-3,'Vague aspirante','sac','openbag','unlock',1,'À chaque palier rempli, le sac aspire tout le butin à l\'écran',0],
  ['spyglass','furBoots',-1,5,'Longue-vue','arcanes','eye','unlock',1,'La mini-carte montre où sont les ennemis les plus rentables',0],
@@ -490,11 +500,14 @@ const SPEC = {
   bardFork: [80000, 1, () => 'Les bardes fusionnent (puissance ×1,5)', { need: c => c.maxTier >= 3 && c.L('bard3') > 0, cond: 'Remplis le sac jusqu\'au palier Céleste et recrute 3 bardes' }],
 };
 // Voies de classe : on n'en prend qu'une par fourche.
+const NEW_COST = { th: 30000, dr: 60000, en: 250000, al: 1e6, su: 4e6 };
 const PAIRS = [['arA', 'arB'], ['arA1', 'arA2'], ['arB1', 'arB2'], ['maA', 'maB'], ['maA1', 'maA2'], ['maB1', 'maB2'],
-  ['knA', 'knB'], ['knA1', 'knA2'], ['knB1', 'knB2'], ['baA', 'baB'], ['baA1', 'baA2'], ['baB1', 'baB2']];
+  ['knA', 'knB'], ['knA1', 'knA2'], ['knB1', 'knB2'], ['baA', 'baB'], ['baA1', 'baA2'], ['baB1', 'baB2'],
+  ['thA', 'thB'], ['drA', 'drB'], ['enA', 'enB'], ['alA', 'alB'], ['suA', 'suB']];
 for (const [a, b] of PAIRS) for (const [me, other] of [[a, b], [b, a]]) {
   const r3 = me.length === 4;
-  SPEC[me] = [r3 ? 250000 : 50000, 1, () => (r3 ? 'Rang 3 · ' : 'Rang 2 · ') + 'puissance ×' + (r3 ? '2,2' : '1,5'),
+  const nh = NEW_COST[me.slice(0, 2)];
+  SPEC[me] = [nh ? nh * 15 : r3 ? 250000 : 50000, 1, () => nh ? 'Rang 2 · voie choisie' : (r3 ? 'Rang 3 · ' : 'Rang 2 · ') + 'puissance ×' + (r3 ? '2,2' : '1,5'),
     { need: c => !c.L(other), cond: 'Tu as déjà choisi l\'autre voie à cette fourche' }];
 }
 export const CLASS_PAIRS = PAIRS;
