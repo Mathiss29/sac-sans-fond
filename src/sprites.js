@@ -427,10 +427,12 @@ export function loadHeroSheets(base = 'assets/sprites/heros/') {
 // Ils remplacent les anciens sprites dès qu'ils sont chargés. scale : taille par rapport aux sprites maison.
 export const MONSTER_SHEETS = { wisp: [36, 32, 4], gold: [36, 32, 4], golem: [52, 40, 6], wind: [36, 32, 4], boss: [72, 50, 8],
   // créatures d'événement (planches ChatGPT) : mimique = 2 images fermée puis 4 ouverte
-  vein: [38, 30, 4], goblin: [46, 40, 6], mimic: [46, 44, 6] };
+  vein: [38, 30, 4], goblin: [46, 40, 6], mimic: [46, 44, 6],
+  // ennemis des régions (planches ChatGPT converties avec tools/convertir-planche-ennemis.py) : [largeur, hauteur, images, échelle]
+  frog: [32, 24, 4, 0.65], mosquito: [34, 30, 4, 0.65], mudgolem: [38, 31, 4, 0.7] };
 export function loadMonsterSheets(base = 'assets/sprites/monstres/') {
   SPR.enemyScale = SPR.enemyScale || {};
-  return Promise.all(Object.entries(MONSTER_SHEETS).map(([id, [cw, ch, n]]) => new Promise(ok => {
+  return Promise.all(Object.entries(MONSTER_SHEETS).map(([id, [cw, ch, n, scale = 0.5]]) => new Promise(ok => {
     const im = new Image();
     im.onload = () => {
       const frames = [];
@@ -439,7 +441,7 @@ export function loadMonsterSheets(base = 'assets/sprites/monstres/') {
         c.getContext('2d').drawImage(im, k * cw, 0, cw, ch, 0, 0, cw, ch);
         frames.push({ c, white: whiteOf(c) });
       }
-      SPR.enemies[id] = frames; SPR.enemyScale[id] = 0.5;
+      SPR.enemies[id] = frames; SPR.enemyScale[id] = scale;
       ok(true);
     };
     im.onerror = () => ok(false);

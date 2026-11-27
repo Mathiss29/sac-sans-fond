@@ -44,9 +44,9 @@ function shadow(g, x, y, rx, ry) {
 const iconCache = {};
 export function enemyIcon(type) {
   if (iconCache[type]) return iconCache[type];
-  const def = ENEMIES[type], look = (def && def.look) || type;
+  const def = ENEMIES[type], own = !!SPR.enemies[type], look = own ? type : (def && def.look) || type;
   let fr = SPR.enemies[look] || SPR.enemies.wisp;
-  if (def && def.tint) fr = tinted(look, def.tint, fr);
+  if (def && def.tint && !own) fr = tinted(look, def.tint, fr);
   const f = fr[0].c;
   const c = document.createElement('canvas'); c.width = 22; c.height = 22;
   const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
@@ -62,9 +62,11 @@ export function drawEnemy(g, e, t, px = 3) {
     g.save(); g.translate(0, -k * 260); drawEnemy(g, { ...e, fall: 0, hp: e.max }, t, px); g.restore();
     return;
   }
-  const key = e.boss ? (e.def && e.def.look && SPR.enemies[e.def.look] ? e.def.look : 'boss') : e.gold ? 'gold' : (e.def && e.def.look) || e.type;
+  // un ennemi qui a sa propre planche l'utilise telle quelle ; sinon dessin d'origine teinté
+  const own = !e.boss && !e.gold && SPR.enemies[e.type];
+  const key = e.boss ? (e.def && e.def.look && SPR.enemies[e.def.look] ? e.def.look : 'boss') : e.gold ? 'gold' : own ? e.type : (e.def && e.def.look) || e.type;
   let frames = SPR.enemies[key] || SPR.enemies.wisp;
-  if (e.def && e.def.tint) frames = tinted(key, e.def.tint, frames);
+  if (e.def && e.def.tint && !own) frames = tinted(key, e.def.tint, frames);
   if (e.elite) frames = tinted(key + 'elite', '#ffd246', frames);
   if (e.boss && e.dash && e.dash.warn > 0) {   // ruée annoncée : ligne rouge vers la cible
     g.strokeStyle = `rgba(255,70,50,${0.4 + 0.4 * Math.sin(t * 25)})`; g.lineWidth = e.r * 0.9; g.setLineDash([px * 4, px * 3]);
