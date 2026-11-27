@@ -409,6 +409,27 @@ export const HERO_SHEETS = {
   // nouveaux héros : planches ChatGPT converties (tools/convertir-planche-ennemis.py puis assemblées en cellules 60x52)
   thief: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 12, hurt: 6, victory: 6 },
     anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  druid: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  engineer: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  alchemist: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 2 },
+  summoner: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  // classes (même cellule ; une planche absente retombe sur la voie puis sur le héros de base)
+  arA: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  arA1: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  arA2: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  arB: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  arB2: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
+  arB1: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 3 },
 };
 export function loadHeroSheets(base = 'assets/sprites/heros/') {
   SPR.sheets = SPR.sheets || {};

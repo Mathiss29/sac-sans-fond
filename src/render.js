@@ -250,6 +250,17 @@ function edgeArrows(g, world, t, camX, camY) {
 let heroTints = {};
 const tintSheets = new Map();
 export function setHeroTints(m) { heroTints = m || {}; }
+// Classes : planche propre à la classe choisie (ex. arA1 = Œil-de-faucon), sinon celle de sa voie (arA), sinon le héros de base.
+let heroSkins = {};
+export function setHeroSkins(cls) { heroSkins = cls || {}; }
+function sheetOf(type) {
+  const S = SPR.sheets; if (!S) return null;
+  const c = heroSkins[type];
+  const ok = id => S[id] && S[id].img.idle && S[id].img.idle.naturalWidth;
+  if (c && ok(c)) return S[c];
+  if (c && c.length > 3 && ok(c.slice(0, 3))) return S[c.slice(0, 3)];
+  return S[type] || null;
+}
 function tintOf(src, color) {
   if (!color) return src;
   let byCol = tintSheets.get(src);
@@ -265,7 +276,7 @@ function tintOf(src, color) {
 // pose = { anim, k } pour les héros qui ont une planche dessinée (sinon ancien sprite à 2 images).
 export function drawHero(g, type, x, y, face, bob, alpha = 1, px = 3, pose = null) {
   const tint = heroTints[type];
-  const sheet = SPR.sheets && SPR.sheets[type];
+  const sheet = sheetOf(type);
   const anim = pose ? pose.anim : 'idle';
   if (sheet && sheet.img[anim] && sheet.img[anim].complete && sheet.img[anim].naturalWidth) {
     const [cw, ch] = sheet.cell, n = sheet.anims[anim];
@@ -292,7 +303,7 @@ export function drawHero(g, type, x, y, face, bob, alpha = 1, px = 3, pose = nul
 // Le tir est découpé en deux : on bande l'arc pendant la fin du temps de recharge,
 // puis la flèche part (images 3 à 5) au moment exact où le jeu la crée.
 function heroPose(world, u, t) {
-  const sheet = SPR.sheets && SPR.sheets[u.type];
+  const sheet = sheetOf(u.type);
   if (!sheet) return null;
   if (u.stun > 0) return { anim: 'hurt', k: t * sheet.fps.hurt };
   if (u.drop > 0) return { anim: 'idle', k: 0 };

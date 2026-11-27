@@ -4,7 +4,7 @@ import { loadSave, writeSave, freshSave, exportSave, importSave } from './save.j
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
 import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
-import { setHeroTints, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
+import { setHeroTints, setHeroSkins, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
@@ -25,6 +25,7 @@ function calcStats() {
   for (const k in heroIcons) delete heroIcons[k];
   const s = computeStats(save.level, curioBonus(save, gearBonus(save.gear, save.level)));
   s.eventCount += extraEvents(save);
+  setHeroSkins(s.cls);
   return s;
 }
 let stats = calcStats();

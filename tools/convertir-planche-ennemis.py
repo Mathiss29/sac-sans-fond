@@ -3,7 +3,7 @@
 # Planche de boss : un seul nom -> une seule bande (repos ×4, attaque ×4, blessé ×2, endormi ×2).
 # Pour chaque ligne : fond retiré, grille de pixels retrouvée (phase qui minimise la variance des blocs),
 # une couleur par bloc, puis les 4 images posées pieds en bas, centrées, dans des cases de même taille.
-import sys, numpy as np
+import os, sys, numpy as np
 from PIL import Image
 
 src, out, *names = sys.argv[1:]
@@ -46,6 +46,8 @@ for (y0, y1) in rows:
         # (seulement si l'un des deux morceaux est petit : deux images entières proches restent séparées)
         if merged and c[0] - merged[-1][1] < 3 * P and min(c[1] - c[0], merged[-1][1] - merged[-1][0]) < 8 * P: merged[-1] = (merged[-1][0], c[1])
         else: merged.append(c)
+    # héros : les petits morceaux détachés (fiole en vol, étincelle) sont retirés, le jeu dessine ses propres projectiles
+    if os.environ.get('SANS_DETACHES'): merged = [c for c in merged if c[1] - c[0] >= 10 * P]
     line = []
     for (x0, x1) in merged:
         ys = np.where(fg[y0:y1, x0:x1].any(1))[0]
