@@ -939,6 +939,7 @@ export function update(world, dt) {
       if (r.shake <= 0) burstBag(world);
     } else {
       r.tearT -= dt;
+      updatePetTear(world, dt);
       if (r.waves && r.waves.length) { r.waveT += dt; tearWave(world); }
       updateRelics(world, dt);
       const anyFlying = world.coins.some(c => c.fly) || (r.waves && r.waves.length > 0);
@@ -1776,7 +1777,7 @@ function endTear(world) {
 function maybeTreat(world, e) {
   const s = world.stats;
   if (!s.petsOn || e.fake || e.guard) return;
-  const ch = e.boss ? 1 : e.elite ? 0.25 : e.event ? 0.15 : 0.025;
+  const ch = (e.boss ? 1 : e.elite ? 0.25 : e.event ? 0.15 : 0.025) * (s.pet && s.pet.acc === 'straw' ? 1.5 : 1);
   if (Math.random() >= ch) return;
   const sp = speciesOfZone(world.zone.id) || 'ferret', id = SPECIES[sp].treat[0];
   for (let i = 0, n = e.boss ? 3 : 1; i < n; i++) {
@@ -1816,7 +1817,7 @@ function updatePet(world, dt) {
   let h = r.pet;
   if (!h || h.mode !== world.mode) {
     const at = world.mode === 'arena' ? { x: world.mapW / 2 - 60, y: world.mapH * 0.75 } : { x: b.x - 40, y: b.y + 30 };
-    h = r.pet = { kind: 'pet', sp: P.sp, stage: P.stage, gold: P.gold, rar: P.rar, x: at.x, y: at.y, face: 1, t: 0, cd: 3, belly: 0, bellyV: 0, mode: world.mode, swallowed: false };
+    h = r.pet = { kind: 'pet', sp: P.sp, stage: P.stage, gold: P.gold, rar: P.rar, acc: P.acc, x: at.x, y: at.y, face: 1, t: 0, cd: 3, belly: 0, bellyV: 0, mode: world.mode, swallowed: false };
   }
   h.t += dt; h.cd -= dt;
   r.petLight = null;
@@ -1825,7 +1826,7 @@ function updatePet(world, dt) {
   const inLeash = o => !o || leash === Infinity || d2(o, b) < leash * leash;
   // le familier travaille là où le joueur regarde (sinon on ne voit rien de ce qu'il fait)
   const view = o => onScreen(world, o.x, o.y, 120) && inLeash(o);
-  if (world.mode === 'arena') { arenaPet(world, h, dt, pw, S); return; }
+  if (world.mode === 'arena') { arenaPet(world, h, dt, pw * (P.acc === 'horns' ? 1.5 : 1), S); return; }
   switch (S.mode) {
     case 'fetch': {
       if (!h.target || h.target.fly || h.target.dead) { const c = nearestCoin(world, h, 900); h.target = inLeash(c) ? c : null; }
@@ -1985,3 +1986,23 @@ function arenaPet(world, h, dt, pw, S) {
   world.texts.push({ x: h.x, y: h.y - 30, text: txt, color: PET_TXT_COL[S.boss] || '#ffffff', size: 16, life: 1.1 });
 }
 const PET_TXT_COL = { freeze: '#bfe8ff', burn: '#ff9a5a', gold: '#ffd246', cheer: '#d8ff7a', bite: '#ffffff' };
+
+// Pendant la Déchirure, le familier saute partout et attrape lui aussi des pièces.
+function updatePetTear(world, dt) {
+  const r = world.run, P = world.stats.pet;
+  if (!P || !r.pet || world.mode !== 'map') return;
+  const h = r.pet, b = bagPos(world);
+  h.t += dt; h.cd -= dt; r.petLight = null; h.ring = 0;
+  if (!h.tear) { h.tear = true; h.target = null; h.spot = null; h.digging = false; if (h.bellyV) { credit(world, h.bellyV); h.belly = h.bellyV = 0; } }
+  if (!h.target || h.target.fly || h.target.dead) {
+    let best = null, bd = Infinity;
+    for (const c of world.coins) { if (c.fly || c.item || !onScreen(world, c.x, c.y, 0)) continue; const d = d2(c, h); if (d < bd) { bd = d; best = c; } }
+    h.target = best;
+  }
+  if (h.target) {
+    if (petMove(h, h.target.x, h.target.y, 220 + 120 * P.power, dt) < 16) {
+      h.target.fly = true; h.target.sp = 200; h.target = null; h.caught = (h.caught || 0) + 1;
+      if (h.caught % 5 === 0) world.texts.push({ x: h.x, y: h.y - 30, text: 'Attrapé !', color: '#ffb0d8', size: 13, life: 0.6 });
+    }
+  } else petMove(h, b.x - 50, b.y + 40, 120, dt);
+}

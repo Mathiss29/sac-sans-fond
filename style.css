@@ -919,3 +919,13 @@ button[disabled] { cursor: var(--cur) !important; }
 .epCls canvas.noArt { background: repeating-linear-gradient(45deg, rgba(255,255,255,.04) 0 6px, transparent 6px 12px); }
 .epCls b { font-size: 12px; } .epCls span { font-size: 11px; opacity: .7; }
 .epCls .epClsUlt { font-style: normal; font-size: 11px; color: #c8bfa8; } .epCls .epClsUlt.ok { color: #ffd27a; }
+.pmTreat.feast { color: #ffd246; border-color: #6f5f34; }
+.pmAccs { display: flex; flex-direction: column; gap: 6px; }
+.pmAcc { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; align-items: center; padding: 6px 8px; background: #1a2215; border: 2px solid #2c3624; border-radius: 3px; }
+.pmAcc.own { border-color: #6f5f34; }
+.pmAcc canvas { width: 30px; height: auto; image-rendering: pixelated; }
+.pmAccTxt { display: flex; flex-direction: column; font: 400 12px var(--body); color: var(--ink); min-width: 0; }
+.pmAccTxt b { font-weight: 400; color: #ecebd8; font-size: 13px; }
+.pmColl { margin: 0; font: 400 13px var(--body); color: #ffd246; }
+.pmGoals { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
+.pmCol .btn.second.on { border-color: #ffd246; color: #ffd246; }

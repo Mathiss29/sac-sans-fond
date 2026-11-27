@@ -4,7 +4,7 @@ import { TIERS, ENEMIES, bagMax, tierOf } from './data.js';
 const UI_FONT = "'Silkscreen', 'Pixelify Sans', monospace";
 import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos, RARITIES } from './game.js';
 
-import { petSprite, treatSprite, PET_RARITIES, SPECIES } from './pets.js';
+import { petSprite, treatSprite, accSprite, ACCESSORIES, PET_RARITIES, SPECIES } from './pets.js';
 import { buildSprites, loadHeroSheets, loadMonsterSheets, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
 
 const SPR = buildSprites();
@@ -1061,7 +1061,7 @@ function veinFmt(v) { return v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') +
 // Familier actif : sprite, aura de sa rareté, forme dorée qui scintille.
 function drawPet(g, h, t, px, world) {
   const S = SPECIES[h.sp], im = petSprite(h.sp, h.stage, h.gold);
-  const k = h.stage === 2 ? Math.round(px * 1.5) : px * 2, w = im.width * k, hh = im.height * k;
+  const k = h.stage === 2 ? Math.round(px * 1.5) : h.stage >= 4 ? Math.round(px * 2.5) : px * 2, w = im.width * k, hh = im.height * k;
   const fly = S.fly, hop = !fly && h.moving ? (Math.floor(t * 10) % 2 ? -k : 0) : Math.round(Math.sin(t * 3) * 1);
   const x = Math.round(h.x), y = Math.round(h.y + (fly ? -24 + Math.sin(t * 5) * 4 : hop));
   // ombre
@@ -1085,6 +1085,12 @@ function drawPet(g, h, t, px, world) {
   }
   g.save(); g.translate(x, 0); g.scale(h.face || 1, 1);
   g.drawImage(im, Math.round(-w / 2), Math.round(y - hh), w, hh);
+  if (h.acc && ACCESSORIES[h.acc]) {   // accessoire posé sur la tête
+    const a = accSprite(h.acc), ak = Math.max(px, Math.round(k * 0.75)), aw = a.width * ak, ah = a.height * ak;
+    const ay = y - hh - ah + Math.round(ak * (ACCESSORIES[h.acc].float ? -1 + Math.sin(t * 4) : 1.5));
+    g.drawImage(a, Math.round(-aw / 2), Math.round(ay), aw, ah);
+  }
   g.restore();
+  if (h.stage >= 4 && Math.random() < 0.3) world.particles.push({ x: h.x + (Math.random() - 0.5) * w, y: y - Math.random() * hh, vx: 0, vy: -25, grav: 0, life: 0.7, max: 0.7, size: px, color: '#fff6c8' });
   if (h.belly) { g.font = `${10 + px * 2}px ${UI_FONT}`; g.textAlign = 'center'; g.fillStyle = '#24161e'; g.fillText('×' + h.belly, x + 1, y - hh - 3); g.fillStyle = '#ffd246'; g.fillText('×' + h.belly, x, y - hh - 4); }
 }
