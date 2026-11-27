@@ -3,9 +3,11 @@ import { ENEMIES, ZONES, LEVELS, HEROES, ALL_HEROES, COSTUMES, TIERS } from './d
 import { NODES } from './tree.js';
 import { showView } from './company.js';
 import { setVolumes } from './audio.js';
-export const VERSION = '1.0';
+import { copyReport } from './bugreport.js';
+export const VERSION = '1.0.1';
 // Journal des versions, du plus récent au plus ancien.
 const JOURNAL = [
+  ['1.0.1', 'Corrections', ['Les pièces ne tournent plus autour du sac sans y entrer', 'Filons fluides même en fin de partie, avec une jauge de l\'or restant', 'Bouton « 🐞 Bug » : copie un rapport à coller sur Discord']],
   ['1.0', 'Le grand voyage', ['10 régions et 20 niveaux sur une carte du monde (touche M), chacune avec son boss et sa mécanique', 'Ultimes à épreuve (E, R, T, Y) et changements de classe à deux rangs', '5 nouveaux héros : voleur, druide, ingénieur, alchimiste, invocateur', 'Lutin, pie et chien des Enfers ; 7 nouveaux événements', 'Curiosités : cartes de créature, boutique du vieux crapaud, quêtes, donjons', 'Épopée : bilan de la partie, bestiaire, garde-robe, options', 'Sauvegarde exportable, volumes séparés, flèches vers le portail, grande mini-carte (Tab)']],
   ['0.9', 'La forge', ['Compagnie, équipement en 5 raretés, ensembles, forge, album']],
   ['0.8', 'Le rendu', ['Nouveau rendu fidèle, grand arbre en croix, musiques']],
@@ -176,6 +178,10 @@ function renderOpts(body) {
   const msg = h('span', 'cuHint', '');
   im.onclick = () => { const err = C.importSave(ta.value.trim()); if (err) msg.textContent = err; };
   btns.append(ex, im, msg); body.append(ta, btns);
+  body.append(h('h3', '', 'Signaler un bug'));
+  body.append(h('p', 'cuHint', 'Copie un petit rapport (version, appareil, fluidité, partie en cours, dernières erreurs) à coller sur Discord avec ce qui s\'est passé. Rien n\'est envoyé tout seul.'));
+  const bug = h('button', 'btn small', '🐞 Copier le rapport'); bug.type = 'button'; bug.onclick = () => copyReport(bug);
+  const bb = h('div', 'epBtns'); bb.append(bug); body.append(bb);
   body.append(h('h3', '', 'Journal'));
   for (const [v, title, lines] of JOURNAL) {
     const d = h('div', 'epJournal'); d.append(h('b', '', `${v} · ${title}`));
