@@ -2,7 +2,7 @@
 import { showView } from './company.js';
 import { gearOf } from './gear.js';
 import { SPECIES, SPECIES_IDS, TREATS, PET_RARITIES, STAGES, GROW_NEED, ANCIENT, STAR_MAX, AWAKE_COST, ACCESSORIES, ACC_IDS, petsOf, petById, petSprite, treatSprite, accSprite,
-  nestSlots, growthMult, hearts, petPower, nestBonus, feed, caress, releaseShards, starNeed, canAncient, makeAncient, awakeFodder, awaken, toggleScout, buyAcc, wear, collectionBonus } from './pets.js';
+  nestSlots, growthMult, hearts, petPower, nestBonus, feed, caress, releaseShards, starNeed, canAncient, makeAncient, awakeFodder, awaken, toggleScout, buyAcc, wear, collectionBonus, CHALLENGES, checkChallenges, ancientSpecies, NORMAL_SPECIES } from './pets.js';
 
 const $ = id => document.getElementById(id);
 const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
@@ -37,7 +37,11 @@ function pic(pet, size) {
   cv.style.width = cv.width * k + 'px'; cv.style.height = cv.height * k + 'px';
   return cv;
 }
-function change(text = '') { msg = text; C.write(); C.onChange(); render(); }
+function change(text = '') {
+  const done = checkChallenges(C.save);
+  if (done.length) { text = `Défi réussi : ${done.map(c => c.name).join(', ')} ! ${done.map(c => ACCESSORIES[c.acc].name).join(', ')} débloqué.`; C.play('gold'); }
+  msg = text; C.write(); C.onChange(); render();
+}
 function place(uid, where) {
   const p = petsOf(C.save);
   p.nest = p.nest.filter(u => u !== uid); p.scout = p.scout.filter(u => u !== uid);
@@ -96,7 +100,7 @@ function render() {
   const g = gearOf(s);
   col1.append(h('h3', '', `Accessoires · ${g.shards} éclats`));
   const al = h('div', 'pmAccs');
-  for (const id of ACC_IDS) {
+  for (const id of ACC_IDS.filter(a => !ACCESSORIES[a].unique)) {
     const A = ACCESSORIES[id], it = h('div', 'pmAcc' + (p.acc[id] ? ' own' : ''));
     const cv = h('canvas'), im = accSprite(id); cv.width = im.width; cv.height = im.height; cv.getContext('2d').drawImage(im, 0, 0);
     const who = p.list.find(x => x.acc === id);
@@ -110,6 +114,20 @@ function render() {
     al.append(it);
   }
   col1.append(al);
+  // défis : accessoires uniques
+  col1.append(h('h3', '', `Défis · ${CHALLENGES.filter(c => p.acc[c.acc]).length} / ${CHALLENGES.length}`));
+  const dl2 = h('div', 'pmAccs');
+  for (const c of CHALLENGES) {
+    const A = ACCESSORIES[c.acc], won = !!p.acc[c.acc], v = Math.min(c.goal, c.val(p));
+    const it = h('div', 'pmAcc chal' + (won ? ' own' : ''));
+    const cv = h('canvas'), im = accSprite(c.acc); cv.width = im.width; cv.height = im.height; cv.getContext('2d').drawImage(im, 0, 0);
+    if (!won) cv.style.filter = 'brightness(0) opacity(.5)';
+    const who = p.list.find(x => x.acc === c.acc);
+    const txt = h('span', 'pmAccTxt'); txt.append(h('b', '', `${c.name} · ${won ? A.name : '???'}`), h('span', '', won ? A.fx + (who ? ' · porté par ' + petName(who) : '') : c.txt));
+    it.append(cv, txt, h('span', 'pmChalN num', won ? '✓' : `${v} / ${c.goal}`));
+    dl2.append(it);
+  }
+  col1.append(dl2);
 
   // ----- collection -----
   const col2 = h('section', 'cuCol pmCol');
@@ -133,10 +151,12 @@ function render() {
   for (const id of SPECIES_IDS) {
     const d = h('span', 'pmSp' + (p.seen[id] ? '' : ' unknown')), cv = h('canvas'), im = petSprite(id);
     cv.width = im.width; cv.height = im.height; cv.getContext('2d').drawImage(im, 0, 0);
-    d.append(cv); d.title = p.seen[id] ? `${SPECIES[id].name} : ${SPECIES[id].power}` : `??? · son œuf vient du boss de la région ${zoneName(id)}`;
+    d.append(cv); d.title = p.seen[id] ? `${SPECIES[id].name} : ${SPECIES[id].power}` : SPECIES[id].hidden ? `??? · un œuf mystérieux apparaît quand les ${NORMAL_SPECIES} espèces ont eu un Ancien (${ancientSpecies(s)} / ${NORMAL_SPECIES})` : `??? · son œuf vient du boss de la région ${zoneName(id)}`;
+    if (SPECIES[id].hidden && !p.seen[id]) d.classList.add('secret');
     sp.append(d);
   }
   col2.append(sp);
+  if (!p.seen.dragon) col2.append(h('p', 'cuHint', `Une espèce secrète dort au fond du Sac… Anciens : ${ancientSpecies(s)} / ${NORMAL_SPECIES} espèces.`));
 
   // ----- fiche -----
   const col3 = h('section', 'cuCol pmCol pmCard');
@@ -144,7 +164,7 @@ function render() {
   if (pet) fiche(col3, pet, p, s);
   box.append(col1, col2, col3);
 }
-const ZONE_NAMES = { clairiere: 'Clairière', marais: 'Marais brumeux', automne: 'Bois d\'automne', gel: 'Cimes gelées', desert: 'Désert de cuivre', grotte: 'Grottes de cristal', lumi: 'Forêt luminescente', enfers: 'Enfers', ciel: 'Îles célestes', neant: 'Néant' };
+const ZONE_NAMES = { clairiere: 'Clairière', marais: 'Marais brumeux', automne: 'Bois d\'automne', gel: 'Cimes gelées', desert: 'Désert de cuivre', grotte: 'Grottes de cristal', lumi: 'Forêt luminescente', enfers: 'Enfers', ciel: 'Îles célestes', neant: 'Néant', sac: 'Sac du mage' };
 const zoneName = id => ZONE_NAMES[SPECIES[id].zone] || SPECIES[id].zone;
 
 function fiche(col, pet, p, s) {
@@ -190,7 +210,7 @@ function fiche(col, pet, p, s) {
       const x = h('button', 'btn small' + (ok ? '' : ' second'), 'Devenir Ancien'); x.type = 'button'; x.disabled = !ok;
       x.title = ok ? 'Puissance ×1,4, plus grand, et il brille' : `Il faut 5 cœurs (${hearts(pet)}/5) et un festin royal du boss de la région ${zoneName(pet.sp)} (${nf})`;
       x.onclick = () => { if (makeAncient(s, pet)) { C.play('gold'); change(`${petName(pet)} devient un Ancien !`); } };
-      goals.append(x, h('span', 'cuHint', ok ? 'Prêt pour le dernier stade !' : `Ancien : 5 cœurs + festin royal (${nf})`));
+      goals.append(x, h('span', 'cuHint', ok ? 'Prêt pour le dernier stade !' : S.hidden ? 'Ancien : 5 cœurs' : `Ancien : 5 cœurs + festin royal (${nf})`));
     }
     if (pet.rar < PET_RARITIES.length - 1) {
       const fod = awakeFodder(s, pet), ok = fod.length >= AWAKE_COST;

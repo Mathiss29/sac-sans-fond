@@ -63,9 +63,14 @@ export const SPECIES = {
     power: 'Mini-Déchirure : une fois par expédition, avale tout le butin à l\'écran.', bossTxt: 'Bouchée du néant : gros dégâts au boss',
     pal: { '1': '#3a2a5a', '2': '#ffcf4a', '3': '#ff4a5a', e: '#ff4a5a' },
     map: ['....kkkk....', '...k2222k...', '....k22k....', '..kkk22kkk..', '.k11111111k.', 'k1111111111k', 'k11e1111e11k', 'k1111kk1111k', 'k111k33k111k', 'k1111kk1111k', '.k11111111k.', '..kkkkkkkk..'] },
+  // familier caché : son œuf n'apparaît que lorsque les 10 autres espèces ont un Ancien
+  dragon: { name: 'Dragonnet du Sac', zone: 'sac', hidden: true, treat: ['tout', 'Tout ce qu\'on lui donne', '#ffd246'], mode: 'dragon', boss: 'burn', passive: 'gold', fly: true, glow: '#ffcf4a',
+    power: 'Survole la compagnie, crache du feu sur les hordes et attire l\'or autour de lui.', bossTxt: 'Souffle du Sac : brûle le boss très fort',
+    pal: { '1': '#7a5ad0', '2': '#ffcf4a', '3': '#f0c060', e: K, w: '#fff' },
+    map: ['.....k..k.....', '....k2kk2k....', '...k111111k...', '..k1we11we1k..', '..k11111111k..', 'k3kk133331kk3k', 'k33k111111k33k', '.k3k133331k3k.', '..kk111111kk..', '...k1k11k1k.k.', '...kk.kk.kk1k.', '...........kk.'] },
 };
 export const SPECIES_IDS = Object.keys(SPECIES);
-export const TREATS = Object.fromEntries(SPECIES_IDS.map(id => [SPECIES[id].treat[0], { id: SPECIES[id].treat[0], name: SPECIES[id].treat[1], color: SPECIES[id].treat[2], zone: SPECIES[id].zone }]));
+export const TREATS = Object.fromEntries(SPECIES_IDS.filter(id => !SPECIES[id].hidden).map(id => [SPECIES[id].treat[0], { id: SPECIES[id].treat[0], name: SPECIES[id].treat[1], color: SPECIES[id].treat[2], zone: SPECIES[id].zone }]));
 // Accessoires : achetés en éclats, un seul porteur à la fois, dessinés sur la tête du familier.
 export const ACCESSORIES = {
   straw: { name: 'Chapeau de paille', cost: 60, fx: 'Friandises ×1,5 en expédition', pal: { '1': '#e8c060', '2': '#c04040' }, map: ['...kkkk...', '..k1111k..', 'kk122221kk', 'k11111111k', '.kkkkkkkk.'] },
@@ -74,7 +79,32 @@ export const ACCESSORIES = {
   horns: { name: 'Casque à cornes', cost: 120, fx: 'Attaque de boss ×1,5', pal: { '1': '#f0e0c0', '2': '#8a8a9a' }, map: ['k........k', 'k1k....k1k', '.k1kkkk1k.', '..k2222k..', '..kkkkkk..'] },
   crown: { name: 'Couronne', cost: 200, fx: 'Bonus au nid ×1,5', pal: { '1': '#ffd246', '2': '#ff4a5a' }, map: ['k.k.k.k', 'k1k1k1k', 'k11111k', 'k12121k', 'kkkkkkk'] },
   halo: { name: 'Auréole', cost: 200, fx: 'Œufs plus fréquents (+3 %)', float: true, pal: { '1': '#fff6a0' }, map: ['.kkkkkk.', 'k111111k', '.kkkkkk.'] },
+  // accessoires uniques : gagnés par les défis de la Ménagerie
+  scarf: { name: 'Écharpe du voyageur', unique: true, fx: 'Puissance +15 %', pal: { '1': '#e05050', '2': '#f0e0c0' }, map: ['kkkkkkkkk', 'k1212121k', 'kkkkk11k.', '....k12k.', '....kkkk.'] },
+  phoenix: { name: 'Plume de phénix', unique: true, fx: 'Attaque de boss ×2', pal: { '1': '#ff7a3c', '2': '#ffd246' }, map: ['...kk', '..k2k', '.k21k', 'k11k.', 'k1k..', 'kk...'] },
+  spoon: { name: 'Cuillère en or', unique: true, fx: 'Croissance et étoiles ×2', pal: { '1': '#ffd246' }, map: ['.kkk.', 'k111k', 'k111k', '.k1k.', '.k1k.', '.kkk.'] },
+  monocle: { name: 'Monocle du mage', unique: true, fx: 'Bonus au nid ×2', pal: { '1': '#ffd246', '2': '#cfe8ff' }, map: ['.kkk.', 'k222k', 'k212k', 'k222k', '.kkk.', '..k..'] },
+  comet: { name: 'Étoile filante', unique: true, fx: 'Œufs plus fréquents (+5 %)', float: true, pal: { '1': '#fff6a0', '2': '#ffcf4a' }, map: ['..k..', '.k1k.', 'k121k', '.k1k.', '..k..'] },
+  chart: { name: 'Carte au trésor', unique: true, fx: 'Fouilles ×2 friandises', pal: { '1': '#e8d4a0', '2': '#c04040' }, map: ['kkkkkk', 'k1112k', 'k1211k', 'k1111k', 'kkkkkk'] },
 };
+// Défis de la Ménagerie : chacun débloque un accessoire unique.
+export const CHALLENGES = [
+  { id: 'loyal', acc: 'scarf', name: 'Compagnon fidèle', txt: 'Fais 10 expéditions avec le même familier', goal: 10, val: p => Math.max(0, ...p.list.map(x => x.runs || 0)) },
+  { id: 'hunter', acc: 'phoenix', name: 'Chasseur de boss', txt: 'Bats 3 boss avec un familier à tes côtés', goal: 3, val: p => p.stats.bosses || 0 },
+  { id: 'cook', acc: 'spoon', name: 'Grand cuisinier', txt: 'Donne 200 friandises', goal: 200, val: p => p.stats.fed || 0 },
+  { id: 'elders', acc: 'monocle', name: 'Conseil des Anciens', txt: 'Fais passer 3 familiers au stade Ancien', goal: 3, val: p => Object.keys(p.ancients).length },
+  { id: 'myth', acc: 'comet', name: 'Légende vivante', txt: 'Éveille un familier jusqu\'à Mythique', goal: 1, val: p => p.stats.mythic || 0 },
+  { id: 'scout', acc: 'chart', name: 'Grand explorateur', txt: 'Termine 25 fouilles', goal: 25, val: p => p.stats.scouts || 0 },
+];
+// Renvoie les défis qui viennent d'être réussis (et donne leur accessoire).
+export function checkChallenges(save) {
+  const p = petsOf(save), done = [];
+  for (const c of CHALLENGES) if (!p.acc[c.acc] && c.val(p) >= c.goal) { p.acc[c.acc] = 1; p.news++; done.push(c); }
+  return done;
+}
+// Dragonnet : combien d'espèces ont déjà eu un Ancien
+export const ancientSpecies = save => SPECIES_IDS.filter(id => !SPECIES[id].hidden && petsOf(save).ancients[id]).length;
+export const NORMAL_SPECIES = SPECIES_IDS.filter(id => !SPECIES[id].hidden).length;
 export const ACC_IDS = Object.keys(ACCESSORIES);
 export const speciesOfZone = zid => SPECIES_IDS.find(id => SPECIES[id].zone === String(zid).replace(/2$/, '')) || null;
 
@@ -120,10 +150,10 @@ export function petsOf(save) {
   if (!save.pets) save.pets = { list: [], active: null, nest: [], treats: {}, seen: {}, next: 1, news: 0 };
   const p = save.pets;
   p.list = (p.list || []).filter(x => x && SPECIES[x.sp]);
-  p.treats = p.treats || {}; p.seen = p.seen || {}; p.feasts = p.feasts || {}; p.found = p.found || {}; p.acc = p.acc || {}; p.nest = (p.nest || []).filter(u => p.list.some(x => x.uid === u));
+  p.treats = p.treats || {}; p.seen = p.seen || {}; p.feasts = p.feasts || {}; p.found = p.found || {}; p.acc = p.acc || {}; p.stats = p.stats || {}; p.ancients = p.ancients || {}; p.nest = (p.nest || []).filter(u => p.list.some(x => x.uid === u));
   if (p.active && !p.list.some(x => x.uid === p.active)) p.active = null;
   p.scout = (p.scout || []).filter(u => p.nest.includes(u));
-  for (const x of p.list) if (x.stage) { p.found[x.sp + '|' + x.rar] = 1; if (x.gold) p.found['gold|' + x.sp] = 1; }
+  for (const x of p.list) { if (x.stage) { p.found[x.sp + '|' + x.rar] = 1; if (x.gold) p.found['gold|' + x.sp] = 1; } if (x.stage >= 4) p.ancients[x.sp] = 1; }
   return p;
 }
 export const petById = (save, uid) => petsOf(save).list.find(x => x.uid === uid) || null;
@@ -134,10 +164,10 @@ export const hearts = pet => Math.min(5, Math.floor((pet.aff || 0) / HEART_PTS))
 // Puissance d'un familier : stade × rareté × forme dorée × talent (5 cœurs). Un adulte commun vaut 1.
 export function petPower(pet) {
   if (!pet || !pet.stage) return 0;
-  return STAGE_POWER[pet.stage] * (1 + 0.3 * pet.rar) * (pet.gold ? 1.5 : 1) * (hearts(pet) >= 5 ? 1.25 : 1) * (1 + 0.1 * (pet.stars || 0)) * (pet.acc === 'wizard' ? 1.1 : 1);
+  return STAGE_POWER[pet.stage] * (1 + 0.3 * pet.rar) * (pet.gold ? 1.5 : 1) * (hearts(pet) >= 5 ? 1.25 : 1) * (1 + 0.1 * (pet.stars || 0)) * (pet.acc === 'wizard' ? 1.1 : pet.acc === 'scarf' ? 1.15 : 1);
 }
 // bonus passif au nid : 25 % de la valeur du familier (un adulte commun en expédition « vaut » +20 %)
-export const nestBonus = pet => 0.25 * 0.2 * petPower(pet) * (pet.acc === 'crown' ? 1.5 : 1);
+export const nestBonus = pet => 0.25 * 0.2 * petPower(pet) * (pet.acc === 'crown' ? 1.5 : pet.acc === 'monocle' ? 2 : 1);
 // Bonus de collection : +1 % d'or par couple espèce × rareté découvert, +2 % par forme dorée.
 export function collectionBonus(save) { const f = petsOf(save).found; return Object.keys(f).reduce((t, k) => t + (k.startsWith('gold|') ? 0.02 : 0.01), 0); }
 export function markFound(save, pet) { const f = petsOf(save).found; f[pet.sp + '|' + pet.rar] = 1; if (pet.gold) f['gold|' + pet.sp] = 1; }
@@ -183,7 +213,8 @@ export function petsAfterRun(save, r, ctx) {
   const eggs = [];
   for (const uid of p.scout) {
     const pet = petById(save, uid); if (!pet || !pet.stage) continue;
-    const pw = petPower(pet), sp = any(), id = SPECIES[sp].treat[0], n = 2 + Math.round(pw + Math.random() * 2);
+    const pw = petPower(pet), sp = any(), id = SPECIES[sp].treat[0], n = (2 + Math.round(pw + Math.random() * 2)) * (pet.acc === 'chart' ? 2 : 1);
+    p.stats.scouts = (p.stats.scouts || 0) + 1;
     p.treats[id] = (p.treats[id] || 0) + n;
     news.push([`Fouille de ${pet.name || SPECIES[pet.sp].name}`, `${n} × ${TREATS[id].name}`, '#9fe07a']);
     if (Math.random() < Math.min(0.08, 0.03 + 0.01 * pw)) eggs.push([any(), rollRarity(), 'rapporté par ' + (pet.name || SPECIES[pet.sp].name)]);
@@ -191,9 +222,13 @@ export function petsAfterRun(save, r, ctx) {
   // nouveaux œufs : le premier arrive tout seul, puis la Déchirure en lâche parfois, et chaque boss en donne un la première fois
   if (!p.list.length && save.expeditions >= 2) eggs.push(['ferret', 0]);
   if (ctx.bossFirst && zsp) eggs.push([zsp, rollRarity(Math.random, ctx.hard ? 2 : 1)]);
-  const act = petById(save, p.active), halo = act && act.acc === 'halo' ? 0.03 : 0;
+  const act = petById(save, p.active), halo = act && act.acc === 'halo' ? 0.03 : act && act.acc === 'comet' ? 0.05 : 0;
+  if (act && act.stage) { act.runs = (act.runs || 0) + 1; if (r.bossKilled && !ctx.dungeon) p.stats.bosses = (p.stats.bosses || 0) + 1; }
+  // l'œuf du Sac : une seule fois, quand les 10 espèces ont eu un Ancien
+  if (!p.stats.dragonEgg && ancientSpecies(save) >= NORMAL_SPECIES) { p.stats.dragonEgg = 1; eggs.push(['dragon', rollRarity(Math.random, 3), 'l\'Œuf du Sac ! Il éclot après la prochaine expédition']); }
   if (!r.lair.only && !ctx.dungeon && Math.random() < 0.05 + 0.03 * (r.tier || 0) + halo) eggs.push([any(), rollRarity()]);
   for (const [sp, rar, why] of eggs) { addEgg(save, sp, rar); news.push(['Œuf trouvé !', `${PET_RARITIES[rar].name} · ${why || 'éclot après la prochaine expédition'}`, PET_RARITIES[rar].color]); }
+  for (const c of checkChallenges(save)) news.push(['Défi réussi : ' + c.name, ACCESSORIES[c.acc].name + ' débloqué !', '#ffd246']);
   // la caresse se recharge à chaque expédition
   for (const pet of p.list) pet.petted = false;
   return news;
@@ -204,10 +239,10 @@ export function feed(save, pet, treatId, n = 1) {
   const p = petsOf(save);
   n = Math.min(n, p.treats[treatId] || 0);
   if (!pet || !pet.stage || !n || (pet.stage >= 3 && (pet.stars || 0) >= STAR_MAX)) return '';
-  const fav = SPECIES[pet.sp].treat[0] === treatId;
-  p.treats[treatId] -= n;
+  const fav = SPECIES[pet.sp].treat[0] === treatId || SPECIES[pet.sp].treat[0] === 'tout';
+  p.treats[treatId] -= n; p.stats.fed = (p.stats.fed || 0) + n;
   pet.aff = (pet.aff || 0) + n * (fav ? 8 : 4) * (pet.acc === 'bow' ? 2 : 1);
-  pet.food += n * TREAT_FOOD * (fav ? 2 : 1) * growthMult(save);
+  pet.food += n * TREAT_FOOD * (fav ? 2 : 1) * growthMult(save) * (pet.acc === 'spoon' ? 2 : 1);
   let msg = fav ? 'Sa friandise préférée !' : 'Miam !';
   while (pet.stage < 3 && pet.food >= GROW_NEED[pet.stage]) { pet.food -= GROW_NEED[pet.stage]; pet.stage++; msg = `Il grandit : ${STAGES[pet.stage]} !`; }
   while (pet.stage >= 3 && (pet.stars || 0) < STAR_MAX && pet.food >= starNeed(pet.stars || 0)) { pet.food -= starNeed(pet.stars || 0); pet.stars = (pet.stars || 0) + 1; msg = `Nouvelle étoile : ${pet.stars} ★ !`; }
@@ -219,10 +254,10 @@ export function caress(pet) {
   pet.petted = true; pet.aff = (pet.aff || 0) + 10 * (pet.acc === 'bow' ? 2 : 1); return true;
 }
 // Stade Ancien : un adulte à 5 cœurs + un festin royal de sa région.
-export const canAncient = (save, pet) => pet && pet.stage === 3 && hearts(pet) >= 5 && (petsOf(save).feasts[pet.sp] || 0) > 0;
+export const canAncient = (save, pet) => pet && pet.stage === 3 && hearts(pet) >= 5 && (SPECIES[pet.sp].hidden || (petsOf(save).feasts[pet.sp] || 0) > 0);
 export function makeAncient(save, pet) {
   if (!canAncient(save, pet)) return false;
-  petsOf(save).feasts[pet.sp]--; pet.stage = ANCIENT; return true;
+  const p = petsOf(save); if (!SPECIES[pet.sp].hidden) p.feasts[pet.sp]--; pet.stage = ANCIENT; p.ancients[pet.sp] = 1; return true;
 }
 // Éveil : deux doublons de la même espèce (œufs ou familiers, pas ceux qui travaillent) font monter la rareté d'un cran.
 export function awakeFodder(save, pet) {
@@ -234,7 +269,7 @@ export function awaken(save, pet) {
   if (!pet || pet.rar >= PET_RARITIES.length - 1 || fod.length < AWAKE_COST) return false;
   // les accessoires des doublons restent achetés : on peut les remettre à un autre
   p.list = p.list.filter(x => !fod.includes(x));
-  pet.rar++; if (pet.stage) markFound(save, pet); return true;
+  pet.rar++; if (pet.stage) markFound(save, pet); if (pet.rar >= PET_RARITIES.length - 1) p.stats.mythic = 1; return true;
 }
 // Fouille : un familier du nid part fouiller au lieu de donner son bonus.
 export function toggleScout(save, pet) {
@@ -245,7 +280,7 @@ export function toggleScout(save, pet) {
 // Accessoires : achat en éclats, un porteur à la fois.
 export function buyAcc(save, id, shards) {
   const p = petsOf(save);
-  if (p.acc[id] || shards < ACCESSORIES[id].cost) return false;
+  if (p.acc[id] || ACCESSORIES[id].unique || shards < ACCESSORIES[id].cost) return false;
   p.acc[id] = 1; return true;
 }
 export function wear(save, pet, id) {

@@ -929,3 +929,6 @@ button[disabled] { cursor: var(--cur) !important; }
 .pmColl { margin: 0; font: 400 13px var(--body); color: #ffd246; }
 .pmGoals { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
 .pmCol .btn.second.on { border-color: #ffd246; color: #ffd246; }
+.pmChalN { font: 400 12px var(--ui); color: var(--ink); }
+.pmAcc.chal.own .pmChalN { color: #9fe07a; }
+.pmSp.secret { border-color: #6f5f34; box-shadow: 0 0 8px rgba(255, 207, 74, .35); }

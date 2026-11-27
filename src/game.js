@@ -1826,7 +1826,7 @@ function updatePet(world, dt) {
   const inLeash = o => !o || leash === Infinity || d2(o, b) < leash * leash;
   // le familier travaille là où le joueur regarde (sinon on ne voit rien de ce qu'il fait)
   const view = o => onScreen(world, o.x, o.y, 120) && inLeash(o);
-  if (world.mode === 'arena') { arenaPet(world, h, dt, pw * (P.acc === 'horns' ? 1.5 : 1), S); return; }
+  if (world.mode === 'arena') { arenaPet(world, h, dt, pw * (P.acc === 'horns' ? 1.5 : P.acc === 'phoenix' ? 2 : 1), S); return; }
   switch (S.mode) {
     case 'fetch': {
       if (!h.target || h.target.fly || h.target.dead) { const c = nearestCoin(world, h, 900); h.target = inLeash(c) ? c : null; }
@@ -1949,6 +1949,25 @@ function updatePet(world, dt) {
         world.texts.push({ x: h.x, y: h.y - 30, text: 'Pluie d\'étoiles !', color: '#ffb0e8', size: 15, life: 1.1 });
         burst(world, h.x, h.y, 16, ['#ffb0e8', '#fff5b4', '#ffffff'], 140, 2, 0, 0.6);
       }
+      break;
+    }
+    case 'dragon': {   // dragonnet du Sac : survole la compagnie, crache du feu sur la horde la plus proche, attire l'or
+      const hs = world.heroes.filter(u => u.drop <= 0);
+      const f = hs.length ? hs[Math.floor(h.t / 6) % hs.length] : home;
+      if (!h.target || h.target.dead) h.target = nearestEnemy(world, h);
+      const tg = h.target && view(h.target) ? h.target : null;
+      petMove(h, tg ? tg.x - 70 * (h.face || 1) : f.x + 30, tg ? tg.y - 20 : f.y - 30, 200, dt);
+      if (tg && h.cd <= 0 && d2(h, tg) < 160 * 160) {
+        h.cd = 2.2;
+        const dmg = (s.archerBase || s.damage.archer) * 3 * pw;
+        for (const e of world.enemies) if (!e.dead && !e.boss && d2(e, tg) < 90 * 90) { e.burn = Math.max(e.burn || 0, 2); e.burnDps = Math.max(e.burnDps || 0, dmg * 0.3); damage(world, e, dmg, 0, h, 'pet'); }
+        const dx = tg.x - h.x, dy = tg.y - h.y, n = 18;
+        for (let i = 0; i < n; i++) { const k = i / n; burst(world, h.x + dx * k, h.y - 24 + dy * k, 1, ['#ff5a2a', '#ffb040', '#fff0b0'], 50, 2, 0, 0.45); }
+        world.fx.push({ kind: 'ring', x: tg.x, y: tg.y, r0: 10, r1: 90, t: 0.35, life: 0.35, color: '#ff9a3c' });
+        shake(world, 3);
+      }
+      const R = 80 + 20 * pw;
+      for (const c of world.coins) if (!c.fly && !c.air && !c.item && d2(c, h) < R * R) { c.fly = true; c.sp = 120; }
       break;
     }
     case 'swallow': {   // Petit Sac : une fois par expédition, avale tout le butin à l'écran
