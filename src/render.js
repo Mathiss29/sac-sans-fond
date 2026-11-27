@@ -55,6 +55,80 @@ export function enemyIcon(type) {
   return (iconCache[type] = c);
 }
 
+// Petite couronne d'élite posée au-dessus de la tête.
+const CROWN = ['O.O.O.O', 'OyOyOyO', 'OyyryyO', 'OyyyyyO', 'OOOOOOO'];
+function drawCrown(g, x, y, px) {
+  const c = { O: '#24161e', y: '#ffd246', r: '#e0505a' }, s = Math.max(2, Math.round(px * 0.8));
+  for (let j = 0; j < CROWN.length; j++) for (let i = 0; i < 7; i++) {
+    const ch = CROWN[j][i]; if (ch === '.') continue;
+    g.fillStyle = c[ch]; g.fillRect(x + (i - 3.5) * s, y + (j - 5) * s, s, s);
+  }
+}
+
+// Images d'un ennemi : sa planche, ou le dessin d'origine teinté ; variante sombre aux yeux rouges en niveau II.
+let hardZone = false;
+function enemyFrames(e) {
+  const own = !e.boss && !e.gold && SPR.enemies[e.type];
+  const key = e.boss ? (e.def && e.def.look && SPR.enemies[e.def.look] ? e.def.look : 'boss') : e.gold ? 'gold' : own ? e.type : (e.def && e.def.look) || e.type;
+  let frames = SPR.enemies[key] || SPR.enemies.wisp;
+  if (e.def && e.def.tint && !own) frames = tinted(key, e.def.tint, frames);
+  if (hardZone && !e.boss && !e.gold && !e.event) frames = hardened(key + (own ? '' : (e.def && e.def.tint) || ''), frames);
+  if (e.elite) frames = tinted(key + 'elite' + (hardZone ? 'II' : ''), '#ffd246', frames);
+  return { key, frames };
+}
+const hardCache = {};
+function hardened(id, frames) {
+  if (hardCache[id]) return hardCache[id];
+  const conv = im => {
+    const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+    const x = c.getContext('2d'); x.drawImage(im, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height), p = d.data;
+    for (let i = 0; i < p.length; i += 4) {
+      if (!p[i + 3]) continue;
+      const r = p[i], gg = p[i + 1], b = p[i + 2];
+      // yeux jaunes ou clairs → rouge vif ; le reste s'assombrit et tire vers le violet
+      if (r > 170 && gg > 120 && b < 120 && r - b > 90) { p[i] = 255; p[i + 1] = 50; p[i + 2] = 40; continue; }
+      p[i] = r * 0.62 + 18; p[i + 1] = gg * 0.55 + 6; p[i + 2] = b * 0.62 + 26;
+    }
+    x.putImageData(d, 0, 0);
+    return c;
+  };
+  return (hardCache[id] = frames.map(f => ({ ...f, c: conv(f.c), white: f.white })));
+}
+// Mort d'un ennemi : il s'écrase et s'efface ; les volants tombent, les autres laissent une flaque.
+function drawDeath(g, d, t, px) {
+  const k = 1 - d.t / d.life, { key, frames } = enemyFrames(d), drawn = SPR.enemyScale && SPR.enemyScale[key];
+  const img = frames[Math.floor(d.ph * 0.9) % frames.length].c, sc = px * (drawn || 1), w = img.width * sc, h = img.height * sc;
+  const fly = d.def && (d.def.role === 'fast' || d.type === 'wisp');
+  g.save();
+  if (!fly) {   // flaque de la couleur de la créature
+    g.globalAlpha = 0.45 * (1 - k * k); g.fillStyle = (d.def && d.def.color) || '#6a5a4a';
+    g.beginPath(); g.ellipse(d.x, d.y + h * 0.42, w * 0.35 * (0.6 + k * 0.6), px * 2.2 * (0.6 + k * 0.6), 0, 0, 7); g.fill();
+  }
+  g.globalAlpha = 1 - k;
+  const fall = fly ? k * k * 40 : 0, sq = fly ? 1 : 1 - k * 0.7;
+  g.translate(Math.round(d.x), Math.round(d.y + h * 0.5 + fall));
+  if (fly) g.rotate(d.face * k * 1.6);
+  g.scale((drawn && d.face > 0 ? -1 : 1) * (1 + (fly ? 0 : k * 0.25)), sq);
+  g.drawImage(img, Math.round(-w / 2), Math.round(-h), w, h);
+  g.restore();
+}
+
+// Image k d'un ennemi pour l'interface (bestiaire animé), dans un carré de taille n.
+export function enemyFrameIcon(type, k, n = 44) {
+  const ck = `${type}#${k % enemyFrameCount(type)}#${n}`;
+  if (iconCache[ck]) return iconCache[ck];
+  const def = ENEMIES[type], own = !!SPR.enemies[type], look = own ? type : (def && def.look) || type;
+  let fr = SPR.enemies[look] || SPR.enemies.wisp;
+  if (def && def.tint && !own) fr = tinted(look, def.tint, fr);
+  const f = fr[k % fr.length].c, c = document.createElement('canvas'); c.width = c.height = n;
+  const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+  const s = Math.max(1, Math.round(n / Math.max(f.width, f.height) * 2) / 2);
+  x.drawImage(f, Math.round((n - f.width * s) / 2), Math.round((n - f.height * s) / 2), f.width * s, f.height * s);
+  return (iconCache[ck] = c);
+}
+export function enemyFrameCount(type) { const def = ENEMIES[type], own = !!SPR.enemies[type]; return (SPR.enemies[own ? type : (def && def.look) || type] || SPR.enemies.wisp).length; }
+
 export function drawEnemy(g, e, t, px = 3) {
   if (e.fall > 0) {   // tombe du ciel : ombre qui grossit, créature au-dessus
     const k = Math.min(1, e.fall / 1.2);
@@ -62,12 +136,7 @@ export function drawEnemy(g, e, t, px = 3) {
     g.save(); g.translate(0, -k * 260); drawEnemy(g, { ...e, fall: 0, hp: e.max }, t, px); g.restore();
     return;
   }
-  // un ennemi qui a sa propre planche l'utilise telle quelle ; sinon dessin d'origine teinté
-  const own = !e.boss && !e.gold && SPR.enemies[e.type];
-  const key = e.boss ? (e.def && e.def.look && SPR.enemies[e.def.look] ? e.def.look : 'boss') : e.gold ? 'gold' : own ? e.type : (e.def && e.def.look) || e.type;
-  let frames = SPR.enemies[key] || SPR.enemies.wisp;
-  if (e.def && e.def.tint && !own) frames = tinted(key, e.def.tint, frames);
-  if (e.elite) frames = tinted(key + 'elite', '#ffd246', frames);
+  let { key, frames } = enemyFrames(e);
   if (e.boss && e.dash && e.dash.warn > 0) {   // ruée annoncée : ligne rouge vers la cible
     g.strokeStyle = `rgba(255,70,50,${0.4 + 0.4 * Math.sin(t * 25)})`; g.lineWidth = e.r * 0.9; g.setLineDash([px * 4, px * 3]);
     g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(e.dash.tx, e.dash.ty); g.stroke(); g.setLineDash([]);
@@ -84,6 +153,11 @@ export function drawEnemy(g, e, t, px = 3) {
   const fly = e.type === 'wisp' || e.type === 'wind' || e.boss;
   const hover = fly ? Math.round(Math.sin(e.ph * 1.3) * 1.5) * px : 0;
   shadow(g, e.x, e.y + h * 0.45, w * 0.32, px * 1.6);
+  if (e.elite) {   // élite : aura dorée qui pulse sous la créature
+    const R = w * (0.75 + 0.08 * Math.sin(t * 4 + e.ph)), au = g.createRadialGradient(e.x, e.y + hover, 2, e.x, e.y + hover, R);
+    au.addColorStop(0, 'rgba(255,214,80,.42)'); au.addColorStop(1, 'rgba(255,214,80,0)');
+    g.fillStyle = au; g.beginPath(); g.arc(e.x, e.y + hover, R, 0, 7); g.fill();
+  }
   if (e.type === 'wisp' || e.gold || e.boss) {
     const halo = g.createRadialGradient(e.x, e.y + hover, 2, e.x, e.y + hover, w * 0.9);
     halo.addColorStop(0, e.gold ? 'rgba(255,230,120,.45)' : 'rgba(255,170,80,.35)'); halo.addColorStop(1, 'rgba(255,170,80,0)');
@@ -108,6 +182,7 @@ export function drawEnemy(g, e, t, px = 3) {
     const txt = 'Prime ' + Math.round(e.value); g.strokeText(txt, e.x, ty); g.fillStyle = '#ffd246'; g.fillText(txt, e.x, ty);
   }
   if (e.boss) bossExtras(g, e, t, px, w, h);
+  if (e.elite) drawCrown(g, Math.round(e.x), Math.round(e.y - h / 2 + hover - px * 3 + Math.sin(t * 3 + e.ph) * px * 0.6), px);
   if (e.elite) { g.strokeStyle = 'rgba(255,210,70,.8)'; g.lineWidth = 2; g.beginPath(); g.ellipse(e.x, e.y + h * 0.42, w * 0.42, px * 2.5, 0, 0, 7); g.stroke(); }
   if (e.guard) { g.strokeStyle = '#aee6ff'; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.arc(e.x, e.y, w * 0.6, 0, 7); g.stroke(); g.setLineDash([]); }
   if (e.frozen > 0 && !e.boss) { g.fillStyle = 'rgba(174,230,255,.35)'; g.fillRect(Math.round(e.x - w / 2), Math.round(e.y - h / 2 + hover), w, h); }
@@ -262,6 +337,7 @@ function shade(hex, f) {
 }
 
 export function render(g, world, dpr) {
+  hardZone = !!(world.zone && world.zone.hard) && world.mode === 'map';
   const { w, h } = world;
   const zone = world.zone;
   const map = getMap(world), px = map.px;
@@ -466,6 +542,7 @@ export function render(g, world, dpr) {
     g.strokeStyle = 'rgba(36,22,30,.6)'; g.lineWidth = 2; g.beginPath(); g.ellipse(k.x, k.y, k.r * (0.4 + q), k.r * 0.5 * (0.4 + q), 0, 0, 7); g.stroke();
     if (q < 0.5) { const yy = k.y - q * 400; g.strokeStyle = '#5a3a1a'; g.lineWidth = 2; g.beginPath(); g.moveTo(k.x, yy); g.lineTo(k.x, yy - 14); g.stroke(); g.fillStyle = '#d8d8d8'; g.fillRect(k.x - 1, yy, 3, 3); }
   }
+  for (const d of world.deaths || []) drawDeath(g, d, t, px);
   for (const e of world.enemies) drawEnemy(g, e, t, px);
   for (const q of world.particles) {
     g.globalAlpha = Math.min(1, q.life / q.max * 1.6); g.fillStyle = q.color;

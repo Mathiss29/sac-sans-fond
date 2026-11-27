@@ -62,7 +62,7 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
   world.stage = stage;
   Object.assign(world, {
     phase: 'expedition', mode: 'map', mapW: MAP.w, mapH: MAP.h,
-    enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], hazards: [], strikes: [], zones: [], shake: 0,
+    enemies: [], heroes: [], coins: [], arrows: [], fx: [], texts: [], particles: [], hazards: [], strikes: [], zones: [], deaths: [], shake: 0,
     stats, zone,
     run: {
       t: 0, duration: stats.duration, spawnT: 0, bag: 0, full: false, overflow: 0,
@@ -257,7 +257,7 @@ export function enterArena(world) {
   const heroes = world.heroes;
   // la salle s'adapte à l'écran (sans dépasser la taille prévue) pour qu'on voie tout le combat
   const aw = Math.min(ARENA.w, Math.max(world.w, 640)), ah = Math.min(ARENA.h, Math.max(world.h, 560));
-  Object.assign(world, { mode: 'arena', mapW: aw, mapH: ah, enemies: [], coins: [], arrows: [], hazards: [], strikes: [], zones: [] });
+  Object.assign(world, { mode: 'arena', mapW: aw, mapH: ah, enemies: [], deaths: [], coins: [], arrows: [], hazards: [], strikes: [], zones: [] });
   // les héros déjà largués entrent par le bas de la salle
   heroes.forEach((u, i) => {
     const a = Math.PI * (0.15 + 0.7 * (i + 0.5) / heroes.length);
@@ -669,6 +669,10 @@ function keepPouches(world) {
 function killEnemy(world, e) {
   e.dead = true;
   world.run.kills++;
+  if (!e.boss && !e.fake && world.mode === 'map' && onScreen(world, e.x, e.y)) {
+    const dl = world.deaths || (world.deaths = []);
+    if (dl.length < 40) dl.push({ x: e.x, y: e.y, type: e.type, def: e.def, elite: e.elite, gold: e.gold, event: e.event, ph: e.ph, face: Math.cos(e.a) > 0.2 ? 1 : -1, t: 0.45, life: 0.45 });
+  }
   if (!e.fake && !e.guard) { const kb = world.run.killsBy || (world.run.killsBy = {}); kb[e.boss ? 'boss:' + world.zone.id : e.type] = (kb[e.boss ? 'boss:' + world.zone.id : e.type] || 0) + 1; }
   if (world.run.cnt) world.run.cnt.kills++;
   if (e.bounty && !e.boss && !e.event) e.value *= 1.5;
@@ -785,6 +789,7 @@ export function update(world, dt) {
   if (world.slowT > 0) { world.slowT -= dt; dt *= world.slowT > 0.3 ? 0.25 : 0.6; }
   world.t += dt;
   for (const f of world.fx) f.t -= dt;
+  if (world.deaths) { for (const d of world.deaths) d.t -= dt; world.deaths = world.deaths.filter(d => d.t > 0); }
   world.fx = world.fx.filter(f => f.t > 0);
   for (const t of world.texts) { t.life -= dt; if (t.dmg) { t.y += t.vy * dt; t.vy *= Math.pow(0.05, dt); t.pop += dt; } else t.y -= 28 * dt; }
   for (const q of world.particles) { q.life -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vy += q.grav * dt; const f = Math.pow(0.08, dt); q.vx *= f; q.vy *= f; }

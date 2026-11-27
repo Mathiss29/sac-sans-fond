@@ -84,7 +84,17 @@ function renderEpic(body) {
   body.append(h('h3', '', 'Régions'), fr);
 }
 
+// bestiaire animé : les créatures déjà vues bougent (6 images par seconde)
+let anim = [], animTimer = null;
+function animate() {
+  if (!anim.length || $('epic').hidden || sub !== 'beasts' || !anim[0].cv.isConnected) { animTimer = null; return; }
+  const f = Math.floor(performance.now() / 160);
+  for (const a of anim) { const x = a.cv.getContext('2d'); x.clearRect(0, 0, 44, 44); x.drawImage(C.enemyFrameIcon(a.k, f % a.n), 0, 0); }
+  animTimer = setTimeout(animate, 160);
+}
 function renderBeasts(body) {
+  anim = [];
+  if (!animTimer) animTimer = setTimeout(animate, 160);
   const b = C.save.bestiary || {};
   const ids = Object.keys(ENEMIES).filter(k => k !== 'boss');
   const seen = ids.filter(k => b[k] > 0).length;
@@ -94,7 +104,8 @@ function renderBeasts(body) {
   for (const k of ids) {
     const n = b[k] || 0, def = ENEMIES[k];
     const d = h('div', 'epBeast' + (n ? '' : ' unknown'));
-    const cv = h('canvas'); cv.width = cv.height = 22; cv.getContext('2d').drawImage(C.enemyIcon(k), 0, 0);
+    const cv = h('canvas'); cv.width = cv.height = 44; cv.getContext('2d').drawImage(C.enemyFrameIcon(k, 0), 0, 0);
+    if (n) anim.push({ cv, k, n: C.enemyFrameCount(k) });
     d.append(cv, h('b', '', n ? def.name : '???'), h('span', '', n ? `${C.fmt(n)} vaincus` : 'jamais vu'));
     if (n) {
       const zone = ZONES.find(z => z.spawn && z.spawn[k]);

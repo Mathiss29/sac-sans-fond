@@ -4,7 +4,7 @@ import { loadSave, writeSave, freshSave, exportSave, importSave } from './save.j
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
 import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos } from './game.js';
-import { setHeroTints, render, drawHero, drawBag, getMap, enemyIcon, heroSheetsReady } from './render.js';
+import { setHeroTints, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
@@ -1103,7 +1103,7 @@ initCurio({ get save() { return save; }, write: () => writeSave(save), fmt, play
   onChange: () => { stats = calcStats(); renderTree(); },
   storeAndShow: items => { const f = storeItems(items.filter(Boolean)); writeSave(save); if (f.length) showLoot(f, () => { companyRefresh(); }); } });
 applyVolumes(save);
-initEpic({ get save() { return save; }, write: () => writeSave(save), fmt, enemyIcon, stats: () => stats,
+initEpic({ get save() { return save; }, write: () => writeSave(save), fmt, enemyIcon, enemyFrameIcon, enemyFrameCount, stats: () => stats,
   exportSave: () => exportSave(save), importSave: txt => { const err = importSave(txt); if (!err) location.reload(); return err; },
   drawHeroIcon: (cg, k) => { cg.imageSmoothingEnabled = false; drawHero(cg, k, 34, 64, 1, 0, 1, HERO_SHEETS[k] ? 2 : 3); },
   onChange: () => { stats = calcStats(); renderTree(); } });
