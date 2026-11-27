@@ -5,8 +5,8 @@ import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
 import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos, LAYOUTS, LAYOUT_NAMES, dailyLayout } from './game.js';
 import { setHeroTints, setHeroSkins, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
-import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
-import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
+import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites, SPR } from './sprites.js';
+import { NODES, NODE, BRANCHES, TREE_LABELS, CLASS_PAIRS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
 import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
 import { initCurio, curioRefresh } from './curio-ui.js';
@@ -846,6 +846,7 @@ function renderInfo() {
   hd.append(Object.assign(document.createElement('i'), { textContent: n.max > 1 && !n.soon ? `Niv. ${lv}/${n.max}` : kind }));
   add('h3', '', n.name);
   add('p', '', n.desc);
+  if (n.type === 'cls') box.append(classDuel(n));
   if (n.soon) { if (n.cond) add('p', 'cond', n.cond); add('p', 'locked', 'Bientôt dans le jeu.'); return; }
   const eff = add('div', 'eff', isMax ? n.effect(lv) : lv ? n.effect(lv) + '  →  ' : '');
   if (!isMax) eff.append(Object.assign(document.createElement('b'), { textContent: n.effect(lv + 1) }));
@@ -871,6 +872,39 @@ function renderInfo() {
     : Object.assign(document.createElement('span'), { className: 'need', textContent: `Il manque ${fmt(c - save.coins)}` }));
   box.append(pr);
 }
+// « Choisis ta voie » : les deux classes du choix côte à côte, qui enchaînent attaque et repos.
+let duelTimer = null;
+function classDuel(n) {
+  const pair = CLASS_PAIRS.find(p => p.includes(n.id)) || [n.id];
+  const S = SPR.sheets || {}, ok = k => S[k] && S[k].img.idle && S[k].img.idle.naturalWidth;
+  const sheetOf = id => ok(id) ? S[id] : ok(id.slice(0, 3)) ? S[id.slice(0, 3)] : ok(n.branch) ? S[n.branch] : null;
+  const wrap = document.createElement('div'); wrap.className = 'clsDuel';
+  const cells = [];
+  pair.forEach((id, i) => {
+    const m = NODE[id]; if (!m) return;
+    if (i) wrap.append(Object.assign(document.createElement('span'), { className: 'vs', textContent: 'ou' }));
+    const d = document.createElement('div'); d.className = 'dCls' + (id === n.id ? ' me' : '') + (L(id) ? ' got' : '');
+    const cv = document.createElement('canvas'); cv.width = 96; cv.height = 92;
+    d.append(cv, Object.assign(document.createElement('b'), { textContent: m.name }));
+    if (L(id)) d.append(Object.assign(document.createElement('i'), { textContent: 'choisie' }));
+    wrap.append(d); cells.push({ cv, sh: sheetOf(id), off: i * 3 });
+  });
+  const draw = () => {
+    if (!cells.length || !cells[0].cv.isConnected) { duelTimer = null; return; }
+    const f = Math.floor(performance.now() / 130);
+    for (const c of cells) {
+      const x = c.cv.getContext('2d'); x.clearRect(0, 0, 96, 92); x.imageSmoothingEnabled = false;
+      if (!c.sh) continue;
+      const [cw, ch] = c.sh.cell, sc = 1.6, k = (f + c.off) % 22;   // 12 images d'attaque (2 coups), puis 10 de repos
+      const an = k < 12 && c.sh.img.attack ? 'attack' : 'idle', fr = an === 'attack' ? k % c.sh.anims.attack : k % c.sh.anims.idle;
+      x.drawImage(c.sh.img[an], fr * cw, 0, cw, ch, (96 - cw * sc) / 2, 92 - ch * sc, cw * sc, ch * sc);
+    }
+    duelTimer = setTimeout(draw, 130);
+  };
+  clearTimeout(duelTimer); duelTimer = setTimeout(draw, 0);
+  return wrap;
+}
+
 // La fiche suit le nœud : à sa droite, ou à sa gauche près du bord.
 function placeInfo(n) {
   const box = $('info'), wrap = $('treeWrap'), el = $('treeInner').querySelector(`[data-id="${n.id}"]`);

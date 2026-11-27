@@ -564,9 +564,10 @@ export function render(g, world, dpr) {
   // frappes à venir : ombre au sol qui se resserre (pluie de flèches)
   for (const k of world.strikes || []) {
     if (k.kind === 'spirit') {
-      g.fillStyle = 'rgba(208,128,255,.35)'; g.beginPath(); g.arc(k.x, k.y, 13, 0, 7); g.fill();
-      g.fillStyle = '#d080ff'; g.fillRect(Math.round(k.x) - 5, Math.round(k.y) - 6, 10, 10);
-      g.fillStyle = '#f0d0ff'; g.fillRect(Math.round(k.x) - 3, Math.round(k.y) - 4, 6, 5);
+      const sp = (k.cfx && k.cfx.pal) || ['#d080ff', '#f0d0ff'];
+      g.globalAlpha = 0.35; g.fillStyle = sp[0]; g.beginPath(); g.arc(k.x, k.y, 13, 0, 7); g.fill(); g.globalAlpha = 1;
+      g.fillStyle = sp[0]; g.fillRect(Math.round(k.x) - 5, Math.round(k.y) - 6, 10, 10);
+      g.fillStyle = sp[1]; g.fillRect(Math.round(k.x) - 3, Math.round(k.y) - 4, 6, 5);
       g.fillStyle = '#24161e'; g.fillRect(Math.round(k.x) - 2, Math.round(k.y) - 3, 1, 2); g.fillRect(Math.round(k.x) + 1, Math.round(k.y) - 3, 1, 2);
       continue;
     }
@@ -574,7 +575,7 @@ export function render(g, world, dpr) {
       const q = 1 - Math.max(0, k.t / k.t0), x = k.x0 + (k.x - k.x0) * q, y = k.y0 + (k.y - k.y0) * q - Math.sin(q * Math.PI) * 70;
       g.strokeStyle = 'rgba(160,220,60,.5)'; g.lineWidth = 2; g.beginPath(); g.ellipse(k.x, k.y, k.r * q, k.r * 0.6 * q, 0, 0, 7); g.stroke();
       g.save(); g.translate(Math.round(x), Math.round(y)); g.rotate(q * 8);
-      g.fillStyle = '#24161e'; g.fillRect(-5, -6, 10, 11); g.fillStyle = '#d0f060'; g.fillRect(-4, -2, 8, 6); g.fillStyle = '#e8f0f8'; g.fillRect(-2, -5, 4, 3);
+      g.fillStyle = '#24161e'; g.fillRect(-5, -6, 10, 11); g.fillStyle = (k.cfx && k.cfx.pal) ? k.cfx.pal[0] : '#d0f060'; g.fillRect(-4, -2, 8, 6); g.fillStyle = '#e8f0f8'; g.fillRect(-2, -5, 4, 3);
       g.restore();
       continue;
     }

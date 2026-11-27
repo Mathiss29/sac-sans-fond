@@ -935,3 +935,12 @@ button[disabled] { cursor: var(--cur) !important; }
 
 /* Bilan : la compagnie en pose de victoire */
 #resParty { display: block; width: 100%; max-width: 480px; height: auto; margin: 2px auto 6px; image-rendering: pixelated; }
+
+/* « Choisis ta voie » : aperçu animé des deux classes dans la fiche */
+.clsDuel { display: flex; align-items: flex-end; justify-content: center; gap: 6px; margin: 8px 0 4px; }
+.clsDuel .vs { font-size: 11px; opacity: .6; padding-bottom: 30px; }
+.clsDuel .dCls { display: flex; flex-direction: column; align-items: center; padding: 4px 4px 6px; border-radius: 6px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.08); width: 110px; }
+.clsDuel .dCls.me { border-color: var(--c, #ffe68a); box-shadow: 0 0 8px color-mix(in srgb, var(--c, #ffe68a) 40%, transparent); }
+.clsDuel .dCls canvas { width: 96px; height: 92px; image-rendering: pixelated; }
+.clsDuel .dCls b { font-size: 11px; text-align: center; line-height: 1.2; }
+.clsDuel .dCls i { font-size: 10px; font-style: normal; color: #9fe39a; }
