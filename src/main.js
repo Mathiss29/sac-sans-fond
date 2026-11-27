@@ -1,5 +1,5 @@
 // Point d'entrée : boucle à pas fixe, entrées, interface (HUD, Atelier, bilan).
-import { ZONES, LEVELS, levelZone, ENEMIES, stageFor, TIERS, HEROES, HERO_ORDER, ALL_HEROES, ARENA, ULTS, TRIALS, computeStats, masteryBonus, mastered, nodeCost, bagMax, tierOf, tierRange } from './data.js';
+import { ZONES, LEVELS, levelZone, ENEMIES, stageFor, TIERS, HEROES, HERO_ORDER, ALL_HEROES, ARENA, ULTS, TRIALS, CLASS_ULT_GOAL, computeStats, masteryBonus, mastered, nodeCost, bagMax, tierOf, tierRange } from './data.js';
 import { loadSave, writeSave, freshSave, exportSave, importSave } from './save.js';
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
@@ -26,6 +26,8 @@ function calcStats() {
   for (const k in heroIcons) delete heroIcons[k];
   const s = computeStats(save.level, curioBonus(save, masteryBonus(save, gearBonus(save.gear, save.level))));
   s.eventCount += extraEvents(save);
+  s.clsUltCount = save.clsUlt || {};
+  s.clsUltOn = Object.fromEntries(Object.entries(s.clsUltCount).map(([v, n]) => [v, n >= CLASS_ULT_GOAL]));
   setHeroSkins(s.cls);
   return s;
 }
@@ -233,7 +235,7 @@ function goNow() {
   $('phase').hidden = true;
   stats = calcStats(); world.gearCtx = gearCtx();
   const z = curZone();
-  stats.layoutPick = save.layoutPick; stats.masteredHere = mastered(save).includes(String(z.id).replace(/2$/, ''));
+  stats.layoutPick = layoutPickOf(z); stats.masteredHere = mastered(save).includes(String(z.id).replace(/2$/, ''));
   startExpedition(world, stats, z, lairInfo(), stageFor(save.expeditions, z));
   showRunUi();
 }
@@ -324,6 +326,7 @@ function finishExpedition() {
   if (save.curio) { save.curio.active = []; fillQuests(save, randOpen()); }
   const found = storeItems([...(r.items || []), ...extra]);
   recordRun(save, r, gained);
+  for (const [v, n] of Object.entries(r.clsUses || {})) (save.clsUlt = save.clsUlt || {})[v] = (save.clsUlt[v] || 0) + n;
   const trialsDone = checkTrials(r);
   writeSave(save);
   const rows = [['Élémentaires vaincus', fmt(r.kills), '#c4c8b2']];
@@ -698,19 +701,22 @@ function nodeIcon(n) {
 }
 
 // Cartographe : choix du paysage à côté du bouton d'expédition (★ = paysage du jour)
+const regionKey = z => String(z.id).replace(/2$/, '');
+const layoutPickOf = z => ((save.layoutBy || {})[regionKey(z)]) || null;
 function layoutUi() {
   let sel = $('layoutPick');
   if (!L('carto')) { if (sel) sel.remove(); return; }
   if (!sel) {
     sel = document.createElement('select'); sel.id = 'layoutPick'; sel.title = 'Paysage de la prochaine expédition';
-    sel.onchange = () => { save.layoutPick = sel.value || null; writeSave(save); };
+    sel.onchange = () => { (save.layoutBy = save.layoutBy || {})[regionKey(curZone())] = sel.value || null; writeSave(save); };
     document.querySelector('.footLeft').append(sel);
   }
   const day = L('daily') ? dailyLayout() : null;
   const opts = [['', 'Paysage au hasard'], ...LAYOUTS.map(k => [k, LAYOUT_NAMES[k].replace('Carte : ', '') + (k === day ? ' ★ +30 %' : '')])];
   const sig = opts.map(o => o[1]).join();
   if (sel.dataset.sig !== sig) { sel.dataset.sig = sig; sel.innerHTML = ''; for (const [v, t] of opts) sel.append(Object.assign(document.createElement('option'), { value: v, textContent: t })); }
-  sel.value = save.layoutPick || '';
+  sel.value = layoutPickOf(curZone()) || '';
+  sel.title = 'Paysage retenu pour ' + curZone().name;
 }
 function renderTree() {
   layoutUi();

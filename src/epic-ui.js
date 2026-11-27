@@ -1,5 +1,6 @@
 // Onglet « Épopée » de l'Atelier : ton épopée (chiffres de la partie), bestiaire et garde-robe.
-import { ENEMIES, ZONES, LEVELS, HEROES, ALL_HEROES, COSTUMES, TIERS, MASTERY } from './data.js';
+import { ENEMIES, ZONES, LEVELS, HEROES, ALL_HEROES, COSTUMES, TIERS, MASTERY, CLASS_ULTS, CLASS_ULT_GOAL } from './data.js';
+import { SPR } from './sprites.js';
 import { NODES } from './tree.js';
 import { showView } from './company.js';
 import { setVolumes } from './audio.js';
@@ -47,14 +48,14 @@ const fmtTime = s => { s = Math.floor(s); const hh = Math.floor(s / 3600), mm = 
 function render() {
   const box = $('epic'); box.innerHTML = '';
   const nav = h('nav', 'epNav');
-  for (const [id, label] of [['epic', 'Ton épopée'], ['beasts', 'Bestiaire'], ['looks', 'Garde-robe'], ['opts', 'Options et journal']]) {
+  for (const [id, label] of [['epic', 'Ton épopée'], ['beasts', 'Bestiaire'], ['classes', 'Classes'], ['looks', 'Garde-robe'], ['opts', 'Options et journal']]) {
     const b = h('button', 'cSubTab' + (sub === id ? ' on' : ''), label); b.type = 'button';
     b.onclick = () => { sub = id; render(); };
     nav.append(b);
   }
   box.append(nav);
   const body = h('div', 'epBody'); box.append(body);
-  if (sub === 'epic') renderEpic(body); else if (sub === 'beasts') renderBeasts(body); else if (sub === 'opts') renderOpts(body); else renderLooks(body);
+  if (sub === 'epic') renderEpic(body); else if (sub === 'beasts') renderBeasts(body); else if (sub === 'classes') renderClasses(body); else if (sub === 'opts') renderOpts(body); else renderLooks(body);
 }
 
 function renderEpic(body) {
@@ -135,6 +136,45 @@ function renderBeasts(body) {
     bossGrid.append(d);
   }
   body.append(h('h3', '', 'Boss'), bossGrid);
+}
+
+// Codex des classes : chaque classe de l'arbre, animée une fois choisie, en silhouette sinon.
+let clsAnim = [], clsTimer = null;
+const sheetFor = id => { const S = SPR.sheets || {}, ok = k => S[k] && S[k].img.idle && S[k].img.idle.naturalWidth; return ok(id) ? S[id] : ok(id.slice(0, 3)) ? S[id.slice(0, 3)] : null; };
+function drawCls(cv, sh, f, dark) {
+  const x = cv.getContext('2d'), [cw, ch] = sh.cell, sc = 2;
+  x.clearRect(0, 0, cv.width, cv.height); x.imageSmoothingEnabled = false;
+  x.drawImage(sh.img.idle, (f % sh.anims.idle) * cw, 0, cw, ch, (cv.width - cw * sc) / 2, cv.height - ch * sc, cw * sc, ch * sc);
+  if (dark) { x.globalCompositeOperation = 'source-in'; x.fillStyle = 'rgba(20,14,24,.9)'; x.fillRect(0, 0, cv.width, cv.height); x.globalCompositeOperation = 'source-over'; }
+}
+function animateCls() {
+  if (!clsAnim.length || $('epic').hidden || sub !== 'classes' || !clsAnim[0].cv.isConnected) { clsTimer = null; return; }
+  const f = Math.floor(performance.now() / 160);
+  for (const a of clsAnim) drawCls(a.cv, a.sh, f, false);
+  clsTimer = setTimeout(animateCls, 160);
+}
+function renderClasses(body) {
+  clsAnim = [];
+  if (!clsTimer) clsTimer = setTimeout(animateCls, 160);
+  const all = NODES.filter(n => n.type === 'cls');
+  const got = all.filter(n => L(n.id) > 0).length;
+  body.append(h('p', 'cuHint', `${got} / ${all.length} classes choisies. Une voie de rang 2 débloque un ultime de classe après ${CLASS_ULT_GOAL} lancers de l'ultime de sa lignée.`));
+  const lines = ALL_HEROES.filter(k => all.some(n => n.branch === k));
+  const cnt = C.save.clsUlt || {};
+  for (const ln of lines) {
+    const grid = h('div', 'epClasses');
+    for (const n of all.filter(m => m.branch === ln)) {
+      const on = L(n.id) > 0, sh = sheetFor(n.id) || sheetFor(ln), d = h('div', 'epCls' + (on ? ' on' : ''));
+      const cv = h('canvas'); cv.width = 96; cv.height = 100;
+      if (sh) { drawCls(cv, sh, 0, !on); if (on) clsAnim.push({ cv, sh }); } else cv.className = 'noArt';
+      d.append(cv, h('b', '', n.name), h('span', '', (n.badge || '') + (on ? ' · choisie' : '')));
+      const cu = CLASS_ULTS[n.id];
+      if (cu) d.append(h('i', 'epClsUlt' + ((cnt[n.id] || 0) >= CLASS_ULT_GOAL ? ' ok' : ''), `${cu[0]} : ${Math.min(CLASS_ULT_GOAL, cnt[n.id] || 0)}/${CLASS_ULT_GOAL}`));
+      d.title = n.desc + (cu ? ` · Ultime de classe : ${cu[1]}` : '');
+      grid.append(d);
+    }
+    body.append(h('h3', '', HEROES[ln] ? HEROES[ln].plural : ln), grid);
+  }
 }
 
 function renderLooks(body) {
