@@ -614,7 +614,9 @@ function damage(world, e, amount, slow, from, type) {
     // chaque coup fait jaillir une part de l'or, proportionnelle aux dégâts
     const v = Math.min(e.value, e.total * Math.min(amount, e.hp + amount) / e.max);
     e.value -= v;
-    for (const pc of splitLoot(v, Math.max(1, Math.ceil(v / 4)), 2, 4)) {
+    // au plus 6 pièces par coup : en fin de partie un filon vaut des milliers, et une pièce par
+    // tranche de 4 en faisait jaillir des centaines à chaque coup (le jeu tombait à 1 image/s)
+    for (const pc of capPieces(splitLoot(v, Math.min(6, Math.max(1, Math.ceil(v / 4))), 2, 4), 6)) {
       const a = rnd(0, Math.PI * 2), sp = rnd(40, 110);
       world.coins.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, kind: pc.kind, value: pc.value,
         life: world.stats.coinLife, max: world.stats.coinLife, fly: false, sp: 0, z: 0, vz: rnd(200, 320), spin: rnd(0, 6) });
@@ -789,6 +791,16 @@ function splitLoot(value, n, k, maxCoins) {
   const c = Math.max(rem > 0.01 ? 1 : 0, Math.min(maxCoins, Math.ceil(rem)));
   for (let i = 0; i < c; i++) out.push({ kind: 'coin', value: rem / c });
   return out;
+}
+
+// Regroupe les plus petites pièces d'une même sorte jusqu'à n'en garder que max.
+function capPieces(pieces, max) {
+  while (pieces.length > max) {
+    pieces.sort((a, b) => a.value - b.value);
+    const a = pieces.shift(), b = pieces.find(o => o.kind === a.kind) || pieces[0];
+    b.value += a.value;
+  }
+  return pieces;
 }
 
 export function attractionActive(world) { return world.phase === 'tear' && holding(world); }
@@ -1432,9 +1444,12 @@ function updateCoins(world, dt) {
   for (const c of world.coins) {
     if (c.fly) {
       const dx = target.x - c.x, dy = target.y - c.y, d = Math.hypot(dx, dy) || 1;
-      c.sp += 1400 * dt;
-      c.x += dx / d * c.sp * dt; c.y += dy / d * c.sp * dt;
-      if (d < 14) { c.dead = true; if (c.item) gotItem(world, c.item); else credit(world, c.value * (c.kind === 'gem' ? world.stats.gemMult || 1 : 1)); }
+      c.sp = Math.min(c.sp + 1400 * dt, 2600);
+      // pas plafonné à la distance restante : une pièce rapide ne dépasse plus le sac (avant, elle
+      // le traversait, repartait de l'autre côté et oscillait sans fin autour)
+      const step = Math.min(d, c.sp * dt);
+      c.x += dx / d * step; c.y += dy / d * step;
+      if (d - step < 14) { c.dead = true; if (c.item) gotItem(world, c.item); else credit(world, c.value * (c.kind === 'gem' ? world.stats.gemMult || 1 : 1)); }
       continue;
     }
     if (c.beam > 0) c.beam = Math.max(0, c.beam - dt);
@@ -1462,6 +1477,31 @@ function updateCoins(world, dt) {
       burst(world, c.x, c.y, 3, ['#fff5b4', '#ffcd3c'], 60, 1, 0, 0.3);
     }
     else if (fresh && mouth && d2(c, bag) < mouth * mouth && (world.stats.deepMouth || (c.kind !== 'gem' && c.kind !== 'crown'))) { c.fly = true; c.sp = 60; }
+  }
+  world.coins = world.coins.filter(c => !c.dead);
+  mergeCoins(world);
+}
+
+// Trop de pièces au sol (filons, pluies, boss…) : on fusionne les plus petites avec une voisine de même
+// sorte, sans rien perdre. La valeur ramassée est identique, mais l'écran reste fluide.
+const COIN_CAP = 260;
+function mergeCoins(world) {
+  const ground = world.coins.filter(c => !c.fly && !c.item && !c.dead && !c.air);
+  let extra = ground.length - COIN_CAP;
+  if (extra <= 0) return;
+  ground.sort((a, b) => a.value - b.value);
+  for (let i = 0; i < ground.length && extra > 0; i++) {
+    const c = ground[i];
+    if (c.dead) continue;
+    let best = null, bd = Infinity;
+    for (let j = i + 1; j < ground.length; j++) {
+      const o = ground[j];
+      if (o.dead || o.kind !== c.kind) continue;
+      const dd = d2(o, c); if (dd < bd) { bd = dd; best = o; }
+    }
+    if (!best) continue;
+    best.value += c.value; best.life = Math.max(best.life, c.life); best.max = Math.max(best.max, best.life);
+    c.dead = true; extra--;
   }
   world.coins = world.coins.filter(c => !c.dead);
 }
