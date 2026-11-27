@@ -703,7 +703,7 @@ function layoutUi() {
   if (!sel) {
     sel = document.createElement('select'); sel.id = 'layoutPick'; sel.title = 'Paysage de la prochaine expédition';
     sel.onchange = () => { save.layoutPick = sel.value || null; writeSave(save); };
-    $('go').before(sel);
+    document.querySelector('.footLeft').append(sel);
   }
   const day = L('daily') ? dailyLayout() : null;
   const opts = [['', 'Paysage au hasard'], ...LAYOUTS.map(k => [k, LAYOUT_NAMES[k].replace('Carte : ', '') + (k === day ? ' ★ +30 %' : '')])];

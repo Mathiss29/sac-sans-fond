@@ -853,4 +853,4 @@ button[disabled] { cursor: var(--cur) !important; }
 .epReg .epMast { display: block; font-style: normal; font-size: 11px; opacity: .55; margin-top: 2px; }
 .epReg .epMast.ok { opacity: 1; color: #ffd27a; }
 /* Cartographe : choix du paysage */
-#layoutPick { font: inherit; font-size: 13px; background: #2a2030; color: #f4ead2; border: 2px solid #120c14; padding: 4px 6px; margin-right: 8px; }
+#layoutPick { display: block; margin-top: 6px; font: inherit; font-size: 13px; background: #2a2030; color: #f4ead2; border: 2px solid #120c14; padding: 4px 6px; margin-right: 8px; }
