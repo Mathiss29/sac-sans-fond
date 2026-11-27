@@ -71,7 +71,7 @@ function enemyFrames(e) {
   const own = !e.boss && !e.gold && SPR.enemies[e.type];
   const key = e.boss ? (e.def && e.def.look && SPR.enemies[e.def.look] ? e.def.look : 'boss') : e.gold ? 'gold' : own ? e.type : (e.def && e.def.look) || e.type;
   let frames = SPR.enemies[key] || SPR.enemies.wisp;
-  if (e.def && e.def.tint && !own) frames = tinted(key, e.def.tint, frames);
+  if (e.def && e.def.tint && !own && !(e.boss && key !== 'boss')) frames = tinted(key, e.def.tint, frames);
   if (hardZone && !e.boss && !e.gold && !e.event) frames = hardened(key + (own ? '' : (e.def && e.def.tint) || ''), frames);
   if (e.elite) frames = tinted(key + 'elite' + (hardZone ? 'II' : ''), '#ffd246', frames);
   return { key, frames };
@@ -143,7 +143,11 @@ export function drawEnemy(g, e, t, px = 3) {
   }
   const drawn = SPR.enemyScale && SPR.enemyScale[key];
   // boss dessiné : 4 images de repos, puis 4 de coup de poing quand il frappe
-  if (drawn && e.boss && frames.length === 8) frames = e.atk > 0 ? frames.slice(4) : frames.slice(0, 4);
+  // planche de boss à 12 images : repos ×4, attaque ×4, blessé ×2, endormi ×2 (il se réveille en arrivant dans l'antre)
+  if (drawn && e.boss && frames.length >= 8) {
+    const F = frames, wake = F.length >= 12 && (e.age || 0) < 1.6;
+    frames = wake ? ((e.age || 0) < 1.1 ? [F[10], F[11]] : [F[8], F[9]]) : F.length >= 12 && e.hp <= 0 ? [F[8], F[9]] : e.atk > 0 ? F.slice(4, 8) : F.slice(0, 4);
+  }
   const f = drawn && e.boss && e.atk > 0 && frames.length >= 4 ? frames[Math.min(3, Math.floor((1 - e.atk / 0.7) * 4))] : e.type === 'mimic' ? (frames.length >= 6 ? (e.awake ? frames[2 + Math.floor(e.ph * 4) % 4] : frames[Math.floor(e.ph * 0.9) % 2]) : frames[e.awake ? 1 : 0]) : frames[Math.floor(e.ph * (e.type === 'goblin' ? 4 : e.type === 'vein' ? 2 : 0.9)) % frames.length];
   // le boss est frappé sans arrêt : un bref éclair seulement, sinon il resterait blanc
   const flash = e.boss ? e.hit > 0.09 && Math.floor(t * 20) % 3 === 0 : e.hit > 0.06 || (e.hit > 0 && Math.floor(t * 30) % 2);

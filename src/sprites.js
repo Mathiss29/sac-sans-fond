@@ -435,7 +435,11 @@ export const MONSTER_SHEETS = { wisp: [36, 32, 4], gold: [36, 32, 4], golem: [52
   beetle: [29, 21, 4, 0.7], dustdevil: [27, 28, 4, 0.65], scarab: [41, 30, 4, 0.65],
   spider: [31, 24, 4, 0.65], moth: [41, 28, 4, 0.6], turtle: [40, 35, 4, 0.65],
   shroom: [23, 22, 4, 0.75], firefly: [32, 24, 4, 0.65], brute: [41, 31, 4, 0.65],
-  puff: [27, 21, 4, 0.7], harpy: [42, 30, 4, 0.6], guardian: [41, 34, 4, 0.65], blob: [31, 16, 4, 0.7], shade: [25, 26, 4, 0.7], voideye: [37, 38, 4, 0.6], king: [40, 30, 4, 0.9], puffer: [34, 30, 4, 0.55], healer: [31, 30, 4, 0.6], bandit: [34, 28, 4, 0.6], mvp: [26, 27, 4, 0.6] };
+  puff: [27, 21, 4, 0.7], harpy: [42, 30, 4, 0.6], guardian: [41, 34, 4, 0.65], blob: [31, 16, 4, 0.7], shade: [25, 26, 4, 0.7], voideye: [37, 38, 4, 0.6], king: [40, 30, 4, 0.9], puffer: [34, 30, 4, 0.55], healer: [31, 30, 4, 0.6], bandit: [34, 28, 4, 0.6], mvp: [26, 27, 4, 0.6],
+  // boss des régions : une bande de 12 images
+  boss_marais: [49, 36, 12, 0.95], boss_automne: [49, 45, 12, 0.95], boss_gel: [50, 39, 12, 0.95], boss_desert: [51, 42, 12, 0.95],
+  boss_grotte: [52, 42, 12, 0.95], boss_lumi: [50, 45, 12, 0.95],
+  boss_enfers: [48, 43, 12, 0.95], boss_ciel: [50, 44, 12, 0.95], boss_neant: [52, 46, 12, 1.05] };
 export function loadMonsterSheets(base = 'assets/sprites/monstres/') {
   SPR.enemyScale = SPR.enemyScale || {};
   return Promise.all(Object.entries(MONSTER_SHEETS).map(([id, [cw, ch, n, scale = 0.5]]) => new Promise(ok => {

@@ -1,5 +1,6 @@
 # Convertit une planche ChatGPT d'ennemis (3 lignes × 4 images, fond gris uni) en bandes de sprites du jeu.
 # Usage : python3 tools/convertir-planche-ennemis.py planche.png sortie_dossier nomA nomB nomC [taille_pixel]
+# Planche de boss : un seul nom -> une seule bande (repos ×4, attaque ×4, blessé ×2, endormi ×2).
 # Pour chaque ligne : fond retiré, grille de pixels retrouvée (phase qui minimise la variance des blocs),
 # une couleur par bloc, puis les 4 images posées pieds en bas, centrées, dans des cases de même taille.
 import sys, numpy as np
@@ -42,7 +43,8 @@ for (y0, y1) in rows:
     # fusionne les morceaux proches (ailes, pattes détachées)
     merged = []
     for c in cols:
-        if merged and c[0] - merged[-1][1] < 3 * P: merged[-1] = (merged[-1][0], c[1])
+        # (seulement si l'un des deux morceaux est petit : deux images entières proches restent séparées)
+        if merged and c[0] - merged[-1][1] < 3 * P and min(c[1] - c[0], merged[-1][1] - merged[-1][0]) < 8 * P: merged[-1] = (merged[-1][0], c[1])
         else: merged.append(c)
     line = []
     for (x0, x1) in merged:
@@ -71,6 +73,8 @@ for (y0, y1) in rows:
         line.append(img)
     sprites.append(line)
 
+# un seul nom pour plusieurs lignes (planche de boss) : toutes les images dans une seule bande
+if len(names) == 1 and len(sprites) > 1: sprites = [[im for line in sprites for im in line]]
 for name, line in zip(names, sprites):
     cw = max(i.shape[1] for i in line) + 2; ch = max(i.shape[0] for i in line) + 1
     strip = np.zeros((ch, cw * len(line), 4), np.uint8)

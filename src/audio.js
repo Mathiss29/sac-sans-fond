@@ -73,6 +73,7 @@ const TRACKS = {
   boss: 'assets/music/boss-rage-des-demons.mp3',
   matin: 'assets/music/expedition-matin.mp3',
   minuit: 'assets/music/expedition-minuit.mp3',
+  marais: 'assets/music/expedition-marais.mp3',   // « Swamp Quest »
 };
 const MUSIC_VOL = 0.42;
 const players = {};

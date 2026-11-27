@@ -1021,7 +1021,9 @@ $('reset').onclick = () => {
 
 // Musique du moment : Atelier, expédition, ou boss dans son antre.
 // musique d'expédition : propre à l'ambiance quand elle en a une (matin, minuit), sinon le thème commun
-const stageTrack = () => ({ matin: 'matin', minuit: 'minuit' }[world.stage && world.stage.id] || 'expedition');
+// les régions qui ont leur propre morceau (niveau normal et niveau II)
+const REGION_TRACKS = { marais: 'marais' };
+const stageTrack = () => REGION_TRACKS[((world.zone && world.zone.id) || '').replace(/2$/, '')] || ({ matin: 'matin', minuit: 'minuit' }[world.stage && world.stage.id] || 'expedition');
 function musicFor() {
   if (world.phase === 'expedition') return world.mode === 'arena' ? 'boss' : stageTrack();
   if (world.phase === 'done' && world.mode === 'arena') return 'boss';
