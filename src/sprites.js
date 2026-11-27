@@ -429,7 +429,13 @@ export const MONSTER_SHEETS = { wisp: [36, 32, 4], gold: [36, 32, 4], golem: [52
   // créatures d'événement (planches ChatGPT) : mimique = 2 images fermée puis 4 ouverte
   vein: [38, 30, 4], goblin: [46, 40, 6], mimic: [46, 44, 6],
   // ennemis des régions (planches ChatGPT converties avec tools/convertir-planche-ennemis.py) : [largeur, hauteur, images, échelle]
-  frog: [32, 24, 4, 0.65], mosquito: [34, 30, 4, 0.65], mudgolem: [38, 31, 4, 0.7] };
+  frog: [32, 24, 4, 0.65], mosquito: [34, 30, 4, 0.65], mudgolem: [38, 31, 4, 0.7],
+  pumpkin: [27, 28, 4, 0.7], leaves: [33, 29, 4, 0.65], stump: [44, 35, 4, 0.65],
+  snowball: [27, 26, 4, 0.7], icebat: [41, 29, 4, 0.6], troll: [43, 34, 4, 0.65],
+  beetle: [29, 21, 4, 0.7], dustdevil: [27, 28, 4, 0.65], scarab: [41, 30, 4, 0.65],
+  spider: [31, 24, 4, 0.65], moth: [41, 28, 4, 0.6], turtle: [40, 35, 4, 0.65],
+  shroom: [23, 22, 4, 0.75], firefly: [32, 24, 4, 0.65], brute: [41, 31, 4, 0.65],
+  puff: [27, 21, 4, 0.7], harpy: [42, 30, 4, 0.6], guardian: [41, 34, 4, 0.65], blob: [31, 16, 4, 0.7], shade: [25, 26, 4, 0.7], voideye: [37, 38, 4, 0.6], king: [40, 30, 4, 0.9], puffer: [34, 30, 4, 0.55], healer: [31, 30, 4, 0.6], bandit: [34, 28, 4, 0.6], mvp: [26, 27, 4, 0.6] };
 export function loadMonsterSheets(base = 'assets/sprites/monstres/') {
   SPR.enemyScale = SPR.enemyScale || {};
   return Promise.all(Object.entries(MONSTER_SHEETS).map(([id, [cw, ch, n, scale = 0.5]]) => new Promise(ok => {
