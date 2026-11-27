@@ -4,6 +4,9 @@ import { rollItem, RARITIES as GEAR_RARITIES, DROP } from './gear.js';
 import { CARD_DROP } from './curio.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
+// types de paysage d'une carte (voir buildMap)
+export const LAYOUTS = ['bosquets', 'foret', 'plaine', 'lacs', 'ruines'];
+const LAYOUT_NAMES = { bosquets: 'Carte : bosquets', foret: 'Carte : forêt dense', plaine: 'Carte : grande plaine', lacs: 'Carte : pays des lacs', ruines: 'Carte : vieilles ruines' };
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
 
 // ---------- Effets : particules, secousses, sons, chiffres ----------
@@ -57,7 +60,12 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
   const m = stage.mods || {};
   zone = { ...zone, stage: stage.name, hpMult: zone.hpMult * (m.hp || 1), valueMult: zone.valueMult * (m.value || 1) * (stats.valueMult || 1) * (zone.demon ? stats.embers || 1 : 1) };
   // zones nommées de la carte : plus d'ennemis costauds, plus d'or
-  zone.areaList = (zone.areas || []).map(([name, fx, fy, hp, gold]) => ({ name, x: fx * MAP.w, y: fy * MAP.h, r: 300, hp, gold }));
+  // carte tirée au sort à chaque expédition : graine, miroir et type de paysage
+  const lay = zone.layout || { seed: 1 + Math.floor(Math.random() * 2e9), fx: Math.random() < 0.5, fy: Math.random() < 0.5, kind: LAYOUTS[Math.floor(Math.random() * LAYOUTS.length)] };
+  const mx = f => (lay.fx ? 1 - f : f), my = f => (lay.fy ? 1 - f : f);
+  zone.layout = lay;
+  if (zone.boss && zone.boss.at) { const at = zone.boss.at0 || zone.boss.at; zone.boss = { ...zone.boss, at0: at, at: [mx(at[0]), my(at[1])] }; }
+  zone.areaList = (zone.areas || []).map(([name, fx, fy, hp, gold]) => ({ name, x: mx(fx) * MAP.w, y: my(fy) * MAP.h, r: 300, hp, gold }));
   stats = { ...stats, goldChance: stats.goldChance * (m.gold || 1) };
   world.stage = stage;
   Object.assign(world, {
@@ -76,7 +84,7 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
   const b = bagPos(world);
   centerCam(world, b.x, b.y + 40);
   for (let i = 0; i < BASE.startPacks; i++) spawnPack(world, true);
-  world.events.push({ kind: 'banner', title: stage.name, sub: stage.blurb });
+  world.events.push({ kind: 'banner', title: stage.name, sub: (stage.blurb ? stage.blurb + ' · ' : '') + LAYOUT_NAMES[lay.kind] });
 }
 
 export function areaAt(world, x, y) {

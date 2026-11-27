@@ -640,7 +640,9 @@ function tree(g, x, y, r, col, rnd) {
 // clairière sombre du boss dans un coin. Dessinée en basse résolution (1 pixel = 1 pixel d'art).
 // Renvoie le canvas et quelques repères (en pixels d'art) pour le jeu et la mini-map.
 export function buildMap(w, h, zone, seed = 11) {
-  let s = seed;
+  const lay = zone.layout || { seed, fx: false, fy: false, kind: 'bosquets' }, kind = lay.kind;
+  let s = lay.seed % 2147483646 + 1;
+  const mx = f => (lay.fx ? 1 - f : f), my = f => (lay.fy ? 1 - f : f);
   const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d');
@@ -675,8 +677,16 @@ export function buildMap(w, h, zone, seed = 11) {
   for (let i = 0; i < (w * h) / 120; i++) g.fillRect(Math.floor(rnd() * w), Math.floor(rnd() * h), 1, 1);
 
   const cx = Math.round(w / 2), cy = Math.round(h / 2);
-  const boss = { x: Math.round(w * 0.84), y: Math.round(h * 0.2), r: Math.round(Math.min(w, h) * 0.13) };
-  const pond = { x: Math.round(w * 0.24), y: Math.round(h * 0.28), r: Math.round(Math.min(w, h) * 0.08) };
+  const bat = (zone.boss && zone.boss.at) || [mx(0.84), my(0.2)];
+  const boss = { x: Math.round(w * bat[0]), y: Math.round(h * bat[1]), r: Math.round(Math.min(w, h) * 0.13) };
+  const pond = { x: Math.round(w * mx(0.2 + rnd() * 0.1)), y: Math.round(h * my(0.25 + rnd() * 0.1)), r: Math.round(Math.min(w, h) * (0.06 + rnd() * 0.04)) };
+  // étangs en plus (paysage « lacs »), loin du campement et du boss
+  const ponds = [pond];
+  for (let i = 0; kind === 'lacs' && ponds.length < 4 && i < 60; i++) {
+    const p = { x: Math.round(w * (0.1 + rnd() * 0.8)), y: Math.round(h * (0.12 + rnd() * 0.76)), r: Math.round(Math.min(w, h) * (0.04 + rnd() * 0.05)) };
+    const far = (q, d) => (p.x - q.x) ** 2 + (p.y - q.y) ** 2 > d * d;
+    if (far({ x: cx, y: cy }, Math.min(w, h) * 0.25) && far(boss, boss.r + p.r * 2) && ponds.every(q => far(q, (q.r + p.r) * 2.2))) ponds.push(p);
+  }
 
   // clairière du boss : sol sombre et cercle de pierres
   for (let yy = -boss.r; yy <= boss.r; yy++) for (let xx = -boss.r; xx <= boss.r; xx++) {
@@ -691,10 +701,15 @@ export function buildMap(w, h, zone, seed = 11) {
 
   // chemins : du campement vers les bords et vers la clairière du boss
   const dirt = zone.path || '#c9a06a', dirtDark = mix(dirt, -0.25), dirtLight = mix(dirt, 0.2);
-  const paths = [
-    [cx, cy, 0, Math.round(h * 0.62)], [cx, cy, w, Math.round(h * 0.45)],
-    [cx, cy, Math.round(w * 0.42), h], [cx, cy, boss.x, boss.y], [cx, cy, Math.round(w * 0.36), 0],
-  ];
+  // de 3 à 5 chemins vers les bords, dans des directions tirées au sort, plus celui du boss
+  const paths = [[cx, cy, boss.x, boss.y]], nP = 3 + Math.floor(rnd() * 3), a0 = rnd() * Math.PI * 2;
+  for (let i = 0; i < nP; i++) {
+    const a = a0 + (i + rnd() * 0.5) / nP * Math.PI * 2, dx = Math.cos(a), dy = Math.sin(a);
+    const t = Math.min(dx ? (dx > 0 ? w - cx : -cx) / dx : 1e9, dy ? (dy > 0 ? h - cy : -cy) / dy : 1e9);
+    const ex = cx + dx * t, ey = cy + dy * t;
+    if (Math.hypot(ex - boss.x, ey - boss.y) < boss.r * 2.5) continue;
+    paths.push([cx, cy, Math.round(ex), Math.round(ey)]);
+  }
   const dots = [];
   for (const [x0, y0, x1, y1] of paths) {
     const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0));
@@ -723,28 +738,54 @@ export function buildMap(w, h, zone, seed = 11) {
   // pierres autour du campement
   for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; blob(g, Math.round(cx + Math.cos(a) * camp * 1.5), Math.round(cy + Math.sin(a) * camp * 1.05), 1 + (i % 2), zone.rock, rnd); }
 
-  // étang
+  // étangs
   const water = zone.water || '#3f8fc8', wDark = mix(water, -0.35), wLight = mix(water, 0.45);
-  for (let yy = -pond.r; yy <= pond.r; yy++) for (let xx = -pond.r * 1.6; xx <= pond.r * 1.6; xx++) {
-    const ang = Math.atan2(yy, xx), rr = 1 + Math.sin(ang * 3 + 1) * 0.12;
-    const d = Math.sqrt((xx * xx) / 2.56 + yy * yy) / (pond.r * rr);
-    if (d > 1) continue;
-    g.fillStyle = d > 0.9 ? '#24161e' : d > 0.8 ? mix(zone.ground[1], -0.2) : yy < -pond.r * 0.3 && d > 0.6 ? wLight : d > 0.55 ? water : wDark;
-    g.fillRect(pond.x + Math.round(xx), pond.y + Math.round(yy), 1, 1);
+  for (const pond of ponds) {
+    for (let yy = -pond.r; yy <= pond.r; yy++) for (let xx = -pond.r * 1.6; xx <= pond.r * 1.6; xx++) {
+      const ang = Math.atan2(yy, xx), rr = 1 + Math.sin(ang * 3 + 1) * 0.12;
+      const d = Math.sqrt((xx * xx) / 2.56 + yy * yy) / (pond.r * rr);
+      if (d > 1) continue;
+      g.fillStyle = d > 0.9 ? '#24161e' : d > 0.8 ? mix(zone.ground[1], -0.2) : yy < -pond.r * 0.3 && d > 0.6 ? wLight : d > 0.55 ? water : wDark;
+      g.fillRect(pond.x + Math.round(xx), pond.y + Math.round(yy), 1, 1);
+    }
+    g.fillStyle = wLight;
+    for (let i = 0; i < 14; i++) { const x = pond.x + Math.round((rnd() - 0.5) * pond.r * 2), y = pond.y + Math.round((rnd() - 0.5) * pond.r); g.fillRect(x, y, 3, 1); }
+    mark(pond.x, pond.y, Math.round(pond.r * 1.7));
   }
-  g.fillStyle = wLight;
-  for (let i = 0; i < 14; i++) { const x = pond.x + Math.round((rnd() - 0.5) * pond.r * 2), y = pond.y + Math.round((rnd() - 0.5) * pond.r); g.fillRect(x, y, 3, 1); }
-  mark(pond.x, pond.y, Math.round(pond.r * 1.7));
+
+  // ruines : pans de murs de pierre écroulés (paysage « ruines »)
+  if (kind === 'ruines') {
+    const stone = mix(zone.rock, 0.1), dark = mix(zone.rock, -0.35), light = mix(zone.rock, 0.35);
+    for (let n = 0, tries = 0; n < 6 && tries < 80; tries++) {
+      const rw = 18 + Math.floor(rnd() * 22), rh = 12 + Math.floor(rnd() * 14);
+      const x0 = Math.floor(rnd() * (w - rw - 40)) + 20, y0 = Math.floor(rnd() * (h - rh - 40)) + 20;
+      if (isBusy(x0 + rw / 2, y0 + rh / 2, Math.max(rw, rh) / 2) || Math.hypot(x0 - cx, y0 - cy) < Math.min(w, h) * 0.18) continue;
+      n++;
+      // dalles au sol, puis murs avec des brèches
+      g.fillStyle = mix(zone.ground[1], -0.12); g.fillRect(x0 + 2, y0 + 2, rw - 4, rh - 4);
+      g.fillStyle = mix(zone.ground[1], -0.2);
+      for (let yy = y0 + 4; yy < y0 + rh - 2; yy += 4) g.fillRect(x0 + 2, yy, rw - 4, 1);
+      const wall = (x, y) => { g.fillStyle = dark; g.fillRect(x, y + 2, 3, 2); g.fillStyle = stone; g.fillRect(x, y, 3, 2); g.fillStyle = light; g.fillRect(x, y, 3, 1); };
+      for (let x = x0; x < x0 + rw; x += 3) { if (rnd() > 0.25) wall(x, y0); if (rnd() > 0.45) wall(x, y0 + rh - 3); }
+      for (let y = y0; y < y0 + rh; y += 3) { if (rnd() > 0.3) wall(x0, y); if (rnd() > 0.4) wall(x0 + rw - 3, y); }
+      // une colonne encore debout
+      const px0 = x0 + 3 + Math.floor(rnd() * (rw - 8)), ph = 8 + Math.floor(rnd() * 6);
+      g.fillStyle = dark; g.fillRect(px0 - 1, y0 + rh / 2 - ph, 6, ph + 2); g.fillStyle = stone; g.fillRect(px0, y0 + rh / 2 - ph, 4, ph); g.fillStyle = light; g.fillRect(px0, y0 + rh / 2 - ph, 1, ph);
+      for (let k = 0; k < 4; k++) blob(g, x0 + Math.floor(rnd() * rw), y0 + rh + Math.floor(rnd() * 5), 1 + Math.floor(rnd() * 2), zone.rock, rnd);
+      mark(x0 + rw / 2, y0 + rh / 2, Math.round(Math.max(rw, rh) * 0.7));
+    }
+  }
+  const dens = { foret: 2.1, plaine: 0.35, ruines: 0.8, lacs: 0.8 }[kind] || 1;
 
   // fleurs et rochers sur l'herbe libre
-  for (let i = 0; i < (w * h) / 600; i++) {
+  for (let i = 0; i < (w * h) / 600 / Math.max(0.5, Math.min(1, dens)); i++) {
     const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h);
     if (isBusy(x, y)) continue;
     g.fillStyle = zone.flower[Math.floor(rnd() * zone.flower.length)];
     g.fillRect(x - 1, y, 1, 1); g.fillRect(x + 1, y, 1, 1); g.fillRect(x, y - 1, 1, 1); g.fillRect(x, y + 1, 1, 1);
     g.fillStyle = '#f2b33d'; g.fillRect(x, y, 1, 1);
   }
-  for (let i = 0; i < (w * h) / 5000; i++) {
+  for (let i = 0; i < (w * h) / 5000 * (kind === 'plaine' ? 2.2 : 1); i++) {
     const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h);
     if (!isBusy(x, y, 3)) blob(g, x, y, 2 + Math.floor(rnd() * 3), zone.rock, rnd);
   }
@@ -756,7 +797,7 @@ export function buildMap(w, h, zone, seed = 11) {
     if (x < -4 || y < -4 || x > w + 4 || y > h + 4 || isBusy(x, y + r, Math.round(r * 0.6))) return;
     trees.push([Math.round(x), Math.round(y), r]);
   };
-  const clumps = Math.round((w * h) / 9000);
+  const clumps = Math.round((w * h) / 9000 * dens);
   for (let i = 0; i < clumps; i++) {
     const x0 = rnd() * w, y0 = rnd() * h, rad = 14 + rnd() * 30, n = 4 + Math.floor(rnd() * 12);
     for (let k = 0; k < n; k++) { const a = rnd() * 7, d = Math.sqrt(rnd()) * rad; tryTree(x0 + Math.cos(a) * d * 1.3, y0 + Math.sin(a) * d); }

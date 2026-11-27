@@ -17,7 +17,7 @@ let mapInfo = null, mapKey = '', vig = null, vigKey = '';
 export function getMap(world) {
   const px = pixelSize(world.w, world.h);
   const arena = world.mode === 'arena';
-  const key = `${arena ? 'antre' : world.zone.id}@${px}:${world.mapW}x${world.mapH}`;
+  const key = `${arena ? 'antre' : world.zone.id + '#' + (world.zone.layout ? world.zone.layout.seed + world.zone.layout.kind : 0)}@${px}:${world.mapW}x${world.mapH}`;
   if (key !== mapKey) {
     mapInfo = arena ? buildArena(Math.ceil(world.mapW / px), Math.ceil(world.mapH / px))
       : buildMap(Math.ceil(world.mapW / px), Math.ceil(world.mapH / px), world.zone);

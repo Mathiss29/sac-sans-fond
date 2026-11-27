@@ -20,6 +20,21 @@ def runs(v):
         if not x and on: on = False; out.append((s, i))
     return out
 
+def fill_holes(img, maxn=60):
+    # trous fermés à l'intérieur du sprite (couleur trop proche du fond gris) : on les rebouche
+    a = img[..., 3] > 0; H, W = a.shape; seen = np.zeros_like(a)
+    for y in range(H):
+        for x in range(W):
+            if a[y, x] or seen[y, x]: continue
+            comp, st, edge = [], [(y, x)], False; seen[y, x] = True
+            while st:
+                cy, cx = st.pop(); comp.append((cy, cx))
+                if cy in (0, H - 1) or cx in (0, W - 1): edge = True
+                for ny, nx in ((cy + 1, cx), (cy - 1, cx), (cy, cx + 1), (cy, cx - 1)):
+                    if 0 <= ny < H and 0 <= nx < W and not a[ny, nx] and not seen[ny, nx]: seen[ny, nx] = True; st.append((ny, nx))
+            if not edge and len(comp) <= maxn:
+                for cy, cx in comp: img[cy, cx, 3] = 255
+
 rows = [r for r in runs(fg.any(1)) if r[1] - r[0] > 20]
 sprites = []
 for (y0, y1) in rows:
@@ -52,6 +67,7 @@ for (y0, y1) in rows:
         img = np.zeros(b.shape[:2] + (4,), np.uint8)
         img[..., :3] = np.median(c, 2).clip(0, 255)
         img[..., 3] = (m.mean(2) > 0.5) * 255
+        fill_holes(img)
         line.append(img)
     sprites.append(line)
 
