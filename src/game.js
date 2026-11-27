@@ -2,6 +2,7 @@
 import { ENEMIES, HEROES, HERO_ORDER, ALL_HEROES, GOLD_WISP, TIERS, FULL_BONUS, OVERFLOW_RATE, BASE, MAP, ARENA, EVENTS, EVENT_WINDOWS, STAGES, ULTS, bagMax, tierOf } from './data.js';
 import { rollItem, RARITIES as GEAR_RARITIES, DROP, KINDS, TROPHY_RARITY } from './gear.js';
 import { CARD_DROP } from './curio.js';
+import { SPECIES, speciesOfZone } from './pets.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 // types de paysage d'une carte (voir buildMap)
@@ -358,6 +359,7 @@ function exitArena(world) {
 
 function updateArena(world, dt) {
   const r = world.run, a = r.arena, bo = r.boss, b = world.zone.boss;
+  if (!a.won) updatePet(world, dt);
   updateHeroes(world, dt);
   updateArrows(world, dt);
   updateHazards(world, dt);
@@ -633,6 +635,7 @@ function damage(world, e, amount, slow, from, type) {
   const st = world.stats;
   if (e.boss || e.elite) amount *= st.bossMult * ((st.bossBy && st.bossBy[type]) || 1);
   if (e.def.demon) amount *= st.demonMult || 1;
+  if (type !== 'pet') amount *= st.petDmg || 1;
   if (e.fake) { e.dead = true; burst(world, e.x, e.y, 20, ['#e8e0d0', '#ffffff', '#8c8f86'], 160, 2, 0, 0.5); world.texts.push({ x: e.x, y: e.y - 30, text: 'Faux !', color: '#e8e0d0', size: 16, life: 0.8 }); return; }
   if (e.boss) {
     if (e.shield) { if (Math.random() < 0.08) world.texts.push({ x: e.x, y: e.y - e.r - 6, text: 'bulle', color: '#aee6ff', size: 12, life: 0.5 }); return; }
@@ -764,6 +767,7 @@ function killEnemy(world, e) {
     for (const o of world.enemies) if (!o.dead && o !== e && d2(o, e) < 70 * 70) { o.burn = Math.max(o.burn || 0, 1.5); o.burnDps = dmg; damage(world, o, dmg, 0, e, 'mage'); }
   }
   if (e.event) world.run.eventsGot++;
+  maybeTreat(world, e);
   // cartes de créature (Cabinet de curiosités)
   const rc = world.run;
   if (world.stats.cards && rc && !e.fake && !e.guard && (rc.cards = rc.cards || []).length < 3 && Math.random() < (e.boss ? 0.5 : CARD_DROP * (e.elite ? 5 : 1))) {
@@ -922,6 +926,7 @@ export function update(world, dt) {
     updateEvents(world, dt);
     updateChests(world, dt);
     updateHelpers(world, dt);
+    updatePet(world, dt);
     updateHeroes(world, dt);
     updateArrows(world, dt);
     if (r.t >= r.duration) { r.t = r.duration; startTear(world); }
@@ -1093,6 +1098,7 @@ function updateHeroes(world, dt) {
     let speed = 1 + u.boost;
     if (s.opening && r && r.t < 3) speed *= 2;
     if (r && r.hymnT > 0) speed *= 2;
+    if (r && r.petLight && d2(u, r.petLight) < r.petLight.r * r.petLight.r) speed *= r.petLight.k;
     if (u.type === 'knight' && has.knB) { u.rage = Math.max(0, (u.rage || 0) - dt * 0.15); speed *= 1 + u.rage; }
     u.bob += dt * 3; u.cd -= dt * speed;
     u.recoil = Math.max(0, (u.recoil || 0) - dt * 6);
@@ -1542,7 +1548,7 @@ function updateCoins(world, dt) {
       // le traversait, repartait de l'autre côté et oscillait sans fin autour)
       const step = Math.min(d, c.sp * dt);
       c.x += dx / d * step; c.y += dy / d * step;
-      if (d - step < 14) { c.dead = true; if (c.item) gotItem(world, c.item); else credit(world, c.value * (c.kind === 'gem' ? world.stats.gemMult || 1 : 1)); }
+      if (d - step < 14) { c.dead = true; if (c.treat) gotTreat(world, c); else if (c.item) gotItem(world, c.item); else credit(world, c.value * (c.kind === 'gem' ? world.stats.gemMult || 1 : 1)); }
       continue;
     }
     if (c.beam > 0) c.beam = Math.max(0, c.beam - dt);
@@ -1600,6 +1606,7 @@ function mergeCoins(world) {
 }
 
 function credit(world, value) {
+  value *= world.stats.petGold || 1;
   if (world.mode === 'arena') { world.run.lair.got += value; world.events.push({ kind: 'coins', value }); }
   else if (world.phase === 'tear') { if (world.stats.fairy) value *= 2; world.run.tearGot += value; world.events.push({ kind: 'coins', value }); }
   else addToBag(world, value);
@@ -1731,3 +1738,218 @@ function endTear(world) {
   world.phase = 'done';
   world.events.push({ kind: 'done' });
 }
+
+// ---------- Familiers ----------
+// Friandises : les ennemis en lâchent parfois (celle de la région) ; on les ramasse comme les pièces.
+function maybeTreat(world, e) {
+  const s = world.stats;
+  if (!s.petsOn || e.fake || e.guard) return;
+  const ch = e.boss ? 1 : e.elite ? 0.25 : e.event ? 0.15 : 0.025;
+  if (Math.random() >= ch) return;
+  const sp = speciesOfZone(world.zone.id) || 'ferret', id = SPECIES[sp].treat[0];
+  for (let i = 0, n = e.boss ? 3 : 1; i < n; i++) {
+    dropCoin(world, e.x + rnd(-10, 10), e.y + rnd(-10, 10), 'treat', 0, 10);
+    const c = world.coins[world.coins.length - 1]; c.treat = id; c.life = c.max = Math.max(c.life, 12);
+  }
+}
+function gotTreat(world, c) {
+  const r = world.run; r.treats = r.treats || {};
+  r.treats[c.treat] = (r.treats[c.treat] || 0) + 1;
+  world.texts.push({ x: c.x, y: c.y - 16, text: 'Friandise !', color: '#ffb0d8', size: 13, life: 0.9 });
+  sfx(world, 'gold');
+}
+function avgFoeValue(world) {
+  let t = 0, n = 0;
+  for (const e of world.enemies) if (!e.dead && !e.boss && !e.event && n < 30) { t += e.value; n++; }
+  return n ? t / n : 2 * world.zone.valueMult;
+}
+function coinRain(world, x, y, n, value, spread = 60) {
+  for (let i = 0; i < n; i++) dropCoin(world, x + rnd(-spread, spread), y + rnd(-spread * 0.6, spread * 0.6), 'coin', value, rnd(20, 60));
+}
+function petMove(h, tx, ty, sp, dt) {
+  const dx = tx - h.x, dy = ty - h.y, d = Math.hypot(dx, dy) || 1;
+  if (d > 3) { h.x += dx / d * Math.min(d, sp * dt); h.y += dy / d * Math.min(d, sp * dt); if (Math.abs(dx) > 2) h.face = dx >= 0 ? 1 : -1; h.moving = true; } else h.moving = false;
+  return d;
+}
+function nearestCoin(world, h, maxD = Infinity) {
+  let best = null, bd = maxD * maxD;
+  for (const c of world.coins) { if (c.fly || c.air || c.item || c.petTaken) continue; const d = d2(c, h); if (d < bd) { bd = d; best = c; } }
+  return best;
+}
+// Le familier actif : un comportement par espèce, et une attaque spéciale en duel de boss.
+function updatePet(world, dt) {
+  const s = world.stats, r = world.run, P = s.pet;
+  if (!P) return;
+  const S = SPECIES[P.sp], b = bagPos(world);
+  let h = r.pet;
+  if (!h || h.mode !== world.mode) {
+    const at = world.mode === 'arena' ? { x: world.mapW / 2 - 60, y: world.mapH * 0.75 } : { x: b.x - 40, y: b.y + 30 };
+    h = r.pet = { kind: 'pet', sp: P.sp, stage: P.stage, gold: P.gold, rar: P.rar, x: at.x, y: at.y, face: 1, t: 0, cd: 3, belly: 0, bellyV: 0, mode: world.mode, swallowed: false };
+  }
+  h.t += dt; h.cd -= dt;
+  r.petLight = null;
+  const pw = P.power, leash = P.stage === 1 ? 260 : Infinity;
+  const home = { x: b.x - 40, y: b.y + 30 };
+  const inLeash = o => !o || leash === Infinity || d2(o, b) < leash * leash;
+  // le familier travaille là où le joueur regarde (sinon on ne voit rien de ce qu'il fait)
+  const view = o => onScreen(world, o.x, o.y, 120) && inLeash(o);
+  if (world.mode === 'arena') { arenaPet(world, h, dt, pw, S); return; }
+  switch (S.mode) {
+    case 'fetch': {
+      if (!h.target || h.target.fly || h.target.dead) { const c = nearestCoin(world, h, 900); h.target = inLeash(c) ? c : null; }
+      if (h.target) { if (petMove(h, h.target.x, h.target.y, 150 + 110 * pw, dt) < 12) { h.target.fly = true; h.target.sp = 160; h.target = null; } }
+      else petMove(h, home.x, home.y, 80, dt);
+      break;
+    }
+    case 'gulp': {
+      const cap = Math.round(4 + 6 * pw);
+      if (h.belly >= cap || (h.belly && !nearestCoin(world, h, 600))) {
+        if (petMove(h, b.x, b.y + 10, 150, dt) < 18) {
+          const mult = 1.5 + 0.5 * pw;
+          credit(world, h.bellyV * mult);
+          world.texts.push({ x: b.x, y: b.y - 50, text: `Recraché ×${mult.toFixed(1).replace('.', ',')}`, color: '#cfe08a', size: 16, life: 1.1 });
+          burst(world, b.x, b.y - 10, 10, ['#ffcd3c', '#fff5b4', '#9fe07a'], 140, 2, 0, 0.5); sfx(world, 'gold');
+          h.belly = 0; h.bellyV = 0;
+        }
+      } else {
+        if (!h.target || h.target.dead || h.target.fly) { const c = nearestCoin(world, h, 700); h.target = inLeash(c) ? c : null; }
+        if (h.target) {
+          if (petMove(h, h.target.x, h.target.y, 130 + 60 * pw, dt) < 12) {
+            const c = h.target; c.dead = true; h.target = null;
+            if (c.treat) gotTreat(world, c); else { h.belly++; h.bellyV += c.value * (c.kind === 'gem' ? s.gemMult || 1 : 1); }
+            if (Math.random() < 0.3) world.texts.push({ x: h.x, y: h.y - 26, text: 'gloup', color: '#cfe08a', size: 11, life: 0.5 });
+          }
+        } else petMove(h, home.x, home.y, 80, dt);
+      }
+      break;
+    }
+    case 'dig': {   // renardeau : va flairer un endroit près des combats, creuse, un tas d'or jaillit
+      if (!h.spot) {
+        const l = world.enemies.filter(e => !e.dead && !e.boss && view(e));
+        const e = l[Math.floor(Math.random() * l.length)];
+        h.spot = e ? { x: e.x + rnd(-80, 80), y: e.y + rnd(-60, 60) } : { x: world.cam.x + world.w * rnd(0.25, 0.75), y: world.cam.y + world.h * rnd(0.3, 0.7) };
+        h.dig = 0;
+      }
+      if (petMove(h, h.spot.x, h.spot.y, 140 + 60 * pw, dt) < 6) {
+        h.dig += dt; h.digging = true;
+        if (Math.random() < dt * 10) burst(world, h.x, h.y + 6, 2, ['#8a6a3a', '#5a4024'], 60, 2, 200, 0.4);
+        if (h.dig >= Math.max(1.2, 3 / pw)) {
+          coinRain(world, h.x, h.y, 6 + Math.round(2 * pw), avgFoeValue(world) * (0.8 + 0.6 * pw), 30);
+          world.texts.push({ x: h.x, y: h.y - 30, text: 'Trésor !', color: '#ffd246', size: 15, life: 1 });
+          burst(world, h.x, h.y, 14, ['#ffcd3c', '#8a6a3a', '#fff5b4'], 160, 2, 0, 0.5); sfx(world, 'gold');
+          h.spot = null; h.digging = false; h.cd = Math.max(3, 9 / pw);
+        }
+      } else h.digging = false;
+      if (h.cd > 0 && !h.digging && h.spot && h.dig === 0) { /* en route */ }
+      break;
+    }
+    case 'frost': {   // hibou : vole de horde en horde, les ennemis sous lui sont ralentis
+      if (!h.goal || h.t > 4 || d2(h, h.goal) < 30 * 30) {
+        h.t = 0;
+        const l = world.enemies.filter(e => !e.dead && !e.event && !e.boss && view(e));
+        const e = l[Math.floor(Math.random() * l.length)];
+        h.goal = e ? { x: e.x, y: e.y } : { x: world.cam.x + world.w * rnd(0.2, 0.8), y: world.cam.y + world.h * rnd(0.25, 0.75) };
+      }
+      petMove(h, h.goal.x, h.goal.y, 170, dt);
+      const R = 60 + 30 * pw;
+      for (const e of world.enemies) if (!e.dead && d2(e, h) < R * R) { e.slow = Math.max(e.slow, 0.4); if (Math.random() < dt * 2) burst(world, e.x, e.y - 8, 1, ['#d8f4ff', '#ffffff'], 30, 2, 0, 0.4); }
+      break;
+    }
+    case 'magnet': {   // scarabée : avance doucement vers les tas de pièces, les attire au sac
+      if (!h.goal || h.t > 5 || d2(h, h.goal) < 20 * 20) {
+        h.t = 0; const c = nearestCoin(world, h, 800);
+        h.goal = c && view(c) ? { x: c.x, y: c.y } : { x: world.cam.x + world.w * rnd(0.25, 0.75), y: world.cam.y + world.h * rnd(0.3, 0.7) };
+      }
+      petMove(h, h.goal.x, h.goal.y, 70 + 30 * pw, dt);
+      const R = 60 + 50 * pw;
+      for (const c of world.coins) if (!c.fly && !c.air && !c.item && d2(c, h) < R * R) { c.fly = true; c.sp = 90; }
+      h.ring = R;
+      break;
+    }
+    case 'gems': {   // chauve-souris : comme la pie, mais chipe des gemmes
+      if (!h.goal || h.t > 3.5 || d2(h, h.goal) < 30 * 30) {
+        h.t = 0;
+        const l = world.enemies.filter(e => !e.dead && !e.event && !e.boss && view(e));
+        const e = l[Math.floor(Math.random() * l.length)];
+        h.goal = e ? { x: e.x, y: e.y } : { x: world.cam.x + world.w * rnd(0.2, 0.8), y: world.cam.y + world.h * rnd(0.25, 0.75) };
+      }
+      petMove(h, h.goal.x, h.goal.y, 210, dt);
+      if (h.cd <= 0) {
+        const e = world.enemies.find(o => !o.dead && !o.event && !o.boss && d2(o, h) < 40 * 40);
+        if (e) {
+          h.cd = Math.max(0.35, 1 / pw);
+          world.coins.push({ x: h.x, y: h.y, vx: 0, vy: 0, kind: 'gem', value: Math.max(1, e.value * (0.3 + 0.3 * pw)), life: 3, max: 3, fly: true, sp: 120, z: 0, spin: 0 });
+          world.texts.push({ x: h.x, y: h.y - 16, text: 'gemme !', color: '#c8b4ff', size: 12, life: 0.6 });
+        }
+      }
+      break;
+    }
+    case 'light': {   // luciole : flotte au-dessus de la compagnie, les héros dans sa lumière agissent plus vite
+      const hs = world.heroes.filter(u => u.drop <= 0);
+      if (hs.length) {
+        if (!h.follow || h.t > 6 || !hs.includes(h.follow)) { h.t = 0; h.follow = hs[Math.floor(Math.random() * hs.length)]; }
+        petMove(h, h.follow.x + 20, h.follow.y - 10, 160, dt);
+      } else petMove(h, home.x, home.y, 80, dt);
+      r.petLight = { x: h.x, y: h.y, r: 90 + 30 * pw, k: 1 + 0.2 * pw };
+      break;
+    }
+    case 'bite': {   // diablotin : mord l'ennemi le plus proche et l'enflamme
+      if (!h.target || h.target.dead) h.target = nearestEnemy(world, h);
+      const tg = h.target && inLeash(h.target) ? h.target : null;
+      const d = tg ? petMove(h, tg.x, tg.y, 180, dt) : petMove(h, home.x, home.y, 80, dt);
+      if (tg && d < 24 && h.cd <= 0) {
+        h.cd = 0.6;
+        const dmg = (s.archerBase || s.damage.archer) * 2.5 * pw;
+        tg.burn = Math.max(tg.burn || 0, 2); tg.burnDps = Math.max(tg.burnDps || 0, dmg * 0.3);
+        damage(world, tg, dmg, 0, h, 'pet');
+        burst(world, tg.x, tg.y, 5, ['#ff5a2a', '#ffb040'], 90, 2, 0, 0.35);
+      }
+      break;
+    }
+    case 'rain': {   // méduse : flotte près de la compagnie ; de temps en temps, une pluie de pièces
+      const hs = world.heroes.filter(u => u.drop <= 0);
+      const f = hs.length ? hs[Math.floor(h.t / 5) % hs.length] : home;
+      petMove(h, f.x + 30, f.y - 30, 90, dt);
+      if (h.cd <= 0) {
+        h.cd = Math.max(8, 20 / pw);
+        coinRain(world, h.x, h.y + 20, 8 + Math.round(4 * pw), avgFoeValue(world) * (0.6 + 0.4 * pw), 90);
+        world.texts.push({ x: h.x, y: h.y - 30, text: 'Pluie d\'étoiles !', color: '#ffb0e8', size: 15, life: 1.1 });
+        burst(world, h.x, h.y, 16, ['#ffb0e8', '#fff5b4', '#ffffff'], 140, 2, 0, 0.6);
+      }
+      break;
+    }
+    case 'swallow': {   // Petit Sac : une fois par expédition, avale tout le butin à l'écran
+      const cx = world.cam.x + world.w / 2, cy = world.cam.y + world.h / 2;
+      petMove(h, cx - 60 + Math.sin(h.t) * 30, cy + 40, 140, dt);
+      const vis = world.coins.filter(c => !c.fly && !c.item && onScreen(world, c.x, c.y, 0));
+      const uses = 1 + (pw >= 2 ? 1 : 0);
+      if ((h.used || 0) < uses && vis.length >= 25 && r.t > 5) {
+        h.used = (h.used || 0) + 1;
+        for (const c of vis) { c.fly = true; c.sp = 200; }
+        world.fx.push({ kind: 'ring', x: h.x, y: h.y, r0: 10, r1: 400, t: 0.6, life: 0.6, color: '#ff4a5a' });
+        world.texts.push({ x: h.x, y: h.y - 34, text: 'Mini-Déchirure !', color: '#ff7a8a', size: 20, life: 1.4 });
+        shake(world, 6); sfx(world, 'portal');
+      }
+      break;
+    }
+  }
+}
+// Duel de boss : le familier tourne autour du boss et lance son attaque spéciale toutes les 8 s.
+function arenaPet(world, h, dt, pw, S) {
+  const r = world.run, bo = r.boss;
+  if (!bo || bo.dead) return;
+  const an = h.t * 0.9, R = bo.r + 70;
+  petMove(h, bo.x + Math.cos(an) * R, bo.y + Math.sin(an) * R * 0.7, 200, dt);
+  if (h.cd > 0) return;
+  h.cd = Math.max(5, 9 - pw);
+  const base = (world.stats.archerBase || world.stats.damage.archer);
+  let txt = '';
+  if (S.boss === 'freeze') { bo.stunned = Math.max(bo.stunned || 0, 1.5 + 0.5 * pw); txt = 'Souffle glacé !'; burst(world, bo.x, bo.y, 24, ['#d8f4ff', '#ffffff', '#8fd0ff'], 200, 2, 0, 0.7); }
+  else if (S.boss === 'burn') { bo.burn = Math.max(bo.burn || 0, 4); bo.burnDps = Math.max(bo.burnDps || 0, base * 4 * pw); damage(world, bo, base * 8 * pw, 0, h, 'pet'); txt = 'Flammèche !'; burst(world, bo.x, bo.y, 20, ['#ff5a2a', '#ffb040', '#fff0b0'], 180, 2, 0, 0.6); }
+  else if (S.boss === 'gold') { coinRain(world, bo.x, bo.y + bo.r * 0.5, 8 + Math.round(3 * pw), bo.value * 0.004 * pw, bo.r + 40); txt = S.mode === 'rain' ? 'Averse d\'étoiles !' : 'Le boss perd des pièces !'; }
+  else if (S.boss === 'cheer') { for (const u of world.heroes) u.stun = 0; r.hymnT = Math.max(r.hymnT || 0, 1.5 + pw); txt = 'Éclat de lune !'; world.fx.push({ kind: 'ring', x: h.x, y: h.y, r0: 10, r1: 260, t: 0.6, life: 0.6, color: '#d8ff7a' }); }
+  else { damage(world, bo, base * 15 * pw, 0, h, 'pet'); txt = 'Morsure !'; burst(world, bo.x, bo.y, 14, ['#ffffff', '#ffd246'], 160, 2, 0, 0.4); }
+  shake(world, 4);
+  world.texts.push({ x: h.x, y: h.y - 30, text: txt, color: PET_TXT_COL[S.boss] || '#ffffff', size: 16, life: 1.1 });
+}
+const PET_TXT_COL = { freeze: '#bfe8ff', burn: '#ff9a5a', gold: '#ffd246', cheer: '#d8ff7a', bite: '#ffffff' };

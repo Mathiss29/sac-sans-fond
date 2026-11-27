@@ -4,6 +4,7 @@ import { TIERS, ENEMIES, bagMax, tierOf } from './data.js';
 const UI_FONT = "'Silkscreen', 'Pixelify Sans', monospace";
 import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos, RARITIES } from './game.js';
 
+import { petSprite, treatSprite, PET_RARITIES, SPECIES } from './pets.js';
 import { buildSprites, loadHeroSheets, loadMonsterSheets, bagSprite, buildMap, buildArena, portalSprite } from './sprites.js';
 
 const SPR = buildSprites();
@@ -483,7 +484,7 @@ export function render(g, world, dpr) {
     const a = c.fly ? 1 : Math.min(1, c.life / 1.5);
     const blink = !c.fly && c.life < 1.5 ? (Math.sin(t * 20) > 0 ? 1 : 0.4) : 1;
     g.globalAlpha = a * blink;
-    const im = SPR.loot[c.kind || 'coin'] || SPR.coin;
+    const im = c.treat ? treatSprite(c.treat) : SPR.loot[c.kind || 'coin'] || SPR.coin;
     const k = c.item ? px + 1 : c.kind && c.kind !== 'coin' ? px : (c.big ? px + 1 : px);
     const nk = c.near ? 1.3 : 1;
     const s = im.width * k * nk, sh2 = im.height * k * nk;
@@ -511,7 +512,7 @@ export function render(g, world, dpr) {
         if (!c.fly) g.fillRect(Math.round(c.x - px), Math.round(c.y - z - s * 3), px * 2, Math.round(s * 2.4));
         g.restore();
       } else if (c.kind !== 'bar') { // halo des gemmes et couronnes
-        g.fillStyle = c.kind === 'gem' ? 'rgba(120,230,255,.25)' : 'rgba(255,220,100,.25)';
+        g.fillStyle = c.treat ? 'rgba(255,150,210,.35)' : c.kind === 'gem' ? 'rgba(120,230,255,.25)' : 'rgba(255,220,100,.25)';
         g.beginPath(); g.arc(c.x, c.y - z, s * 0.9, 0, 7); g.fill();
       }
       g.drawImage(im, Math.round(c.x - s / 2), Math.round(c.y - sh2 / 2 - z), s, sh2);
@@ -672,6 +673,7 @@ export function render(g, world, dpr) {
       g.fillStyle = '#ffd246'; g.fillRect(x + f * 9, y - 3, 2, 2);
     }
   }
+  if (world.run && world.run.pet && world.stats.pet) drawPet(g, world.run.pet, t, px, world);
   // mirage : le gant scintille
   if (world.run && world.run.mirage > 0 && world.pointer.inside) {
     const pw = { x: world.pointer.x + world.cam.x, y: world.pointer.y + world.cam.y };
@@ -1055,3 +1057,34 @@ function tinted(key, color, frames) {
   return (tintCache[id] = frames.map(f => ({ ...f, c: tint(f.c), white: f.white })));
 }
 function veinFmt(v) { return v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') + ' M' : v >= 1e4 ? Math.round(v / 1e3) + ' k' : String(Math.round(v)); }
+
+// Familier actif : sprite, aura de sa rareté, forme dorée qui scintille.
+function drawPet(g, h, t, px, world) {
+  const S = SPECIES[h.sp], im = petSprite(h.sp, h.stage, h.gold);
+  const k = h.stage === 2 ? Math.round(px * 1.5) : px * 2, w = im.width * k, hh = im.height * k;
+  const fly = S.fly, hop = !fly && h.moving ? (Math.floor(t * 10) % 2 ? -k : 0) : Math.round(Math.sin(t * 3) * 1);
+  const x = Math.round(h.x), y = Math.round(h.y + (fly ? -24 + Math.sin(t * 5) * 4 : hop));
+  // ombre
+  g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(h.x, h.y + 2, w * 0.35, 3 + px, 0, 0, 7); g.fill();
+  // anneau d'aimant du scarabée
+  if (h.ring) { g.save(); g.strokeStyle = 'rgba(245,176,112,.35)'; g.lineWidth = px; g.setLineDash([px * 3, px * 3]); g.lineDashOffset = -t * 20; g.beginPath(); g.ellipse(h.x, h.y, h.ring, h.ring * 0.7, 0, 0, 7); g.stroke(); g.restore(); }
+  // lumière de la luciole
+  if (S.mode === 'light' && world.run.petLight) { const L = world.run.petLight, gr = g.createRadialGradient(x, y - hh / 2, 4, x, y - hh / 2, L.r); gr.addColorStop(0, 'rgba(216,255,122,.28)'); gr.addColorStop(1, 'rgba(216,255,122,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y - hh / 2, L.r, 0, 7); g.fill(); }
+  // aura de rareté (rare et plus), lueur propre à l'espèce
+  const col = h.gold ? '#ffe14a' : h.rar ? PET_RARITIES[h.rar].color : S.glow;
+  if (col) {
+    const a = h.rar >= 3 || h.gold ? 0.55 : 0.35, rr = Math.max(w, hh) * (0.7 + 0.06 * Math.sin(t * 4));
+    const gr = g.createRadialGradient(x, y - hh / 2, 2, x, y - hh / 2, rr);
+    gr.addColorStop(0, col + Math.round(a * 255).toString(16).padStart(2, '0')); gr.addColorStop(1, col + '00');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y - hh / 2, rr, 0, 7); g.fill();
+  }
+  // traînée de braise (légendaire) ou étincelles (mythique, dorée)
+  if ((h.rar >= 3 || h.gold) && Math.random() < 0.5) {
+    const pc = h.gold ? ['#fff6c8', '#ffe14a'] : h.rar >= 4 ? ['#ff4a5a', '#ffd0d0'] : ['#ff9a3d', '#ffe0a0'];
+    world.particles.push({ x: h.x + (Math.random() - 0.5) * w * 0.6, y: y - Math.random() * hh, vx: (Math.random() - 0.5) * 20, vy: -20 - Math.random() * 30, grav: 0, life: 0.6, max: 0.6, size: px, color: pc[Math.floor(Math.random() * pc.length)] });
+  }
+  g.save(); g.translate(x, 0); g.scale(h.face || 1, 1);
+  g.drawImage(im, Math.round(-w / 2), Math.round(y - hh), w, hh);
+  g.restore();
+  if (h.belly) { g.font = `${10 + px * 2}px ${UI_FONT}`; g.textAlign = 'center'; g.fillStyle = '#24161e'; g.fillText('×' + h.belly, x + 1, y - hh - 3); g.fillStyle = '#ffd246'; g.fillText('×' + h.belly, x, y - hh - 4); }
+}

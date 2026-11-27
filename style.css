@@ -854,3 +854,60 @@ button[disabled] { cursor: var(--cur) !important; }
 .epReg .epMast.ok { opacity: 1; color: #ffd27a; }
 /* Cartographe : choix du paysage */
 #layoutPick { display: block; margin-top: 6px; font: inherit; font-size: 13px; background: #2a2030; color: #f4ead2; border: 2px solid #120c14; padding: 4px 6px; margin-right: 8px; }
+
+/* Ménagerie : le nid, la collection de familiers et la fiche */
+#pets { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1.2fr) minmax(280px, 1.1fr); gap: 12px; padding: 12px max(12px, env(safe-area-inset-right, 0px)) 84px max(12px, env(safe-area-inset-left, 0px)); overflow: auto; }
+#pets[hidden] { display: none; }
+@media (max-width: 900px) { #pets { grid-template-columns: 1fr; } }
+#pets canvas { image-rendering: pixelated; }
+.pmSlots { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.pmSlot { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; min-height: 124px; padding: 6px 4px; border-radius: 4px; cursor: pointer; color: #ecebd8;
+  background: radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--rc, #3c4830) 28%, transparent) 0 40%, transparent 70%), linear-gradient(#2a3422, #1a2215); border: 2px solid var(--rc, #3c4830); box-shadow: inset 0 0 0 2px #0e130b; }
+.pmSlot.empty { border-style: dashed; cursor: default; background: #1a2215; }
+.pmSlot.act { box-shadow: inset 0 0 0 2px #0e130b, 0 0 0 2px #ffd246; }
+.pmSlot canvas { animation: pmBob 1s steps(2) infinite; }
+.pmLbl { font: 400 10px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink); margin-bottom: auto; }
+.pmNm { font: 400 13px var(--body); }
+.pmBn { font: 400 11px var(--body); color: var(--leaf); text-align: center; }
+@keyframes pmBob { 50% { transform: translateY(-3px); } }
+.pmTreats { display: flex; flex-wrap: wrap; gap: 6px; }
+.pmTreat { display: inline-flex; align-items: center; gap: 6px; font: 400 13px var(--body); background: #1a2215; border: 2px solid #2c3624; border-radius: 3px; padding: 4px 8px; }
+.pmTreat canvas, .pmFeed canvas { width: 12px; height: 12px; }
+.pmGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.pmCell { position: relative; aspect-ratio: 1; display: grid; place-items: center; border-radius: 4px; cursor: pointer; background: linear-gradient(#2a3422, #1a2215); border: 2px solid var(--rc); box-shadow: inset 0 0 0 2px #0e130b; }
+.pmCell.sel { box-shadow: inset 0 0 0 2px #0e130b, 0 0 0 2px #ffd246; }
+.pmCell:hover { transform: translateY(-2px); }
+.pmLv { position: absolute; right: 3px; bottom: 1px; font: 400 10px var(--ui); color: var(--ink); }
+.pmSpecies { display: flex; flex-wrap: wrap; gap: 6px; }
+.pmSp { width: 40px; height: 40px; display: grid; place-items: center; background: #1a2215; border: 2px solid #2c3624; border-radius: 3px; }
+.pmSp canvas { width: 28px; height: auto; max-height: 28px; object-fit: contain; }
+.pmSp.unknown canvas { filter: brightness(0) opacity(.5); }
+.pmCard { border-color: var(--rc, #3c4830); }
+.pmTop { display: flex; gap: 12px; align-items: center; }
+.pmBig { flex: none; width: 116px; height: 116px; display: grid; place-items: center; cursor: pointer; border-radius: 4px; border: 2px solid var(--rc); box-shadow: inset 0 0 0 2px #0e130b;
+  background: radial-gradient(circle, color-mix(in srgb, var(--rc) 35%, transparent) 0 35%, transparent 70%), #141a11; }
+.pmBig canvas { animation: pmBob 1s steps(2) infinite; }
+.pmBig.purr canvas { animation: pmPurr .25s ease-in-out 3; }
+@keyframes pmPurr { 50% { transform: scale(1.12) rotate(-4deg); } }
+.pmId { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pmName { font: 400 18px var(--ui); color: #ecebd8; background: transparent; border: 0; border-bottom: 2px dashed #3c4830; padding: 2px 0; width: 100%; min-width: 0; }
+.pmName:focus { outline: none; border-bottom-color: #ffd246; }
+.pmTags { display: flex; gap: 6px; flex-wrap: wrap; }
+.pmPill { font: 400 11px var(--ui); color: var(--rc); border: 1px solid currentColor; border-radius: 2px; padding: 1px 6px; }
+.pmPill.st { color: var(--leaf); }
+.pmPill.gold { color: #ffe14a; }
+.pmSpName { font: 400 12px var(--body); color: var(--ink); }
+.pmStats { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font: 400 13px var(--body); }
+.pmStats dt { color: var(--ink); }
+.pmStats dd { margin: 0; color: #ecebd8; }
+.pmHearts { color: #ff7a8a; letter-spacing: 1px; }
+.pmFoodTxt { font: 400 12px var(--body); color: var(--ink); }
+.pmFood i { background: linear-gradient(90deg, #8fd06a, #ffd246); }
+.pmMsg { margin: 0; font: 400 14px var(--ui); color: #ffb0d8; }
+.pmBtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.pmFeed.fav { border-color: #ffb0d8; }
+.pmRelease { margin-top: auto; align-self: flex-start; font: 400 11px var(--body); color: var(--ink); background: transparent; border: 1px solid #3c4830; border-radius: 2px; padding: 3px 8px; cursor: pointer; }
+.pmCol .btn.small { font: 400 13px var(--ui); border-radius: 2px; box-shadow: none; padding: 6px 10px; }
+.pmCol .btn.second { color: var(--v3-ink); background: var(--v3-panel); border: 2px solid var(--v3-edge); }
+.pmCol .btn.second:hover { border-color: var(--v3-gold); }
+.pmCol .btn[disabled] { opacity: .5; cursor: default; }
