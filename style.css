@@ -937,11 +937,11 @@ button[disabled] { cursor: var(--cur) !important; }
 #title { background: radial-gradient(ellipse 60% 70% at 50% 45%, rgba(20, 26, 17, .35), rgba(14, 18, 11, .82) 75%); backdrop-filter: none; -webkit-backdrop-filter: none; align-items: center; justify-content: center; z-index: 20; }
 #title[hidden] { display: none; }
 .tMain { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px; max-width: 100%; }
-#tBag { width: 320px; height: 230px; max-width: 80vw; image-rendering: pixelated; margin-bottom: -18px; -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 55%, #000 55%, transparent 100%); mask-image: radial-gradient(ellipse 50% 50% at 50% 55%, #000 55%, transparent 100%); }
-.tLogo { margin: 0; font: 700 clamp(44px, 9vw, 92px)/1 var(--display); letter-spacing: .02em; color: #ffd866; text-align: center;
-  text-shadow: 0 4px 0 #9a5a16, 0 7px 0 #3a2008, 4px 0 0 #2a1806, -4px 0 0 #2a1806, 0 -4px 0 #2a1806, 0 0 28px rgba(255, 200, 80, .45); }
-.tLogo i { font-style: normal; font-size: .6em; color: var(--v3-cream); vertical-align: .25em; }
-.tTag { margin: 14px 0 18px; font: 400 13px var(--ui); letter-spacing: .06em; color: var(--v3-ink); text-shadow: 0 2px 0 #10140d; text-align: center; }
+.tLogo { margin: 0; line-height: 0; animation: tFloat 4s ease-in-out infinite; filter: drop-shadow(0 6px 0 rgba(10, 13, 8, .55)) drop-shadow(0 0 26px rgba(255, 200, 80, .28)); }
+.tLogo img { height: min(440px, 52vh); width: auto; max-width: calc(100vw - 32px); object-fit: contain; }
+@keyframes tFloat { 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .tLogo { animation: none; } }
+.tTag { margin: 4px 0 18px; font: 400 13px var(--ui); letter-spacing: .06em; color: var(--v3-ink); text-shadow: 0 2px 0 #10140d; text-align: center; }
 .tMenu { display: flex; flex-direction: column; gap: 10px; width: min(320px, calc(100vw - 32px)); }
 .tBtn { font: 400 15px var(--ui); letter-spacing: .08em; color: var(--v3-ink); background: var(--v3-panel); border: 2px solid var(--v3-edge); border-radius: 2px; padding: 11px 18px; cursor: pointer;
   box-shadow: 0 0 0 3px #10140d; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: transform .08s, border-color .1s, color .1s; }
