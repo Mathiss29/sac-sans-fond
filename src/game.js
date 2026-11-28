@@ -884,6 +884,7 @@ function addToBag(world, value) {
     world.fx.push({ kind: 'ring', x: p.x, y: p.y, r0: 10, r1: 260, t: 0.9, life: 0.9, color: '#ff9a3c' });
     sfx(world, 'portal');
     world.events.push({ kind: 'banner', title: 'Le portail s\'ouvre !', sub: `${b.lair} : suis la flèche ♛ et clique sur le portail` });
+    world.events.push({ kind: 'eventIntro', ev: 'portal' });   // la première fois, le vieux mage explique
   }
   // Vague aspirante : à chaque palier, tout le butin à l'écran file vers le sac
   if (after > before && s.suction) for (const c of world.coins) if (!c.fly && !c.item && onScreen(world, c.x, c.y, 0)) { c.fly = true; c.sp = 200; }

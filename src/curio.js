@@ -86,6 +86,9 @@ export function newQuest(save, open) {
   const lv = Math.max(0, Math.min(open, LEVELS.length - 1)), z = LEVELS[lv];
   const kinds = ['kills', 'tier', 'events', 'coins'];
   if ((save.bosses || {})[z.id] > 0 || (save.lairs || {})[z.id]) kinds.push('boss');
+  // portail encore scellé ici : quête pour l'ouvrir (deux fois plus probable)
+  const sealed = !((save.bosses || {})[z.id] > 0) && !(save.lairs || {})[z.id] && !(z.id === 'clairiere' && save.lairOpen) && !(ZONES[z.zone] && ZONES[z.zone].demon && !save.level.demonLord) && save.level.tierSoie > 0;
+  if (sealed) kinds.push('portal', 'portal');
   const kind = kinds[Math.floor(Math.random() * kinds.length)];
   const rewards = ['shards', 'card'];
   if (save.level.dungeon > 0) rewards.push('key', 'key');
@@ -107,6 +110,7 @@ export function questText(q) {
     events: () => `Réussis ${q.goal} événements${where}`,
     coins: () => `Gagne ${q.goal} pièces en une expédition`,
     boss: () => `Bats ${levelZone(q.lv).boss.name}${where}`,
+    portal: () => `Ouvre le portail : ${levelZone(q.lv).boss.lair}${where}`,
   };
   return T[q.kind]();
 }
@@ -126,6 +130,7 @@ export function progressQuests(save, info) {
     else if (q.kind === 'tier') q.prog = Math.max(q.prog, info.lairOnly ? 0 : info.tier);
     else if (q.kind === 'coins') q.prog = Math.max(q.prog, info.gained);
     else if (q.kind === 'boss' && info.boss) q.prog = 1;
+    else if (q.kind === 'portal' && info.portal) q.prog = 1;
     if (q.prog >= q.goal) done.push(q);
   }
   c.quests = c.quests.filter(q => !done.includes(q));

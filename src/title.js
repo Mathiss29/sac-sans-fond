@@ -54,6 +54,8 @@ const TIPS = [
   'Ce sac n\'a pas de fond. Mais il a un appétit.',
   'Les élites portent une couronne : elles lâchent mieux.',
   'Rien ne se perd dans le sac. Presque rien.',
+  'Un sac de soie bien rempli ouvre le portail de l\'antre du boss.',
+  'Portail scellé ? Regarde sous son nom : il dit ce qu\'il veut.',
 ];
 let tipTimer = 0, tipIdx = -1;
 function nextTip() {

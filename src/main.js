@@ -5,7 +5,7 @@ import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
 import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos, LAYOUTS, LAYOUT_NAMES, dailyLayout } from './game.js';
 import { setHeroTints, setHeroSkins, setFxIntense, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
-import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites, SPR } from './sprites.js';
+import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites, SPR, portalSprite } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS, CLASS_PAIRS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
 import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
@@ -168,7 +168,7 @@ function renderWorld() {
     b.className = 'wmNode' + (open[i] ? '' : ' locked') + (won ? ' won' : '') + (i === LV() ? ' cur' : '') + (i === wmSel ? ' sel' : '') + (lv.hard ? ' hard' : '');
     b.style.left = p.x + '%'; b.style.top = p.y + '%';
     b.style.setProperty('--g', z.ground[0]); b.style.setProperty('--g2', z.ground[1]); b.style.setProperty('--bc', z.boss.color || '#ff9a46');
-    b.innerHTML = `<span class="wmNum">${i + 1}</span>${won ? '<span class="wmCrown">♛</span>' : open[i] ? '' : '<span class="wmLock">🔒</span>'}<span class="wmName">${lv.name}</span>`;
+    b.innerHTML = `<span class="wmNum">${i + 1}</span>${won ? '<span class="wmCrown">♛</span>' : open[i] ? `<span class="wmPortal ${lairOpen(levelZone(i)) ? 'on' : ''}" title="${lairOpen(levelZone(i)) ? 'Portail de l\'antre ouvert' : 'Portail de l\'antre scellé'}"></span>` : '<span class="wmLock">🔒</span>'}<span class="wmName">${lv.name}</span>`;
     b.onclick = () => { wmSel = i; renderWorld(); };
     b.ondblclick = () => { if (open[i]) travel(i); };
     box.append(b);
@@ -192,6 +192,7 @@ function renderWorld() {
   const best = (save.zoneTier || {})[z.id.replace(/2$/, '')];
   if (best !== undefined) row('Meilleur sac', TIERS[best].name);
   row('Boss vaincu', winsOf(lv.id) ? winsOf(lv.id) + ' fois' : 'pas encore');
+  if (open[wmSel]) row('Antre', lairOpen(z) ? z.boss.lair + ' : portail ouvert' : z.demon && !L('demonLord') ? 'Scellé : achète « Seigneur des Enfers »' : !L('tierSoie') ? 'Scellé : achète « Soie enchantée », puis remplis le sac jusqu\'à la soie ici' : 'Scellé : remplis le sac jusqu\'à la soie ici');
   const btn = document.createElement('button'); btn.className = 'btn'; btn.type = 'button';
   if (open[wmSel]) { btn.textContent = wmSel === LV() ? 'Tu es ici' : 'Partir ici'; btn.disabled = wmSel === LV(); btn.onclick = () => travel(wmSel); }
   else {
@@ -222,8 +223,7 @@ function travel(i) {
 
 // ---------- Expédition ----------
 // Portail de l'antre : ouvert une fois le palier Soie atteint (ou le boss déjà battu).
-function lairOpen() {
-  const z = curZone();
+function lairOpen(z = curZone()) {
   if (winsOf(z.id) > 0) return true;
   if (z.demon && !L('demonLord')) return false;
   return !!((save.lairs || {})[z.id] || (z.id === 'clairiere' && save.lairOpen));
@@ -322,7 +322,7 @@ function finishExpedition() {
     const pool = Object.keys(world.zone.spawn); (r.cards = r.cards || []).push(pool[Math.floor(Math.random() * pool.length)]);
     gearOf(save).shards += 20 + 5 * LV();
   }
-  const qDone = save.curio ? progressQuests(save, { zone: world.zone.dungeon ? null : world.zone.id, kills: r.kills, events: r.eventsGot || 0, tier: r.tier || 0, gained, boss: r.bossKilled && !world.zone.dungeon, lairOnly: r.lair.only }) : [];
+  const qDone = save.curio ? progressQuests(save, { zone: world.zone.dungeon ? null : world.zone.id, kills: r.kills, events: r.eventsGot || 0, tier: r.tier || 0, gained, boss: r.bossKilled && !world.zone.dungeon, lairOnly: r.lair.only, portal: !!r.lair.openedNow }) : [];
   for (const q of qDone) {
     news.push(['Quête accomplie', questText(q) + ' → ' + REWARD_TEXT[q.reward], '#e7d3a1']);
     if (q.reward === 'shards') gearOf(save).shards += 15 + 5 * q.lv;
@@ -498,6 +498,7 @@ const EVENT_HELP = {
   mirage: ['Mirage doré !', 'Pendant 8 s, les ennemis vaincus près du gant valent le triple. Promène-le au milieu des combats.', 'coin'],
   treasure: ['Gobelin des trésors !', 'Il est chargé d\'or : chaque coup lui fait perdre des pièces. Frappe-le le plus possible avant qu\'il ne file.', 'goblin'],
 };
+EVENT_HELP.portal = ['Le portail s\'ouvre !', 'Le vieux mage : « Ton sac a atteint la soie, alors le portail de l\'antre s\'est ouvert. Suis la flèche ♛ et clique sur le portail : le boss t\'attend, et la première victoire rapporte le triple. Plus tard, tu pourras y entrer directement depuis la case de la région, en bas à droite de l\'Atelier. »', 'portal'];
 function eventIntro(kind) {
   save.eventsSeen = save.eventsSeen || {};
   const h = EVENT_HELP[kind];
@@ -508,7 +509,12 @@ function eventIntro(kind) {
   const ic = document.createElement('canvas'); ic.width = ic.height = 64;
   const g2 = ic.getContext('2d'); g2.imageSmoothingEnabled = false;
   const spr = getSprites();
-  const src = h[2] === 'coin' ? spr.coin : spr.enemies[h[2]] && spr.enemies[h[2]][h[2] === 'mimic' ? 0 : 0].c;
+  const src = h[2] === 'portal' ? portalSprite().c : h[2] === 'coin' ? spr.coin : spr.enemies[h[2]] && spr.enemies[h[2]][h[2] === 'mimic' ? 0 : 0].c;
+  if (h[2] === 'portal') {   // le portail ouvert : lave tourbillonnante derrière l'arche
+    const P = portalSprite(), k = Math.min(56 / P.w, 56 / P.h), x0 = 32 - P.w * k / 2, y0 = 32 - P.h * k / 2;
+    g2.fillStyle = '#e0461e'; g2.beginPath(); g2.ellipse(x0 + P.inner.x * k, y0 + P.inner.y * k, P.inner.rx * k, P.inner.ry * k, 0, 0, 7); g2.fill();
+    g2.fillStyle = '#ffd25a'; g2.beginPath(); g2.ellipse(x0 + P.inner.x * k, y0 + P.inner.y * k, P.inner.rx * k * 0.45, P.inner.ry * k * 0.45, 0, 0, 7); g2.fill();
+  }
   if (src) { const k = Math.min(56 / src.width, 56 / src.height); g2.drawImage(src, 32 - src.width * k / 2, 32 - src.height * k / 2, src.width * k, src.height * k); }
   const t = document.createElement('h3'); t.textContent = h[0];
   const p = document.createElement('p'); p.textContent = h[1];
