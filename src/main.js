@@ -4,7 +4,7 @@ import { loadSave, writeSave, freshSave, exportSave, importSave } from './save.j
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
 import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos, LAYOUTS, LAYOUT_NAMES, dailyLayout } from './game.js';
-import { setHeroTints, setHeroSkins, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
+import { setHeroTints, setHeroSkins, setFxIntense, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
 import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites, SPR } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS, CLASS_PAIRS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
@@ -52,6 +52,7 @@ function reached() { let i = 0; while (i + 1 < LEVELS.length && winsOf(LEVELS[i]
 const totalWins = () => Object.values(save.bosses || {}).reduce((t, v) => t + (v > 0 ? 1 : 0), 0);
 world.zone = curZone();
 world.stats = stats;
+setFxIntense(save.fxIntense);
 
 function resize() {
   const r = app.getBoundingClientRect();
@@ -942,7 +943,7 @@ function buy(n) {
 
 // Écran « Changement de classe ! » : les exemplaires tournent en cercle puis fusionnent.
 function classChange(n) {
-  const line = { archer: 'archer', mage: 'mage', knight: 'knight', bard: 'bard' }[n.branch] || 'archer';
+  const line = ALL_HEROES.includes(n.branch) ? n.branch : 'archer';
   const fork = /Fork$/.test(n.id);
   const ov = document.createElement('div'); ov.className = 'classOv';
   const ring = document.createElement('div'); ring.className = 'ring';
@@ -958,7 +959,7 @@ function classChange(n) {
   const d = document.createElement('p'); d.textContent = fork ? 'Les exemplaires fusionnent en un seul héros plus fort, qui garde toutes les améliorations. Choisis maintenant sa voie dans l\'arbre.' : n.desc;
   const ok = document.createElement('button'); ok.className = 'btn'; ok.textContent = 'Super !';
   ov.append(ring, big, t, nm, d, ok); $('app').append(ov);
-  play('tier'); setTimeout(() => play('gold'), 1200);
+  if (fork) play('tier'); else play('jingle', { id: n.id }); setTimeout(() => play('gold'), 1200);
   const close = () => { ov.remove(); removeEventListener('keydown', key, true); };
   const key = e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); close(); } };
   ok.onclick = close; addEventListener('keydown', key, true);

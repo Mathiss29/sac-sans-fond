@@ -381,6 +381,9 @@ function shade(hex, f) {
   return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
 }
 
+// Réglage « effets intenses » (Options) : ondes, coups et éclairs plus grands et plus épais.
+let fxBig = 1;
+export function setFxIntense(on) { fxBig = on ? 1.8 : 1; }
 export function render(g, world, dpr) {
   hardZone = !!(world.zone && world.zone.hard) && world.mode === 'map';
   const { w, h } = world;
@@ -465,17 +468,19 @@ export function render(g, world, dpr) {
 
   for (const f of world.fx) {
     const k = 1 - f.t / f.life;
-    g.strokeStyle = f.color; g.globalAlpha = 1 - k; g.lineWidth = 3;
+    g.strokeStyle = f.color; g.globalAlpha = 1 - k; g.lineWidth = 3 * fxBig;
+    const fr = f.r0 + (f.r1 * fxBig - f.r0) * k;
     g.beginPath();
-    if (f.kind === 'slash') { const a0 = f.face > 0 ? -1.2 : Math.PI - 1.2; g.lineWidth = 4; g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, a0 + k * 1.5, a0 + 1 + k * 1.5); }
+    if (f.kind === 'slash') { const a0 = f.face > 0 ? -1.2 : Math.PI - 1.2; g.lineWidth = 4 * fxBig; g.arc(f.x, f.y, fr, a0 + k * 1.5, a0 + 1 + k * 1.5); }
     else if (f.kind === 'ray') {   // Rayon de glace : un faisceau large qui s'éteint
       g.lineCap = 'round'; g.lineWidth = 34 * (1 - k * 0.6); g.strokeStyle = 'rgba(174,230,255,.55)'; g.moveTo(f.x, f.y); g.lineTo(f.x2, f.y2); g.stroke();
       g.beginPath(); g.lineWidth = 10 * (1 - k * 0.6); g.strokeStyle = '#f0fbff'; g.moveTo(f.x, f.y); g.lineTo(f.x2, f.y2); g.lineCap = 'butt';
     } else if (f.kind === 'bolt') {   // éclair du héraut
-      g.lineWidth = 3; g.strokeStyle = f.color; let x = f.x, y = f.y - 220; g.moveTo(x, y);
-      for (let i = 0; i < 6; i++) { y += 220 / 6; x = f.x + (i < 5 ? rnd2(f.x + i) * 18 : 0); g.lineTo(x, y); }
+      g.lineWidth = 3 * fxBig; g.strokeStyle = f.color; let x = f.x, y = f.y - 220; g.moveTo(x, y);
+      for (let i = 0; i < 6; i++) { y += 220 / 6; x = f.x + (i < 5 ? rnd2(f.x + i) * 18 * fxBig : 0); g.lineTo(x, y); }
+      if (fxBig > 1) { g.stroke(); g.globalAlpha = (1 - k) * 0.35; g.lineWidth = 12; }   // halo autour de l'éclair
     }
-    else g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, 0, 7);
+    else g.arc(f.x, f.y, fr, 0, 7);
     g.stroke();
   }
   g.globalAlpha = 1;
@@ -595,7 +600,7 @@ export function render(g, world, dpr) {
   for (const e of world.enemies) drawEnemy(g, e, t, px);
   for (const q of world.particles) {
     g.globalAlpha = Math.min(1, q.life / q.max * 1.6); g.fillStyle = q.color;
-    const sz = q.size * px * 0.75;
+    const sz = q.size * px * 0.75 * (fxBig > 1 ? 1.4 : 1);
     g.fillRect(Math.round(q.x - sz / 2), Math.round(q.y - sz / 2), Math.round(sz), Math.round(sz));
   }
   g.globalAlpha = 1;

@@ -944,3 +944,5 @@ button[disabled] { cursor: var(--cur) !important; }
 .clsDuel .dCls canvas { width: 96px; height: 92px; image-rendering: pixelated; }
 .clsDuel .dCls b { font-size: 11px; text-align: center; line-height: 1.2; }
 .clsDuel .dCls i { font-size: 10px; font-style: normal; color: #9fe39a; }
+.epVol.epFx input { flex: none; width: 18px; height: 18px; }
+.epVol.epFx .cuHint { margin: 0; }

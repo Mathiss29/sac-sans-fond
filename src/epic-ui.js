@@ -1,13 +1,15 @@
 // Onglet « Épopée » de l'Atelier : ton épopée (chiffres de la partie), bestiaire et garde-robe.
 import { ENEMIES, ZONES, LEVELS, HEROES, ALL_HEROES, COSTUMES, TIERS, MASTERY, CLASS_ULTS, CLASS_ULT_GOAL } from './data.js';
 import { SPR } from './sprites.js';
+import { setFxIntense } from './render.js';
 import { NODES } from './tree.js';
 import { showView } from './company.js';
 import { setVolumes } from './audio.js';
 import { copyReport } from './bugreport.js';
-export const VERSION = '1.0.1';
+export const VERSION = '1.0.2';
 // Journal des versions, du plus récent au plus ancien.
 const JOURNAL = [
+  ['1.0.2', 'Les classes', ['Les 24 classes ont leur sprite, et la fiche de l\'arbre montre les deux classes du choix en animation', 'Effets d\'attaque propres à chaque classe et à chaque voie des nouveaux héros', 'Pose de victoire de l\'équipe sur l\'écran de fin d\'expédition', 'Un petit air par lignée quand tu prends une classe', 'Option « Effets intenses »']],
   ['1.0.1', 'Corrections', ['Les pièces ne tournent plus autour du sac sans y entrer', 'Filons fluides même en fin de partie, avec une jauge de l\'or restant', 'Bouton « 🐞 Bug » : copie un rapport à coller sur Discord']],
   ['1.0', 'Le grand voyage', ['10 régions et 20 niveaux sur une carte du monde (touche M), chacune avec son boss et sa mécanique', 'Ultimes à épreuve (E, R, T, Y) et changements de classe à deux rangs', '5 nouveaux héros : voleur, druide, ingénieur, alchimiste, invocateur', 'Lutin, pie et chien des Enfers ; 7 nouveaux événements', 'Curiosités : cartes de créature, boutique du vieux crapaud, quêtes, donjons', 'Épopée : bilan de la partie, bestiaire, garde-robe, options', 'Sauvegarde exportable, volumes séparés, flèches vers le portail, grande mini-carte (Tab)']],
   ['0.9', 'La forge', ['Compagnie, équipement en 5 raretés, ensembles, forge, album']],
@@ -210,6 +212,9 @@ function renderOpts(body) {
     r.onchange = () => C.write();
     row.append(h('span', '', label), r, out); body.append(row);
   }
+  { const row = h('label', 'epVol epFx'), cb = h('input'); cb.type = 'checkbox'; cb.checked = !!s.fxIntense;
+    cb.onchange = () => { s.fxIntense = cb.checked; setFxIntense(cb.checked); C.write(); };
+    row.append(h('span', '', 'Effets intenses'), cb, h('span', 'cuHint', 'ondes, coups et éclairs plus grands')); body.append(row); }
   body.append(h('h3', '', 'Sauvegarde'));
   body.append(h('p', 'cuHint', 'Copie ce texte pour garder ta partie ou la reprendre sur un autre appareil. Colle un texte de sauvegarde puis « Importer » pour la charger.'));
   const ta = h('textarea', 'epSave'); ta.rows = 4; ta.spellcheck = false;
