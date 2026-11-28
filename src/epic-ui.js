@@ -6,9 +6,10 @@ import { NODES } from './tree.js';
 import { showView } from './company.js';
 import { setVolumes } from './audio.js';
 import { copyReport } from './bugreport.js';
-export const VERSION = '1.0.3';
+export const VERSION = '1.0.4';
 // Journal des versions, du plus récent au plus ancien.
 export const JOURNAL = [
+  ['1.0.4', 'Le chemin de l\'antre', ['La condition pour ouvrir l\'antre du boss est écrite sur la case de la région, avec ton record de palier', 'Le portail scellé dit quoi faire et montre une jauge', 'Le portail s\'ouvre dès que le sac atteint la soie, sans attendre l\'expédition suivante']],
   ['1.0.3', 'L\'accueil', ['Écran d\'accueil avec le logo animé et sa musique « Magical Coin Path » : Jouer ou Continuer, Réglages, Nouveautés, Crédits', 'Astuces du vieux mage et icône d\'onglet', 'Lien vers le site d\'Ombrelune Studio', 'Bouton « ⌂ Menu » dans l\'Atelier pour revenir à l\'accueil']],
   ['1.0.2', 'Les classes', ['Les 24 classes ont leur sprite, et la fiche de l\'arbre montre les deux classes du choix en animation', 'Effets d\'attaque propres à chaque classe et à chaque voie des nouveaux héros', 'Pose de victoire de l\'équipe sur l\'écran de fin d\'expédition', 'Un petit air par lignée quand tu prends une classe', 'Option « Effets intenses »']],
   ['1.0.1', 'Corrections', ['Les pièces ne tournent plus autour du sac sans y entrer', 'Filons fluides même en fin de partie, avec une jauge de l\'or restant', 'Bouton « 🐞 Bug » : copie un rapport à coller sur Discord']],

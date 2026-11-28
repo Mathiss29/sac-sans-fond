@@ -81,7 +81,7 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
       t: 0, duration: stats.duration, spawnT: 0, bag: 0, full: false, overflow: 0,
       kills: 0, toDrop: { ...stats.heroes }, sel: 'archer', attraction: stats.attraction, boss: null, bossKilled: false, golds: 0,
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
-      lair: { open: !!lair.open, first: !!lair.first, done: false, got: 0, only: false, dungeon: !!lair.dungeon }, arena: null,
+      lair: { open: !!lair.open, first: !!lair.first, canOpen: !!lair.canOpen, openedNow: false, done: false, got: 0, only: false, dungeon: !!lair.dungeon }, arena: null,
       happenings: planEvents(stats), eventsGot: 0,
       cnt: { kills: 0, slowed: 0, knocked: 0, auraT: 0 }, areasSeen: {}, mvpAt: zone.families && zone.families.mvp && Math.random() < 0.35 ? stats.duration * rnd(0.2, 0.8) : -1, ult: Object.fromEntries(ALL_HEROES.map(k => [k, 0.5])), hymnT: 0, reinforced: false,
     },
@@ -876,6 +876,15 @@ function addToBag(world, value) {
   const after = tierOf(r.bag, s);
   if (after > before) { shake(world, 6); sfx(world, 'tier'); burst(world, world.mapW / 2, world.mapH / 2 - 30, 40, [TIERS[after].glow, TIERS[after].color, '#ffffff'], 220, 2, 0, 0.9); }
   if (after > before) world.events.push({ kind: 'banner', title: TIERS[after].name + ' !', sub: `Déchirure ×${String(TIERS[after].mult).replace('.', ',')}` });
+  // Le palier qui ouvre l'antre est atteint : le portail s'ouvre tout de suite, sans attendre l'expédition suivante.
+  const L0 = r.lair;
+  if (after > before && after >= ARENA.unlockTier && L0 && !L0.open && L0.canOpen && !L0.dungeon && world.mode === 'map') {
+    L0.open = true; L0.openedNow = true;
+    const p = portalPos(world), b = world.zone.boss;
+    world.fx.push({ kind: 'ring', x: p.x, y: p.y, r0: 10, r1: 260, t: 0.9, life: 0.9, color: '#ff9a3c' });
+    sfx(world, 'portal');
+    world.events.push({ kind: 'banner', title: 'Le portail s\'ouvre !', sub: `${b.lair} : suis la flèche ♛ et clique sur le portail` });
+  }
   // Vague aspirante : à chaque palier, tout le butin à l'écran file vers le sac
   if (after > before && s.suction) for (const c of world.coins) if (!c.fly && !c.item && onScreen(world, c.x, c.y, 0)) { c.fly = true; c.sp = 200; }
   if (r.bag >= max && !r.full) {

@@ -1,6 +1,6 @@
 // Tout le dessin sur le canvas, en pixel art (sprites dans sprites.js).
 import { RARITIES as GEAR_RARITIES } from './gear.js';
-import { TIERS, ENEMIES, bagMax, tierOf } from './data.js';
+import { TIERS, ENEMIES, ARENA, bagMax, tierOf, tierRange } from './data.js';
 const UI_FONT = "'Silkscreen', 'Pixelify Sans', monospace";
 import { bagPos, canDrop, gloveRadius, attractionActive, focusActive, FOCUS_R, portalPos, RARITIES } from './game.js';
 
@@ -932,6 +932,17 @@ function drawPortal(g, world, t, px) {
   const label = r && r.lair.done ? 'Portail refermé' : open ? world.zone.boss.lair : 'Portail scellé';
   g.strokeStyle = '#24161e'; g.lineWidth = 4; g.strokeText(label, p.x, y0 - 8);
   g.fillStyle = open ? '#ffb347' : '#c8b8b0'; g.fillText(label, p.x, y0 - 8);
+  if (r && !open && !r.lair.done && !r.lair.dungeon) {   // portail scellé : on dit comment l'ouvrir
+    const can = r.lair.canOpen && world.stats.tiers > ARENA.unlockTier;
+    const sub = !r.lair.canOpen ? 'Achète « Seigneur des Enfers »' : can ? `Remplis le sac jusqu'au palier ${TIERS[ARENA.unlockTier].name.replace(' enchantée', '')}` : 'Achète « Soie enchantée » dans l\'arbre';
+    g.font = `700 12px 'Pixelify Sans', system-ui, sans-serif`; g.strokeText(sub, p.x, y0 + H + 16); g.fillStyle = '#e8d8c8'; g.fillText(sub, p.x, y0 + H + 16);
+    if (can) {   // jauge : où en est le sac par rapport au palier voulu
+      const goal = tierRange(ARENA.unlockTier, world.stats)[0], k2 = Math.max(0, Math.min(1, r.bag / goal));
+      const bw = 96, bx = Math.round(p.x - bw / 2), by = Math.round(y0 + H + 24);
+      g.fillStyle = '#24161e'; g.fillRect(bx - 2, by - 2, bw + 4, 8); g.fillStyle = '#3a2a40'; g.fillRect(bx, by, bw, 4);
+      g.fillStyle = TIERS[ARENA.unlockTier].color; g.fillRect(bx, by, Math.round(bw * k2), 4);
+    }
+  }
   if (open) { const sub = 'clique pour entrer'; g.font = `700 12px 'Pixelify Sans', system-ui, sans-serif`; g.strokeText(sub, p.x, y0 + H + 16); g.fillStyle = '#fff2c8'; g.fillText(sub, p.x, y0 + H + 16); }
 }
 

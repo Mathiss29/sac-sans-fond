@@ -323,6 +323,13 @@ h1, .btn, #info h3 { letter-spacing: .02em; }
 .zoneCard { border-radius: 2px; border: 2px solid var(--v3-edge); background: radial-gradient(circle at 34px 50%, rgba(255, 170, 70, .6) 0 5px, rgba(255, 120, 40, .2) 6px 20px, transparent 21px), linear-gradient(90deg, #4c4a3a 0 66px, var(--v3-panel) 66px); padding-left: 80px; min-width: 260px; }
 .zoneCard .zoneName { font: 400 15px var(--ui); color: #ecebd8; letter-spacing: .06em; }
 .zoneCard .zoneBoss { font: 400 15px var(--body); color: #e6c875; }
+/* condition d'ouverture de l'antre, toujours visible sous son nom */
+.zoneCard .zoneHint { display: flex; align-items: center; gap: 6px; font: 400 12px var(--body); color: #b8b49c; max-width: 300px; line-height: 1.25; }
+.zoneCard.sealed .zoneHint { color: #f0d9a8; }
+.tierPips { display: inline-flex; gap: 3px; flex: none; }
+.tierPips i { width: 11px; height: 11px; border: 1px solid #0e130b; background: #3a3a30; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.tierPips i.on { background: var(--c); }
+.tierPips i:last-child { outline: 1px solid #e6c875; outline-offset: 1px; }
 
 /* liens : fins, cernés de noir ; vifs une fois achetés, presque noirs sinon */
 #treeLines path { shape-rendering: crispEdges; }
