@@ -5,7 +5,7 @@ import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
 import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos, LAYOUTS, LAYOUT_NAMES, dailyLayout } from './game.js';
 import { setHeroTints, setHeroSkins, setFxIntense, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
-import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites, SPR } from './sprites.js';
+import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites, SPR, portalSprite } from './sprites.js';
 import { NODES, NODE, BRANCHES, TREE_LABELS, CLASS_PAIRS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
 import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
@@ -24,12 +24,14 @@ const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
 let save = loadSave();
 const heroIcons = {};   // icônes des héros (refaites quand la tenue change)
 // stats du moment : arbre + équipement de la Compagnie
+const PORTIER_BONUS = 1.25;   // succès « Portier » : butin des boss quand les 10 portails sont ouverts
 function calcStats() {
   setHeroTints(heroTints(save));
   for (const k in heroIcons) delete heroIcons[k];
   const s = computeStats(save.level, curioBonus(save, masteryBonus(save, gearBonus(save.gear, save.level))));
   s.eventCount += extraEvents(save);
   applyPets(s, save); s.petsOn = petsOf(save).list.some(p => p.stage > 0);
+  if (save.portier) s.bossGold = (s.bossGold || 1) * PORTIER_BONUS;   // succès « Portier » : les 10 portails ouverts
   s.clsUltCount = save.clsUlt || {};
   s.clsUltOn = Object.fromEntries(Object.entries(s.clsUltCount).map(([v, n]) => [v, n >= CLASS_ULT_GOAL]));
   setHeroSkins(s.cls);
@@ -168,7 +170,7 @@ function renderWorld() {
     b.className = 'wmNode' + (open[i] ? '' : ' locked') + (won ? ' won' : '') + (i === LV() ? ' cur' : '') + (i === wmSel ? ' sel' : '') + (lv.hard ? ' hard' : '');
     b.style.left = p.x + '%'; b.style.top = p.y + '%';
     b.style.setProperty('--g', z.ground[0]); b.style.setProperty('--g2', z.ground[1]); b.style.setProperty('--bc', z.boss.color || '#ff9a46');
-    b.innerHTML = `<span class="wmNum">${i + 1}</span>${won ? '<span class="wmCrown">♛</span>' : open[i] ? '' : '<span class="wmLock">🔒</span>'}<span class="wmName">${lv.name}</span>`;
+    b.innerHTML = `<span class="wmNum">${i + 1}</span>${won ? '<span class="wmCrown">♛</span>' : open[i] ? `<span class="wmPortal ${lairOpen(levelZone(i)) ? 'on' : ''}" title="${lairOpen(levelZone(i)) ? 'Portail de l\'antre ouvert' : 'Portail de l\'antre scellé'}"></span>` : '<span class="wmLock">🔒</span>'}<span class="wmName">${lv.name}</span>`;
     b.onclick = () => { wmSel = i; renderWorld(); };
     b.ondblclick = () => { if (open[i]) travel(i); };
     box.append(b);
@@ -192,6 +194,7 @@ function renderWorld() {
   const best = (save.zoneTier || {})[z.id.replace(/2$/, '')];
   if (best !== undefined) row('Meilleur sac', TIERS[best].name);
   row('Boss vaincu', winsOf(lv.id) ? winsOf(lv.id) + ' fois' : 'pas encore');
+  if (open[wmSel]) row('Antre', lairOpen(z) ? z.boss.lair + ' : portail ouvert' : z.demon && !L('demonLord') ? 'Scellé : achète « Seigneur des Enfers »' : !L('tierSoie') ? 'Scellé : achète « Soie enchantée », puis remplis le sac jusqu\'à la soie ici' : 'Scellé : remplis le sac jusqu\'à la soie ici');
   const btn = document.createElement('button'); btn.className = 'btn'; btn.type = 'button';
   if (open[wmSel]) { btn.textContent = wmSel === LV() ? 'Tu es ici' : 'Partir ici'; btn.disabled = wmSel === LV(); btn.onclick = () => travel(wmSel); }
   else {
@@ -222,13 +225,20 @@ function travel(i) {
 
 // ---------- Expédition ----------
 // Portail de l'antre : ouvert une fois le palier Soie atteint (ou le boss déjà battu).
-function lairOpen() {
-  const z = curZone();
+function lairOpen(z = curZone()) {
   if (winsOf(z.id) > 0) return true;
   if (z.demon && !L('demonLord')) return false;
   return !!((save.lairs || {})[z.id] || (z.id === 'clairiere' && save.lairOpen));
 }
-const lairInfo = () => ({ open: lairOpen(), first: !(winsOf(curZone().id) > 0) });
+// canOpen : le portail peut s'ouvrir en cours d'expédition dès que le sac atteint le palier voulu.
+// Portails ouverts dans les 10 régions (niveau I ou II) : 10 sur 10 = succès « Portier ».
+function portalsOpened() {
+  const lairs = save.lairs || {}, bosses = save.bosses || {};
+  return ZONES.filter(z => lairs[z.id] || lairs[z.id + '2'] || bosses[z.id] > 0 || bosses[z.id + '2'] > 0 || (z.id === 'clairiere' && save.lairOpen)).length;
+}
+const lairInfo = () => ({ open: lairOpen(), first: !(winsOf(curZone().id) > 0), canOpen: !curZone().demon || !!L('demonLord') });
+// Meilleur palier de sac atteint dans la région en cours (pour indiquer où on en est vers le portail).
+const zoneRecord = () => ((save.zoneTier || {})[ZONES[LEVELS[LV()].zone].id] || 0);
 function showRunUi() {
   $('atelier').hidden = true; $('result').hidden = true; $('title').hidden = true;
   $('hud').hidden = false; $('dropBar').hidden = false; $('hint').hidden = false; $('mapUi').hidden = false;
@@ -307,7 +317,7 @@ function finishExpedition() {
   if (!r.lair.only) save.maxTier = Math.max(save.maxTier || 0, r.tier);
   const wasOpen = lairOpen(), zid = world.zone.id, base = ZONES[LEVELS[LV()].zone].id;
   if (!r.lair.only) { save.zoneTier = save.zoneTier || {}; save.zoneTier[base] = Math.max(save.zoneTier[base] || 0, r.tier); }
-  if (!r.lair.only && r.tier >= ARENA.unlockTier) { save.lairs = save.lairs || {}; save.lairs[zid] = true; if (zid === 'clairiere') save.lairOpen = true; }
+  if (!r.lair.only && (r.tier >= ARENA.unlockTier || r.lair.openedNow)) { save.lairs = save.lairs || {}; save.lairs[zid] = true; if (zid === 'clairiere') save.lairOpen = true; }
   const unlocked = !wasOpen && lairOpen();
   const lairWait = !lairOpen() && world.zone.demon && (save.lairs || {})[zid];
   // objets trouvés : rangés dans la réserve (ceux qui ne rentrent pas sont recyclés en éclats)
@@ -319,7 +329,7 @@ function finishExpedition() {
     const pool = Object.keys(world.zone.spawn); (r.cards = r.cards || []).push(pool[Math.floor(Math.random() * pool.length)]);
     gearOf(save).shards += 20 + 5 * LV();
   }
-  const qDone = save.curio ? progressQuests(save, { zone: world.zone.dungeon ? null : world.zone.id, kills: r.kills, events: r.eventsGot || 0, tier: r.tier || 0, gained, boss: r.bossKilled && !world.zone.dungeon, lairOnly: r.lair.only }) : [];
+  const qDone = save.curio ? progressQuests(save, { zone: world.zone.dungeon ? null : world.zone.id, kills: r.kills, events: r.eventsGot || 0, tier: r.tier || 0, gained, boss: r.bossKilled && !world.zone.dungeon, lairOnly: r.lair.only, portal: !!r.lair.openedNow }) : [];
   for (const q of qDone) {
     news.push(['Quête accomplie', questText(q) + ' → ' + REWARD_TEXT[q.reward], '#e7d3a1']);
     if (q.reward === 'shards') gearOf(save).shards += 15 + 5 * q.lv;
@@ -349,7 +359,9 @@ function finishExpedition() {
     rows.push([world.zone.boss.name, r.bossKilled ? 'vaincu !' : `${Math.round((1 - Math.max(0, r.boss.hp) / r.boss.max) * 100)} % de dégâts`, '#ff9f7a']);
     rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got), '#ff9f7a']);
   }
-  if (unlocked) rows.push([world.zone.boss.lair, 'portail ouvert !', '#c8a2ff']);
+  if (unlocked) rows.push([world.zone.boss.lair, 'ouvert ! Accès direct depuis l\'Atelier', '#c8a2ff']);
+  if (unlocked && !save.portier) rows.push(['Portails ouverts', `${portalsOpened()} / ${ZONES.length}`, '#c8a2ff']);
+  if (!save.portier && portalsOpened() >= ZONES.length) { save.portier = true; stats = calcStats(); rows.push(['Succès : Portier !', `butin des boss ×${String(PORTIER_BONUS).replace('.', ',')}`, '#ffd246']); }
   if (lairWait) rows.push([world.zone.boss.lair, 'demande « Seigneur des Enfers »', '#ff7a5a']);
   if (r.bossKilled && winsOf(zid) === 1 && LV() + 1 < LEVELS.length) rows.push(['Nouveau niveau', LEVELS[LV() + 1].name + (levelOpen(LV() + 1) ? ' ouvert !' : ' (portail des Enfers requis)'), '#9fe07a']);
   if (found.length) rows.push(['Besaces d\'équipement', String(found.length), '#c07aff']);
@@ -495,6 +507,7 @@ const EVENT_HELP = {
   mirage: ['Mirage doré !', 'Pendant 8 s, les ennemis vaincus près du gant valent le triple. Promène-le au milieu des combats.', 'coin'],
   treasure: ['Gobelin des trésors !', 'Il est chargé d\'or : chaque coup lui fait perdre des pièces. Frappe-le le plus possible avant qu\'il ne file.', 'goblin'],
 };
+EVENT_HELP.portal = ['Le portail s\'ouvre !', 'Le vieux mage : « Ton sac a atteint la soie, alors le portail de l\'antre s\'est ouvert. Suis la flèche ♛ et clique sur le portail : le boss t\'attend, et la première victoire rapporte le triple. Plus tard, tu pourras y entrer directement depuis la case de la région, en bas à droite de l\'Atelier. »', 'portal'];
 function eventIntro(kind) {
   save.eventsSeen = save.eventsSeen || {};
   const h = EVENT_HELP[kind];
@@ -505,7 +518,12 @@ function eventIntro(kind) {
   const ic = document.createElement('canvas'); ic.width = ic.height = 64;
   const g2 = ic.getContext('2d'); g2.imageSmoothingEnabled = false;
   const spr = getSprites();
-  const src = h[2] === 'coin' ? spr.coin : spr.enemies[h[2]] && spr.enemies[h[2]][h[2] === 'mimic' ? 0 : 0].c;
+  const src = h[2] === 'portal' ? portalSprite().c : h[2] === 'coin' ? spr.coin : spr.enemies[h[2]] && spr.enemies[h[2]][h[2] === 'mimic' ? 0 : 0].c;
+  if (h[2] === 'portal') {   // le portail ouvert : lave tourbillonnante derrière l'arche
+    const P = portalSprite(), k = Math.min(56 / P.w, 56 / P.h), x0 = 32 - P.w * k / 2, y0 = 32 - P.h * k / 2;
+    g2.fillStyle = '#e0461e'; g2.beginPath(); g2.ellipse(x0 + P.inner.x * k, y0 + P.inner.y * k, P.inner.rx * k, P.inner.ry * k, 0, 0, 7); g2.fill();
+    g2.fillStyle = '#ffd25a'; g2.beginPath(); g2.ellipse(x0 + P.inner.x * k, y0 + P.inner.y * k, P.inner.rx * k * 0.45, P.inner.ry * k * 0.45, 0, 0, 7); g2.fill();
+  }
   if (src) { const k = Math.min(56 / src.width, 56 / src.height); g2.drawImage(src, 32 - src.width * k / 2, 32 - src.height * k / 2, src.width * k, src.height * k); }
   const t = document.createElement('h3'); t.textContent = h[0];
   const p = document.createElement('p'); p.textContent = h[1];
@@ -697,7 +715,7 @@ const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: winsOf('clairiere'), 
 // épreuves d'ultime : acceptée (meilleur score enregistré) mais pas encore réussie
 const trialOn = n => n.type === 'ult' && !L(n.id) && save.trials && save.trials[n.id] !== undefined;
 // niveau maximum achetable pour l'instant (certains nœuds se débloquent par étapes)
-const capOf = n => n.cap ? Math.min(n.max, n.cap(L)) : n.max;
+const capOf = n => n.cap ? Math.min(n.max, n.cap(L, save)) : n.max;
 const lockedNow = n => n.soon || (n.need && !n.need(ctx()) && !L(n.id));
 // une seule voie par fourche de classe (pas encore en jeu, mais on garde la règle)
 const costOf = (n, lv) => nodeCost(n, lv, save.level);
@@ -760,7 +778,20 @@ function renderTree() {
   $('zoneBoss').textContent = (open ? '♛ ' : '🔒 ') + z.boss.lair;
   document.querySelector('#lairBtn').style.setProperty('--zc', z.boss.color || '#ff9a46');
   $('runsChip').textContent = `Expéditions : ${save.expeditions}`;
-  lb.title = open ? `Affronter ${z.boss.name} directement` : z.demon && (save.lairs || {})[z.id] ? 'Achète « Seigneur des Enfers » dans l\'arbre pour ouvrir son antre' : `Remplis le sac jusqu'au palier « ${TIERS[ARENA.unlockTier].name} » ici pour ouvrir le portail`;
+  const need = TIERS[ARENA.unlockTier], rec = Math.min(zoneRecord(), ARENA.unlockTier);
+  const demonWait = z.demon && !L('demonLord');
+  lb.title = open ? `Affronter ${z.boss.name} directement` : !demonWait && !L('tierSoie') ? 'Achète « Soie enchantée » (branche du sac) dans l\'arbre, puis remplis le sac jusqu\'à ce palier pendant une expédition ici' : demonWait ? 'Achète « Seigneur des Enfers » dans l\'arbre pour ouvrir son antre' : `Remplis le sac jusqu'au palier « ${need.name} » pendant une expédition ici : le portail s'ouvre aussitôt`;
+  // Condition toujours visible (pas seulement au survol) : paliers du sac jusqu'à celui qui ouvre le portail.
+  const hint = $('zoneHint'); hint.innerHTML = '';
+  if (open) hint.textContent = winsOf(z.id) > 0 ? `Vaincu ${winsOf(z.id)} fois · clique pour l'affronter` : 'Portail ouvert · clique pour entrer';
+  else if (demonWait) hint.textContent = 'Achète « Seigneur des Enfers » dans l\'arbre';
+  else if (!L('tierSoie')) hint.textContent = '🔒 Achète « Soie enchantée » dans l\'arbre, puis remplis le sac jusqu\'à la soie ici';
+  else {
+    const pips = document.createElement('span'); pips.className = 'tierPips';
+    for (let i = 0; i <= ARENA.unlockTier; i++) { const d = document.createElement('i'); d.style.setProperty('--c', TIERS[i].color); if (i <= rec) d.className = 'on'; d.title = TIERS[i].name; pips.append(d); }
+    hint.append(pips, `Remplis le sac jusqu'à la soie ici`);
+  }
+  lb.classList.toggle('sealed', !open);
   const inner = $('treeInner'), svg = $('treeLines');
   const W = PAD * 2 + (maxX - minX) * G, H = PAD * 2 + (maxY - minY) * G;
   inner.style.width = W + 'px'; inner.style.height = H + 'px';
@@ -1071,7 +1102,7 @@ function drawMinimap() {
   const b = bagPos(world); dot(b.x, b.y, 6, '#fff2c8');
   for (const u of world.heroes) dot(u.x, u.y, 4, '#7ee06b');
   const lr = world.run && world.run.lair, pp = portalPos(world);
-  if (lr && lr.open && !lr.done) { dot(pp.x, pp.y, 8, '#24161e'); dot(pp.x, pp.y, 6, '#ff9a3c'); }
+  if (lr && lr.open && !lr.done) { dot(pp.x, pp.y, 8, '#24161e'); dot(pp.x, pp.y, 6, world.zone.boss.color || '#ff9a3c'); }
   mg.strokeStyle = '#fff'; mg.lineWidth = 1.5;
   mg.strokeRect(world.cam.x * k, world.cam.y * k, world.w * k, world.h * k);
 }

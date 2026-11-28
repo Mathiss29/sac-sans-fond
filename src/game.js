@@ -81,7 +81,7 @@ export function startExpedition(world, stats, zone, lair = {}, stage = STAGES[0]
       t: 0, duration: stats.duration, spawnT: 0, bag: 0, full: false, overflow: 0,
       kills: 0, toDrop: { ...stats.heroes }, sel: 'archer', attraction: stats.attraction, boss: null, bossKilled: false, golds: 0,
       tearT: 0, tearTotal: 0, tearGot: 0, shake: 0, mult: 1, tier: 0,
-      lair: { open: !!lair.open, first: !!lair.first, done: false, got: 0, only: false, dungeon: !!lair.dungeon }, arena: null,
+      lair: { open: !!lair.open, first: !!lair.first, canOpen: !!lair.canOpen, openedNow: false, done: false, got: 0, only: false, dungeon: !!lair.dungeon }, arena: null,
       happenings: planEvents(stats), eventsGot: 0,
       cnt: { kills: 0, slowed: 0, knocked: 0, auraT: 0 }, areasSeen: {}, mvpAt: zone.families && zone.families.mvp && Math.random() < 0.35 ? stats.duration * rnd(0.2, 0.8) : -1, ult: Object.fromEntries(ALL_HEROES.map(k => [k, 0.5])), hymnT: 0, reinforced: false,
     },
@@ -302,6 +302,8 @@ export function canEnterPortal(world, x, y) {
   return (x - p.x) ** 2 + (y - p.y) ** 2 < p.r * p.r;
 }
 
+// Sieste du boss à l'arrivée dans l'antre (s) : ses coups ×2 pendant ce temps, compte à rebours à l'écran.
+export const BOSS_NAP = 3;
 export function enterArena(world) {
   const r = world.run;
   if (!r.lair.only) {
@@ -325,6 +327,7 @@ export function enterArena(world) {
     type: 'boss', boss: true, def: { ...b, color: b.color || '#ff7a3c', core: '#fff1c2' }, x: home.x, y: home.y, r: b.radius,
     hp: b.hp * world.zone.hpMult, max: b.hp * world.zone.hpMult, value: b.value * world.zone.valueMult * (r.lair.first ? ARENA.firstBonus : 1) * (world.stats.bossGold || 1),
     a: rnd(0, 6), ph: rnd(0, 6), age: 0, hit: 0, dead: false, slow: 0, home,
+    nap: BOSS_NAP + (world.stats.bossNap || 0),   // il dort à notre arrivée : compte à rebours affiché au-dessus de lui
   };
   if (b.mech === 'armor') e.armor = e.armorMax = e.max * 0.3;
   world.enemies.push(e);
@@ -416,7 +419,7 @@ function bossMechanics(world, dt) {
   const fast = (b.faster || 1) * (bo.rage ? 1.5 : 1);
   // le boss dort à notre arrivée : il se réveille en grondant, puis le combat commence
   if (!bo.woke) {
-    if ((bo.age || 0) < 1.1 + (world.stats.bossNap || 0)) { if (Math.random() < dt * 1.2) world.texts.push({ x: bo.x + 20, y: bo.y - 70, text: 'z', color: '#e8eef8', size: 16, life: 1.2, vy: -30 }); return; }
+    if ((bo.age || 0) < bo.nap) { if (Math.random() < dt * 1.2) world.texts.push({ x: bo.x + 20, y: bo.y - 70, text: 'z', color: '#e8eef8', size: 16, life: 1.2, vy: -30 }); return; }
     bo.woke = true; bo.wokeAt = bo.age || 0; shake(world, 12); sfx(world, 'rumble');
     burst(world, bo.x, bo.y + 24, 34, ['#8a7a6a', '#c8b8a0', '#ffffff'], 220, 2, 0, 0.8);
     world.texts.push({ x: bo.x, y: bo.y - 80, text: '!', color: '#ff5e4d', size: 30, life: 1.1 });
@@ -876,6 +879,20 @@ function addToBag(world, value) {
   const after = tierOf(r.bag, s);
   if (after > before) { shake(world, 6); sfx(world, 'tier'); burst(world, world.mapW / 2, world.mapH / 2 - 30, 40, [TIERS[after].glow, TIERS[after].color, '#ffffff'], 220, 2, 0, 0.9); }
   if (after > before) world.events.push({ kind: 'banner', title: TIERS[after].name + ' !', sub: `Déchirure ×${String(TIERS[after].mult).replace('.', ',')}` });
+  // Le palier qui ouvre l'antre est atteint : le portail s'ouvre tout de suite, sans attendre l'expédition suivante.
+  const L0 = r.lair;
+  if (after > before && after >= ARENA.unlockTier && L0 && !L0.open && L0.canOpen && !L0.dungeon && world.mode === 'map') {
+    L0.open = true; L0.openedNow = true;
+    const p = portalPos(world), b = world.zone.boss;
+    const pc = b.color || '#ff9a3c';
+    world.fx.push({ kind: 'ring', x: p.x, y: p.y, r0: 10, r1: 260, t: 0.9, life: 0.9, color: pc });
+    world.fx.push({ kind: 'ring', x: p.x, y: p.y, r0: 10, r1: 520, t: 1.3, life: 1.3, color: '#fff2c8' });
+    burst(world, p.x, p.y - 20, 70, [pc, '#ffd25a', '#fff2c8'], 380, 3, 0, 1.1);
+    shake(world, 18); world.slowT = 0.7;   // un instant au ralenti : le portail s'ouvre
+    sfx(world, 'portal'); sfx(world, 'rumble');
+    world.events.push({ kind: 'banner', title: 'Le portail s\'ouvre !', sub: `${b.lair} : suis la flèche ♛ et clique sur le portail` });
+    world.events.push({ kind: 'eventIntro', ev: 'portal' });   // la première fois, le vieux mage explique
+  }
   // Vague aspirante : à chaque palier, tout le butin à l'écran file vers le sac
   if (after > before && s.suction) for (const c of world.coins) if (!c.fly && !c.item && onScreen(world, c.x, c.y, 0)) { c.fly = true; c.sp = 200; }
   if (r.bag >= max && !r.full) {
