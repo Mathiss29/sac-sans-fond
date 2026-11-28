@@ -1147,15 +1147,18 @@ function updateHeroes(world, dt) {
       if (def.shot === 'vines') {   // druide : ronces qui immobilisent et blessent
         const tr = 46 * (1 + 0.15 * (s.thorns || 0));   // Gardien des bois : +2 niveaux de ronces
         world.zones.push({ x: t.x, y: t.y, r: tr, t: 2.5 + 0.5 * (s.thorns || 0), root: true, dps: dmg, type: u.type, look: 'vines' });
-        world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 6, r1: tr, t: 0.3, life: 0.3, color: '#6fd08a' });
+        const vf = classFx(world, u.type) || {};
+        world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 6, r1: tr, t: 0.3, life: 0.3, color: vf.ring || '#6fd08a' });
+        if (vf.hit === 'petals' && onScreen(world, t.x, t.y)) burst(world, t.x, t.y, 6, ['#ff9ad0', '#fff0f8', '#ffd246'], 90, 2, 40, 0.6);
+        if (vf.hit === 'claw') for (let i = -1; i <= 1; i++) world.fx.push({ kind: 'slash', x: t.x + i * 6, y: t.y + i * 4, r0: 6, r1: 22, t: 0.2, life: 0.2, color: '#e8d0a0', face: u.face });
         continue;
       }
       if (def.shot === 'flask') {   // alchimiste : fiole en cloche, explosion et flaque acide
-        world.strikes.push({ kind: 'flask', x: t.x, y: t.y, x0: u.x + u.face * 10, y0: u.y - 16, r: def.aoe * (s.flaskAoe || 1), t: 0.45, t0: 0.45, dmg, type: u.type });
+        world.strikes.push({ kind: 'flask', cfx: classFx(world, u.type), x: t.x, y: t.y, x0: u.x + u.face * 10, y0: u.y - 16, r: def.aoe * (s.flaskAoe || 1), t: 0.45, t0: 0.45, dmg, type: u.type });
         continue;
       }
       if (def.shot === 'spirit') {   // invocateur : un esprit qui fonce et explose
-        for (let i = 0; i < (s.spirits || 1); i++) world.strikes.push({ kind: 'spirit', x: u.x, y: u.y - 24, vx: u.face * 40 + (i ? rnd(-120, 120) : 0), vy: -80 - i * 30, t: 4, dmg: dmg * (s.spiritPow || 1), type: u.type, r: 46 * (s.spiritPow || 1), target: t });
+        for (let i = 0; i < (s.spirits || 1); i++) world.strikes.push({ kind: 'spirit', cfx: classFx(world, u.type), x: u.x, y: u.y - 24, vx: u.face * 40 + (i ? rnd(-120, 120) : 0), vy: -80 - i * 30, t: 4, dmg: dmg * (s.spiritPow || 1), type: u.type, r: 46 * (s.spiritPow || 1), target: t });
         continue;
       }
       if (def.shot === 'melee') {
@@ -1167,11 +1170,18 @@ function updateHeroes(world, dt) {
           for (const e of world.enemies) if (!e.dead && d2(e, u) < 100 * 100) damage(world, e, dmg * 1.5, 0, u, u.type);
           world.fx.push({ kind: 'ring', x: u.x, y: u.y + 8, r0: 10, r1: 100, t: 0.4, life: 0.4, color: '#ffcf4a' }); shake(world, 3);
         }
-        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: s.looks && s.looks[u.type] ? `rgb(${s.looks[u.type].col})` : has.knB1 ? '#ffcf4a' : '#f0f4fa', face: u.face });
+        world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 10, t: 0.22, life: 0.22, color: s.looks && s.looks[u.type] ? `rgb(${s.looks[u.type].col})` : (classFx(world, u.type) || {}).slash || '#f0f4fa', face: u.face });
+        { const kh = (classFx(world, u.type) || {}).hit;
+          if (kh === 'holy') world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 4, r1: 34, t: 0.3, life: 0.3, color: '#fff3a8' });
+          else if (kh === 'shield') world.fx.push({ kind: 'ring', x: u.x, y: u.y - 8, r0: 14, r1: 22, t: 0.25, life: 0.25, color: '#9fd0ff' });
+          else if (kh === 'smoke') { burst(world, u.x, u.y - 10, 5, ['#5a5a62', '#8a8a92'], 60, 3, -20, 0.45); world.fx.push({ kind: 'slash', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 4, t: 0.18, life: 0.18, color: '#d0303a', face: -u.face }); }
+          else if (kh === 'glint') burst(world, t.x, t.y - 6, 4, ['#ffd246', '#fff0b0'], 90, 2, 80, 0.4);
+          else if (kh === 'crack' && t.boss) { burst(world, t.x, t.y, 8, ['#c8a0ff', '#ffffff'], 150, 2, 0, 0.4); shake(world, 2); } }
         if (has.knB1) world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 8, r1: def.cleave * (s.cleave || 1) + 16, t: 0.3, life: 0.3, color: '#ffcf4a' });
       } else {
         const fire = u.type === 'mage' && has.maB;
-        const shot = (target, k = 1) => world.arrows.push({ kind: fire ? 'fire' : def.shot === 'bolt' ? 'arrow' : def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target, damage: dmg * k, type: u.type, dx: 0, dy: 0, speed: def.speed,
+        const cfx = classFx(world, u.type);
+        const shot = (target, k = 1) => world.arrows.push({ cfx, kind: fire ? 'fire' : def.shot === 'bolt' ? 'arrow' : def.shot, x: u.x + u.face * (SHOT_FROM[u.type] || [0])[0], y: u.y - (SHOT_FROM[u.type] || [0, 10])[1], target, damage: dmg * k, type: u.type, dx: 0, dy: 0, speed: def.speed,
           aoe: def.shot === 'frost' ? s.mageAoe : 0, slow: def.shot === 'frost' && !fire ? s.slowTime || HEROES.mage.slowTime : 0,
           pierce: u.type === 'archer' ? s.pierce || 0 : u.type === 'engineer' ? 1 : 0, bounces: u.type === 'archer' ? s.bounce || 0 : 0, hit: null });
         shot(t);
@@ -1183,7 +1193,7 @@ function updateHeroes(world, dt) {
         if (u.type === 'bard' && s.myths && s.myths.echo && Math.random() < 1 / 3) {
           let o = null, bd = reach * reach;
           for (const e of world.enemies) { if (e.dead || e === t) continue; const dd = d2(e, u); if (dd < bd) { bd = dd; o = e; } }
-          if (o) world.arrows.push({ kind: 'note', x: u.x, y: u.y - 12, target: o, damage: dmg, type: u.type, dx: 0, dy: 0, speed: def.speed, aoe: 0, slow: 0 });
+          if (o) world.arrows.push({ cfx: classFx(world, u.type), kind: 'note', x: u.x, y: u.y - 12, target: o, damage: dmg, type: u.type, dx: 0, dy: 0, speed: def.speed, aoe: 0, slow: 0 });
         }
       }
     }
@@ -1437,16 +1447,19 @@ function updateStrikes(world, dt) {
       if (k.target) {
         const dx = k.target.x - k.x, dy = k.target.y - k.y, d = Math.hypot(dx, dy) || 1;
         k.vx += dx / d * 900 * dt; k.vy += dy / d * 900 * dt;
-        const sp = Math.hypot(k.vx, k.vy); if (sp > 320) { k.vx *= 320 / sp; k.vy *= 320 / sp; }
+        const vv = Math.hypot(k.vx, k.vy); if (vv > 320) { k.vx *= 320 / vv; k.vy *= 320 / vv; }
         if (d < k.target.r + 10) k.t = 0;
       }
       k.x += k.vx * dt; k.y += k.vy * dt;
-      if (Math.random() < 0.5) burst(world, k.x, k.y, 1, ['#d080ff', '#f0d0ff'], 30, 2, 0, 0.4);
+      const sp = (k.cfx && k.cfx.pal) || ['#d080ff', '#f0d0ff'];
+      if (Math.random() < 0.5) burst(world, k.x, k.y, 1, sp, 30, 2, 0, 0.4);
       if (k.t <= 0) {
         k.done = true;
         for (const e of world.enemies) if (!e.dead && d2(e, k) < (k.r + e.r) ** 2) damage(world, e, k.dmg, 0, k, k.type);
-        burst(world, k.x, k.y, 18, ['#d080ff', '#f0d0ff', '#ffffff'], 160, 2, 0, 0.5);
-        world.fx.push({ kind: 'ring', x: k.x, y: k.y, r0: 6, r1: k.r, t: 0.3, life: 0.3, color: '#d080ff' });
+        burst(world, k.x, k.y, 18, [sp[0], sp[1], '#ffffff'], 160, 2, 0, 0.5);
+        world.fx.push({ kind: 'ring', x: k.x, y: k.y, r0: 6, r1: k.r, t: 0.3, life: 0.3, color: sp[0] });
+        if (k.cfx && k.cfx.hit === 'ghost') world.texts.push({ x: k.x, y: k.y - 10, text: '☠', color: '#d8ffe0', size: 12, life: 0.6 });
+        if (k.cfx && k.cfx.hit === 'chain') world.fx.push({ kind: 'ring', x: k.x, y: k.y, r0: k.r * 0.6, r1: k.r * 0.7, t: 0.45, life: 0.45, color: '#d8ecff' });
       }
       continue;
     }
@@ -1465,7 +1478,10 @@ function updateStrikes(world, dt) {
       k.done = true;
       for (const e of world.enemies) if (!e.dead && d2(e, k) < (k.r + e.r) ** 2) damage(world, e, k.dmg, 0, k, k.type);
       world.zones.push({ x: k.x, y: k.y, r: k.r * (k.big || 0.8), t: (k.big ? 4 : 2.5) + (world.stats.acid || 0), burn: true, dps: k.dmg * 0.3 * (1 + 0.3 * (world.stats.acid || 0)) * (world.stats.acidPow || 1), type: k.type, look: 'acid' });
-      burst(world, k.x, k.y, 16, ['#d0f060', '#8ac030', '#ffffff'], 140, 2, 0, 0.45);
+      const fp = (k.cfx && k.cfx.pal) || ['#d0f060', '#8ac030', '#ffffff'];
+      burst(world, k.x, k.y, 16, fp, 140, 2, 0, 0.45);
+      if (k.cfx && k.cfx.hit === 'toxic') burst(world, k.x, k.y, 10, ['#4a8a30', '#78c050', '#2a5a20'], 50, 4, -25, 0.9);
+      if (k.cfx && k.cfx.hit === 'gold') { burst(world, k.x, k.y, 8, ['#ffd246', '#fff0b0'], 120, 2, 160, 0.6); world.fx.push({ kind: 'ring', x: k.x, y: k.y, r0: 4, r1: k.r, t: 0.3, life: 0.3, color: '#ffd246' }); }
       if (Math.random() < 0.4) sfx(world, 'hit');
       continue;
     }
@@ -1512,6 +1528,39 @@ function updateStrikes(world, dt) {
 
 // D'où part le tir sur le dessin (décalage vers l'avant, hauteur) : arc, pointe du bâton, luth.
 const SHOT_FROM = { archer: [14, 6], mage: [22, 8], bard: [10, 4] };
+// Effets d'attaque propres à chaque classe : teinte de la traînée (r,g,b), longueur, glyphe des notes,
+// couleur du coup d'épée et effet à l'impact. Purement visuel.
+export const CLASS_FX = {
+  arA: { tint: '255,246,200' }, arA1: { tint: '255,214,90', len: 1.4 }, arA2: { tint: '200,210,225', bolt: 1, len: 0.8 },
+  arB: { tint: '150,230,140' }, arB1: { tint: '190,250,255', len: 1.6, hit: 'gust' }, arB2: { tint: '255,170,90' },
+  maA: { tint: '200,240,255' }, maA1: { tint: '230,250,255', len: 1.3 }, maA2: { tint: '160,220,255', len: 1.2 },
+  maB: {}, maB1: { tint: '255,90,40', len: 1.3 }, maB2: { tint: '255,200,80', len: 2.4, hit: 'feather' },
+  knA: { slash: '#fff3a8' }, knA1: { slash: '#9fd0ff', hit: 'shield' }, knA2: { slash: '#ffcf4a', hit: 'holy' },
+  knB: { slash: '#ff6a5a' }, knB1: { slash: '#ffcf4a' }, knB2: { slash: '#c8a0ff', hit: 'crack' },
+  baA: { tint: '255,230,138', glyph: '♫', size: 7, hit: 'notes' }, baA1: { tint: '255,170,220', glyph: '♫', size: 8, hit: 'notes' },
+  baA2: { tint: '240,240,255', glyph: '♬', size: 8, hit: 'notes' },
+  baB: { tint: '230,160,100', glyph: '●', size: 5, hit: 'drum' }, baB1: { tint: '255,243,168', glyph: '●', size: 5, hit: 'storm' },
+  baB2: { tint: '255,210,122', glyph: '♪', size: 7, hit: 'horn' },
+  // voies des nouveaux héros
+  thA: { slash: '#d0303a', hit: 'smoke' }, thB: { slash: '#ffd246', hit: 'glint' },
+  drA: { ring: '#ff9ad0', hit: 'petals' }, drB: { ring: '#c8a070', hit: 'claw' },
+  enA: { tint: '255,150,60', len: 1.2, hit: 'smoke' }, enB: { tint: '255,230,120', hit: 'sparks' },
+  alA: { pal: ['#60d040', '#2a8a20', '#b0ff80'], hit: 'toxic' }, alB: { pal: ['#ffd246', '#fff0b0', '#ffffff'], hit: 'gold' },
+  suA: { pal: ['#8cff9a', '#d8ffe0'], hit: 'ghost' }, suB: { pal: ['#6ab0ff', '#d8ecff'], hit: 'chain' },
+};
+function classFx(world, type) { const c = world.stats.cls && world.stats.cls[type]; return c ? CLASS_FX[c] : null; }
+function classHit(world, a, t) {
+  const f = a.cfx && a.cfx.hit; if (!f || !onScreen(world, t.x, t.y)) return;
+  if (f === 'drum') world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 4, r1: 52, t: 0.35, life: 0.35, color: '#e0a060' });
+  else if (f === 'storm') { world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 4, r1: 40, t: 0.3, life: 0.3, color: '#fff3a8' }); if (Math.random() < 0.35) world.fx.push({ kind: 'bolt', x: t.x, y: t.y, t: 0.2, life: 0.2, color: '#fff3a8' }); }
+  else if (f === 'horn') world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 10, r1: 70, t: 0.45, life: 0.45, color: '#ffd27a' });
+  else if (f === 'notes') for (let i = 0; i < 2; i++) world.texts.push({ x: t.x + rnd(-14, 14), y: t.y - 6, vy: -40, text: a.cfx.glyph || '♪', color: `rgb(${a.cfx.tint})`, size: 10, life: 0.6 });
+  else if (f === 'gust') burst(world, t.x, t.y, 6, ['#bef8ff', '#ffffff'], 160, 2, 0, 0.35);
+  else if (f === 'smoke') burst(world, t.x, t.y, 6, ['#8a8a92', '#c0c0c8', '#5a5a62'], 70, 3, -20, 0.5);
+  else if (f === 'sparks') burst(world, t.x, t.y, 7, ['#ffe68a', '#ffffff', '#ffb040'], 180, 1.5, 120, 0.35);
+  else if (f === 'feather') burst(world, t.x, t.y, 8, ['#ffd246', '#ff7a3c', '#fff0b0'], 140, 2, 60, 0.5);
+}
+
 
 function updateArrows(world, dt) {
   const s = world.stats, has = s.has || {};
@@ -1533,6 +1582,7 @@ function updateArrows(world, dt) {
         const col = fire ? ['#ff7a3c', '#ffd246', '#ff5a2a'] : ['#aee6ff', '#f0fbff', '#5a8cdc'];
         burst(world, t.x, t.y, 10, col, 120, 2, 0, 0.4);
         world.fx.push({ kind: 'ring', x: t.x, y: t.y, r0: 6, r1: a.aoe, t: 0.35, life: 0.35, color: col[0] });
+        if (a.cfx && !a.small) classHit(world, a, t);
         if (a.small) continue;
         if (fire) world.zones.push({ x: t.x, y: t.y, r: a.aoe * 0.9, t: 2, max: 2, dps: a.damage * 0.5, burn: true, type: 'mage', color: '#ff7a3c' });
         if (has.maA) world.zones.push({ x: t.x, y: t.y, r: a.aoe * 1.1, t: 2, max: 2, dps: a.damage * 0.4, slow: 1, type: 'mage', color: '#d8f4ff' });
@@ -1544,6 +1594,7 @@ function updateArrows(world, dt) {
         }
       } else {
         damage(world, t, a.damage, 0, { x: t.x - a.dx, y: t.y - a.dy }, a.type);
+        if (a.cfx) classHit(world, a, t);
         if (a.kind !== 'arrow') continue;
         // perçante : la flèche continue droit devant ; rebondissante (ou mythique Ricochet) : elle repart vers un voisin
         const hit = a.hit || new Set(); hit.add(t);

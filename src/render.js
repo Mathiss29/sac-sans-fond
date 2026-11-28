@@ -381,6 +381,9 @@ function shade(hex, f) {
   return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
 }
 
+// Réglage « effets intenses » (Options) : ondes, coups et éclairs plus grands et plus épais.
+let fxBig = 1;
+export function setFxIntense(on) { fxBig = on ? 1.8 : 1; }
 export function render(g, world, dpr) {
   hardZone = !!(world.zone && world.zone.hard) && world.mode === 'map';
   const { w, h } = world;
@@ -465,17 +468,19 @@ export function render(g, world, dpr) {
 
   for (const f of world.fx) {
     const k = 1 - f.t / f.life;
-    g.strokeStyle = f.color; g.globalAlpha = 1 - k; g.lineWidth = 3;
+    g.strokeStyle = f.color; g.globalAlpha = 1 - k; g.lineWidth = 3 * fxBig;
+    const fr = f.r0 + (f.r1 * fxBig - f.r0) * k;
     g.beginPath();
-    if (f.kind === 'slash') { const a0 = f.face > 0 ? -1.2 : Math.PI - 1.2; g.lineWidth = 4; g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, a0 + k * 1.5, a0 + 1 + k * 1.5); }
+    if (f.kind === 'slash') { const a0 = f.face > 0 ? -1.2 : Math.PI - 1.2; g.lineWidth = 4 * fxBig; g.arc(f.x, f.y, fr, a0 + k * 1.5, a0 + 1 + k * 1.5); }
     else if (f.kind === 'ray') {   // Rayon de glace : un faisceau large qui s'éteint
       g.lineCap = 'round'; g.lineWidth = 34 * (1 - k * 0.6); g.strokeStyle = 'rgba(174,230,255,.55)'; g.moveTo(f.x, f.y); g.lineTo(f.x2, f.y2); g.stroke();
       g.beginPath(); g.lineWidth = 10 * (1 - k * 0.6); g.strokeStyle = '#f0fbff'; g.moveTo(f.x, f.y); g.lineTo(f.x2, f.y2); g.lineCap = 'butt';
     } else if (f.kind === 'bolt') {   // éclair du héraut
-      g.lineWidth = 3; g.strokeStyle = f.color; let x = f.x, y = f.y - 220; g.moveTo(x, y);
-      for (let i = 0; i < 6; i++) { y += 220 / 6; x = f.x + (i < 5 ? rnd2(f.x + i) * 18 : 0); g.lineTo(x, y); }
+      g.lineWidth = 3 * fxBig; g.strokeStyle = f.color; let x = f.x, y = f.y - 220; g.moveTo(x, y);
+      for (let i = 0; i < 6; i++) { y += 220 / 6; x = f.x + (i < 5 ? rnd2(f.x + i) * 18 * fxBig : 0); g.lineTo(x, y); }
+      if (fxBig > 1) { g.stroke(); g.globalAlpha = (1 - k) * 0.35; g.lineWidth = 12; }   // halo autour de l'éclair
     }
-    else g.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * k, 0, 7);
+    else g.arc(f.x, f.y, fr, 0, 7);
     g.stroke();
   }
   g.globalAlpha = 1;
@@ -564,9 +569,10 @@ export function render(g, world, dpr) {
   // frappes à venir : ombre au sol qui se resserre (pluie de flèches)
   for (const k of world.strikes || []) {
     if (k.kind === 'spirit') {
-      g.fillStyle = 'rgba(208,128,255,.35)'; g.beginPath(); g.arc(k.x, k.y, 13, 0, 7); g.fill();
-      g.fillStyle = '#d080ff'; g.fillRect(Math.round(k.x) - 5, Math.round(k.y) - 6, 10, 10);
-      g.fillStyle = '#f0d0ff'; g.fillRect(Math.round(k.x) - 3, Math.round(k.y) - 4, 6, 5);
+      const sp = (k.cfx && k.cfx.pal) || ['#d080ff', '#f0d0ff'];
+      g.globalAlpha = 0.35; g.fillStyle = sp[0]; g.beginPath(); g.arc(k.x, k.y, 13, 0, 7); g.fill(); g.globalAlpha = 1;
+      g.fillStyle = sp[0]; g.fillRect(Math.round(k.x) - 5, Math.round(k.y) - 6, 10, 10);
+      g.fillStyle = sp[1]; g.fillRect(Math.round(k.x) - 3, Math.round(k.y) - 4, 6, 5);
       g.fillStyle = '#24161e'; g.fillRect(Math.round(k.x) - 2, Math.round(k.y) - 3, 1, 2); g.fillRect(Math.round(k.x) + 1, Math.round(k.y) - 3, 1, 2);
       continue;
     }
@@ -574,7 +580,7 @@ export function render(g, world, dpr) {
       const q = 1 - Math.max(0, k.t / k.t0), x = k.x0 + (k.x - k.x0) * q, y = k.y0 + (k.y - k.y0) * q - Math.sin(q * Math.PI) * 70;
       g.strokeStyle = 'rgba(160,220,60,.5)'; g.lineWidth = 2; g.beginPath(); g.ellipse(k.x, k.y, k.r * q, k.r * 0.6 * q, 0, 0, 7); g.stroke();
       g.save(); g.translate(Math.round(x), Math.round(y)); g.rotate(q * 8);
-      g.fillStyle = '#24161e'; g.fillRect(-5, -6, 10, 11); g.fillStyle = '#d0f060'; g.fillRect(-4, -2, 8, 6); g.fillStyle = '#e8f0f8'; g.fillRect(-2, -5, 4, 3);
+      g.fillStyle = '#24161e'; g.fillRect(-5, -6, 10, 11); g.fillStyle = (k.cfx && k.cfx.pal) ? k.cfx.pal[0] : '#d0f060'; g.fillRect(-4, -2, 8, 6); g.fillStyle = '#e8f0f8'; g.fillRect(-2, -5, 4, 3);
       g.restore();
       continue;
     }
@@ -594,7 +600,7 @@ export function render(g, world, dpr) {
   for (const e of world.enemies) drawEnemy(g, e, t, px);
   for (const q of world.particles) {
     g.globalAlpha = Math.min(1, q.life / q.max * 1.6); g.fillStyle = q.color;
-    const sz = q.size * px * 0.75;
+    const sz = q.size * px * 0.75 * (fxBig > 1 ? 1.4 : 1);
     g.fillRect(Math.round(q.x - sz / 2), Math.round(q.y - sz / 2), Math.round(sz), Math.round(sz));
   }
   g.globalAlpha = 1;
@@ -684,8 +690,9 @@ export function render(g, world, dpr) {
   g.lineCap = 'round';
   for (const a of world.arrows) {
     const lk = looks[a.type];
-    const len = (a.kind === 'arrow' ? 46 : 26) * (lk ? 1 + 0.15 * lk.r : 1);
-    const col = a.kind === 'fire' ? '255,122,60' : lk ? lk.col : a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
+    const cf = a.cfx || {};
+    const len = (a.kind === 'arrow' ? 46 : 26) * (lk ? 1 + 0.15 * lk.r : 1) * (cf.len || 1);
+    const col = a.kind === 'fire' ? cf.tint || '255,122,60' : lk ? lk.col : cf.tint ? cf.tint : a.kind === 'frost' ? '174,230,255' : a.kind === 'note' ? '255,230,138' : '255,255,240';
     const tr = g.createLinearGradient(a.x, a.y, a.x - a.dx * len, a.y - a.dy * len);
     tr.addColorStop(0, `rgba(${col},${lk ? 0.9 : 0.75})`); tr.addColorStop(1, `rgba(${col},0)`);
     g.strokeStyle = tr; g.lineWidth = (a.kind === 'arrow' ? 2.5 : 4) + (lk ? 0.5 * lk.r : 0);
@@ -702,10 +709,12 @@ export function render(g, world, dpr) {
       g.fillStyle = '#ff7a3c'; g.fillRect(Math.round(a.x) - px * 1.5, Math.round(a.y) - px * 1.5, px * 3, px * 3);
       g.fillStyle = '#fff0b0'; g.fillRect(Math.round(a.x) - px * 0.5, Math.round(a.y) - px * 0.5, px, px);
     } else if (a.kind === 'note') {
-      g.fillStyle = '#ffe68a'; g.font = `700 ${px * 6}px system-ui, sans-serif`; g.textAlign = 'center'; g.fillText('♪', a.x, a.y + px * 2);
+      const cf = a.cfx || {};
+      g.fillStyle = cf.tint ? `rgb(${cf.tint})` : '#ffe68a'; g.font = `700 ${px * (cf.size || 6)}px system-ui, sans-serif`; g.textAlign = 'center'; g.fillText(cf.glyph || '♪', a.x, a.y + px * 2);
     } else {
-      g.strokeStyle = '#5a3a1a'; g.lineWidth = 2;
-      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * 12, a.y - a.dy * 12); g.stroke();
+      const bolt = a.cfx && a.cfx.bolt;   // Arbalétrier lourd : carreau court et épais
+      g.strokeStyle = bolt ? '#3a2a1a' : '#5a3a1a'; g.lineWidth = bolt ? 3.5 : 2;
+      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - a.dx * (bolt ? 9 : 12), a.y - a.dy * (bolt ? 9 : 12)); g.stroke();
       const lk = looks[a.type];
       g.fillStyle = lk ? `rgb(${lk.col})` : '#d8d8d8'; g.beginPath(); g.arc(a.x, a.y, lk ? 2.2 : 1.6, 0, 7); g.fill();
     }
