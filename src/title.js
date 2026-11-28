@@ -3,8 +3,8 @@
 import { drawBag } from './render.js';
 import { moveCam } from './game.js';
 
-// Site du studio : à remplir quand Mathis aura donné le nom et l'adresse.
-export const STUDIO = { name: '', url: '' };
+// Site du studio de Mathis.
+export const STUDIO = { name: 'Ombrelune Studio', url: 'https://ombrelune-studio.github.io/?depuis=sac-sans-fond' };
 
 const $ = id => document.getElementById(id);
 const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
