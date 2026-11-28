@@ -10,6 +10,36 @@ const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) 
 let C = null, panel = null, raf = 0, vx = 14, vy = 6;
 
 export const titleOpen = () => !$('title').hidden;
+// musique d'accueil : son propre morceau s'il est là, sinon celle de l'Atelier
+let hasTrack = false;
+fetch('assets/music/accueil.mp3', { method: 'HEAD' }).then(r => { hasTrack = r.ok; }, () => {});
+export const titleTrack = () => hasTrack ? 'accueil' : 'atelier';
+
+// Astuces du vieux mage, tirées au hasard sous le logo
+const TIPS = [
+  'Un sac plein à ras bord rapporte plus : vise la Déchirure.',
+  'Maintiens le clic pour concentrer le Focus sur un ennemi.',
+  'Les feux follets dorés valent leur pesant d\'or. Littéralement.',
+  'Un boss endormi se réveille de mauvaise humeur. Frappe fort et vite.',
+  'La touche M ouvre la carte du monde.',
+  'Chaque palier du sac multiplie tout ce que tu ramasses.',
+  'Une besace bien remplie, c\'est une Compagnie bien équipée.',
+  'Les cartes de créature se trouvent sur ceux qu\'on bat. Collectionne-les.',
+  'Le vieux crapaud de la boutique ne fait jamais crédit.',
+  'Tab agrandit la mini-carte pendant l\'expédition.',
+  'Un familier ancien vaut mieux que trois œufs.',
+  'Ce sac n\'a pas de fond. Mais il a un appétit.',
+  'Les élites portent une couronne : elles lâchent mieux.',
+  'Rien ne se perd dans le sac. Presque rien.',
+];
+let tipTimer = 0, tipIdx = -1;
+function nextTip() {
+  const el = $('tTip');
+  let i; do i = Math.floor(Math.random() * TIPS.length); while (i === tipIdx && TIPS.length > 1);
+  tipIdx = i;
+  el.classList.add('out');
+  setTimeout(() => { el.textContent = '« ' + TIPS[i] + ' »'; el.classList.remove('out'); }, 350);
+}
 
 export function initTitle(ctx) {
   C = ctx;
@@ -42,12 +72,13 @@ export function show() {
   closePanel();
   const w = C.world; w.cam.x = Math.max(0, (w.mapW - w.w) * 0.3); w.cam.y = Math.max(0, (w.mapH - w.h) * 0.35);
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
+  nextTip(); clearInterval(tipTimer); tipTimer = setInterval(nextTip, 9000);
 }
 
 function play() {
   C.click();
   $('title').hidden = true; $('atelier').hidden = false;
-  cancelAnimationFrame(raf);
+  cancelAnimationFrame(raf); clearInterval(tipTimer);
 }
 
 let last = 0;

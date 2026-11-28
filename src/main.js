@@ -11,7 +11,7 @@ import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
 import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
 import { initCurio, curioRefresh } from './curio-ui.js';
 import { initEpic, epicRefresh, recordRun, heroTints, applyVolumes, VERSION, JOURNAL, renderOptions } from './epic-ui.js';
-import { initTitle, titleOpen } from './title.js';
+import { initTitle, titleOpen, titleTrack } from './title.js';
 import { initBugReport, copyReport } from './bugreport.js';
 import { applyPets, petsOf, petsAfterRun, petSprite } from './pets.js';
 import { initPets, petsRefresh } from './pets-ui.js';
@@ -1122,6 +1122,7 @@ $('reset').onclick = () => {
 const REGION_TRACKS = { marais: 'marais' };
 const stageTrack = () => REGION_TRACKS[((world.zone && world.zone.id) || '').replace(/2$/, '')] || ({ matin: 'matin', minuit: 'minuit' }[world.stage && world.stage.id] || 'expedition');
 function musicFor() {
+  if (titleOpen()) return titleTrack();
   if (world.phase === 'expedition') return world.mode === 'arena' ? 'boss' : stageTrack();
   if (world.phase === 'done' && world.mode === 'arena') return 'boss';
   if (world.phase === 'tear') return stageTrack();
