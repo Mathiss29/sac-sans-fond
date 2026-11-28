@@ -35,6 +35,26 @@ function noise(dur, vol, filter, f0, f1, delay = 0) {
   env(g, t, 0.004, vol, dur); src.connect(f); f.connect(g); g.connect(master); src.start(t); src.stop(t + dur + 0.02);
 }
 
+// Petit air joué à l'achat d'une classe : un instrument par lignée (et par voie pour les bardes).
+const N = st => 440 * Math.pow(2, st / 12);   // demi-tons autour du la
+function seq(type, notes, step, dur, vol, d0 = 0) { notes.forEach((n, i) => { if (n !== null) tone(type, N(n), null, dur, vol, d0 + i * step); }); }
+function drum(times, vol = 0.22) { for (const d of times) { tone('sine', 110, 45, 0.18, vol, d); noise(0.08, vol * 0.4, 'lowpass', 900, 200, d); } }
+function jingle(id) {
+  const line = id.slice(0, 2), v = id.slice(2, 3);
+  if (line === 'ar') { seq('triangle', [3, 7, 10, 15, 19], 0.07, 0.25, 0.08); noise(0.3, 0.05, 'bandpass', 3000, 900, 0.4); }
+  else if (line === 'ma') { seq('sine', [12, 16, 19, 24, 28, 31], 0.06, 0.4, 0.06); tone('sine', N(36), N(24), 0.6, 0.04, 0.35); }
+  else if (line === 'kn') { seq('sawtooth', [0, 0, 7, 12], 0.12, 0.2, 0.045); tone('sawtooth', N(12), null, 0.5, 0.05, 0.5); noise(0.25, 0.12, 'highpass', 3000, 6000, 0.5); }
+  else if (line === 'ba' && id === 'baB2') { tone('square', N(-5), null, 0.45, 0.05); tone('square', N(2), null, 0.7, 0.05, 0.45); tone('sine', N(-17), null, 1.1, 0.08); }
+  else if (line === 'ba' && v === 'B') { drum([0, 0.15, 0.3, 0.38, 0.46, 0.7]); if (id === 'baB1') noise(0.6, 0.12, 'lowpass', 1200, 80, 0.7); }
+  else if (line === 'ba') seq('triangle', [0, 4, 7, 12, 16, 19, 24], 0.045, 0.35, 0.06);   // harpe du troubadour
+  else if (line === 'th') { seq('square', [19, 15, 12, null, 24], 0.06, 0.05, 0.05); tone('square', N(31), null, 0.08, 0.05, 0.35); }
+  else if (line === 'dr') { seq('sine', [7, 9, 12, 14, 19], 0.11, 0.25, 0.08); noise(0.4, 0.04, 'bandpass', 1800, 4000, 0.1); }
+  else if (line === 'en') { noise(0.05, 0.14, 'bandpass', 2500, null); noise(0.05, 0.14, 'bandpass', 1800, null, 0.12); seq('square', [12, 19, 24], 0.08, 0.07, 0.05, 0.26); }
+  else if (line === 'al') { for (let i = 0; i < 6; i++) tone('sine', 300 + i * 90, 900 + i * 120, 0.08, 0.06, i * 0.07); tone('triangle', N(19), null, 0.4, 0.06, 0.5); }
+  else if (line === 'su') { tone('sine', N(-12), N(-14), 1.0, 0.08); tone('sine', N(-11.8), N(-13.8), 1.0, 0.06); seq('triangle', [3, 2, 6], 0.25, 0.3, 0.05, 0.2); }
+  else play('tier');
+}
+
 export function play(name, opt = {}) {
   if (!ctx || muted || ctx.state !== 'running') return;
   const now = ctx.currentTime;
@@ -62,6 +82,7 @@ export function play(name, opt = {}) {
     case 'tick': tone('square', 600 + 900 * (opt.k || 0), null, 0.03, 0.035); break;
     case 'click': tone('square', 700, 500, 0.04, 0.05); break;
     case 'buy': tone('square', 660, null, 0.06, 0.06); tone('square', 990, null, 0.09, 0.06, 0.06); break;
+    case 'jingle': jingle(opt.id || ''); break;
   }
 }
 

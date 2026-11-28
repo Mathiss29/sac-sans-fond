@@ -462,6 +462,10 @@ export const HERO_SHEETS = {
     anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 2 },
   baB2: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
     anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 2 },
+  baB: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 2 },
+  baB1: { cell: [60, 52], anchor: 31, fps: { idle: 6, walk: 11, hurt: 6, victory: 6 },
+    anims: { idle: 6, walk: 8, attack: 6, hurt: 2, victory: 4 }, release: 2 },
 };
 export function loadHeroSheets(base = 'assets/sprites/heros/') {
   SPR.sheets = SPR.sheets || {};

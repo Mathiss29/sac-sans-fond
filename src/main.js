@@ -4,9 +4,9 @@ import { loadSave, writeSave, freshSave, exportSave, importSave } from './save.j
 import { unlockAudio, play, setMuted, setTrack, unlockMusic } from './audio.js';
 import { RARITIES } from './game.js';
 import { useUlt, ultReady, createWorld, startExpedition, startLair, enterArena, canEnterPortal, portalPos, update, dropHero, canDrop, selectHero, moveCam, centerCam, clampCam, pointerWorld, bagPos, LAYOUTS, LAYOUT_NAMES, dailyLayout } from './game.js';
-import { setHeroTints, setHeroSkins, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
-import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites } from './sprites.js';
-import { NODES, NODE, BRANCHES, TREE_LABELS } from './tree.js';
+import { setHeroTints, setHeroSkins, setFxIntense, render, drawHero, drawBag, getMap, enemyIcon, enemyFrameIcon, enemyFrameCount, heroSheetsReady } from './render.js';
+import { HERO_SHEETS, TREE_ICONS, treeIcons, buildSprites as getSprites, SPR } from './sprites.js';
+import { NODES, NODE, BRANCHES, TREE_LABELS, CLASS_PAIRS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
 import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
 import { initCurio, curioRefresh } from './curio-ui.js';
@@ -52,6 +52,7 @@ function reached() { let i = 0; while (i + 1 < LEVELS.length && winsOf(LEVELS[i]
 const totalWins = () => Object.values(save.bosses || {}).reduce((t, v) => t + (v > 0 ? 1 : 0), 0);
 world.zone = curZone();
 world.stats = stats;
+setFxIntense(save.fxIntense);
 
 function resize() {
   const r = app.getBoundingClientRect();
@@ -405,6 +406,7 @@ function finishExpedition() {
   const showResult = () => {
     if (world.phase !== 'done') return;
     $('result').hidden = false;
+    partyDance();
     $('back').focus();
     const t0 = performance.now(), el = $('resTotal');
     let lastTick = 0;
@@ -598,6 +600,27 @@ function hud() {
   const boss = r.boss;
   $('bossBar').hidden = !(boss && ar && world.phase === 'expedition' && !boss.dead);
   if (boss && !boss.dead) { $('bossName').textContent = boss.def.name; $('bossFill').style.width = Math.max(0, boss.hp / boss.max * 100) + '%'; }
+}
+
+// Bilan : la compagnie (une figure par lignée, avec sa tenue de classe) fait sa pose de victoire.
+function partyDance() {
+  const cv = $('resParty'); if (!cv) return;
+  const lines = ALL_HEROES.filter(k => stats.heroes[k] > 0).slice(0, 9);
+  cv.hidden = !lines.length;
+  const x = cv.getContext('2d'), t0 = performance.now();
+  const step = now => {
+    if ($('result').hidden) return;
+    const t = (now - t0) / 1000;
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cv.width, cv.height); x.imageSmoothingEnabled = false;
+    const gap = Math.min(64, cv.width / (lines.length + 1));
+    lines.forEach((k, i) => {
+      const px0 = cv.width / 2 + (i - (lines.length - 1) / 2) * gap;
+      const kk = Math.max(0, t * 6 - i * 0.7);   // ils sautent l'un après l'autre
+      drawHero(x, k, px0, cv.height - 6, -1, 0, 1, 3, { anim: kk > 0 ? 'victory' : 'idle', k: kk });
+    });
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 // Ultimes : un bouton par lignée qui en a un, avec sa jauge ; épreuve en cours affichée dessous.
@@ -824,6 +847,7 @@ function renderInfo() {
   hd.append(Object.assign(document.createElement('i'), { textContent: n.max > 1 && !n.soon ? `Niv. ${lv}/${n.max}` : kind }));
   add('h3', '', n.name);
   add('p', '', n.desc);
+  if (n.type === 'cls') box.append(classDuel(n));
   if (n.soon) { if (n.cond) add('p', 'cond', n.cond); add('p', 'locked', 'Bientôt dans le jeu.'); return; }
   const eff = add('div', 'eff', isMax ? n.effect(lv) : lv ? n.effect(lv) + '  →  ' : '');
   if (!isMax) eff.append(Object.assign(document.createElement('b'), { textContent: n.effect(lv + 1) }));
@@ -849,6 +873,39 @@ function renderInfo() {
     : Object.assign(document.createElement('span'), { className: 'need', textContent: `Il manque ${fmt(c - save.coins)}` }));
   box.append(pr);
 }
+// « Choisis ta voie » : les deux classes du choix côte à côte, qui enchaînent attaque et repos.
+let duelTimer = null;
+function classDuel(n) {
+  const pair = CLASS_PAIRS.find(p => p.includes(n.id)) || [n.id];
+  const S = SPR.sheets || {}, ok = k => S[k] && S[k].img.idle && S[k].img.idle.naturalWidth;
+  const sheetOf = id => ok(id) ? S[id] : ok(id.slice(0, 3)) ? S[id.slice(0, 3)] : ok(n.branch) ? S[n.branch] : null;
+  const wrap = document.createElement('div'); wrap.className = 'clsDuel';
+  const cells = [];
+  pair.forEach((id, i) => {
+    const m = NODE[id]; if (!m) return;
+    if (i) wrap.append(Object.assign(document.createElement('span'), { className: 'vs', textContent: 'ou' }));
+    const d = document.createElement('div'); d.className = 'dCls' + (id === n.id ? ' me' : '') + (L(id) ? ' got' : '');
+    const cv = document.createElement('canvas'); cv.width = 96; cv.height = 92;
+    d.append(cv, Object.assign(document.createElement('b'), { textContent: m.name }));
+    if (L(id)) d.append(Object.assign(document.createElement('i'), { textContent: 'choisie' }));
+    wrap.append(d); cells.push({ cv, sh: sheetOf(id), off: i * 3 });
+  });
+  const draw = () => {
+    if (!cells.length || !cells[0].cv.isConnected) { duelTimer = null; return; }
+    const f = Math.floor(performance.now() / 130);
+    for (const c of cells) {
+      const x = c.cv.getContext('2d'); x.clearRect(0, 0, 96, 92); x.imageSmoothingEnabled = false;
+      if (!c.sh) continue;
+      const [cw, ch] = c.sh.cell, sc = 1.6, k = (f + c.off) % 22;   // 12 images d'attaque (2 coups), puis 10 de repos
+      const an = k < 12 && c.sh.img.attack ? 'attack' : 'idle', fr = an === 'attack' ? k % c.sh.anims.attack : k % c.sh.anims.idle;
+      x.drawImage(c.sh.img[an], fr * cw, 0, cw, ch, (96 - cw * sc) / 2, 92 - ch * sc, cw * sc, ch * sc);
+    }
+    duelTimer = setTimeout(draw, 130);
+  };
+  clearTimeout(duelTimer); duelTimer = setTimeout(draw, 0);
+  return wrap;
+}
+
 // La fiche suit le nœud : à sa droite, ou à sa gauche près du bord.
 function placeInfo(n) {
   const box = $('info'), wrap = $('treeWrap'), el = $('treeInner').querySelector(`[data-id="${n.id}"]`);
@@ -886,7 +943,7 @@ function buy(n) {
 
 // Écran « Changement de classe ! » : les exemplaires tournent en cercle puis fusionnent.
 function classChange(n) {
-  const line = { archer: 'archer', mage: 'mage', knight: 'knight', bard: 'bard' }[n.branch] || 'archer';
+  const line = ALL_HEROES.includes(n.branch) ? n.branch : 'archer';
   const fork = /Fork$/.test(n.id);
   const ov = document.createElement('div'); ov.className = 'classOv';
   const ring = document.createElement('div'); ring.className = 'ring';
@@ -902,7 +959,7 @@ function classChange(n) {
   const d = document.createElement('p'); d.textContent = fork ? 'Les exemplaires fusionnent en un seul héros plus fort, qui garde toutes les améliorations. Choisis maintenant sa voie dans l\'arbre.' : n.desc;
   const ok = document.createElement('button'); ok.className = 'btn'; ok.textContent = 'Super !';
   ov.append(ring, big, t, nm, d, ok); $('app').append(ov);
-  play('tier'); setTimeout(() => play('gold'), 1200);
+  if (fork) play('tier'); else play('jingle', { id: n.id }); setTimeout(() => play('gold'), 1200);
   const close = () => { ov.remove(); removeEventListener('keydown', key, true); };
   const key = e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); close(); } };
   ok.onclick = close; addEventListener('keydown', key, true);
