@@ -90,6 +90,7 @@ export function play(name, opt = {}) {
 // Un lecteur par morceau ; on passe de l'un à l'autre en fondu.
 const TRACKS = {
   atelier: 'assets/music/atelier-prairie-pixel.mp3',
+  accueil: 'assets/music/accueil.mp3',   // écran d'accueil (s'il existe, sinon l'Atelier)
   expedition: 'assets/music/expedition-arpege-fantasy.mp3',
   boss: 'assets/music/boss-rage-des-demons.mp3',
   matin: 'assets/music/expedition-matin.mp3',
