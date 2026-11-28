@@ -79,6 +79,28 @@
     </footer>
   </section>
 
+  <section class="screen" id="title" hidden>
+    <div class="tMain">
+      <canvas id="tBag" width="320" height="230" aria-hidden="true"></canvas>
+      <h1 class="tLogo">Sac <i>sans</i> Fond</h1>
+      <p class="tTag">Le vieux sac du mage n'a jamais de fond.</p>
+      <nav class="tMenu" aria-label="Menu principal">
+        <button class="tBtn tGo" type="button"><span id="tPlay">Jouer</span><small id="tPlaySub"></small></button>
+        <button class="tBtn" id="tSettings" type="button">Réglages</button>
+        <button class="tBtn" id="tNews" type="button">Nouveautés</button>
+        <button class="tBtn" id="tCredits" type="button">Crédits</button>
+      </nav>
+    </div>
+    <a class="tStudio" id="tStudio" target="_blank" rel="noopener"><span>Visiter</span><b>Site du studio</b></a>
+    <span class="tVersion" id="tVersion"></span>
+    <div class="tPanel" id="tPanel" hidden role="dialog" aria-labelledby="tPanelTitle">
+      <div class="tPanelBox">
+        <header><h2 id="tPanelTitle"></h2><button class="ghost" id="tClose" type="button" aria-label="Fermer">✕</button></header>
+        <div class="tPanelBody" id="tPanelBody"></div>
+      </div>
+    </div>
+  </section>
+
   <section class="screen" id="worldMap" hidden>
     <div class="wmBox">
       <header class="wmHead"><h2>Carte du monde</h2><span class="sub" id="wmSub"></span><button class="ghost" id="wmClose" type="button" aria-label="Fermer">✕</button></header>

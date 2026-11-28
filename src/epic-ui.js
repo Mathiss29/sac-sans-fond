@@ -7,7 +7,7 @@ import { setVolumes } from './audio.js';
 import { copyReport } from './bugreport.js';
 export const VERSION = '1.0.1';
 // Journal des versions, du plus récent au plus ancien.
-const JOURNAL = [
+export const JOURNAL = [
   ['1.0.1', 'Corrections', ['Les pièces ne tournent plus autour du sac sans y entrer', 'Filons fluides même en fin de partie, avec une jauge de l\'or restant', 'Bouton « 🐞 Bug » : copie un rapport à coller sur Discord']],
   ['1.0', 'Le grand voyage', ['10 régions et 20 niveaux sur une carte du monde (touche M), chacune avec son boss et sa mécanique', 'Ultimes à épreuve (E, R, T, Y) et changements de classe à deux rangs', '5 nouveaux héros : voleur, druide, ingénieur, alchimiste, invocateur', 'Lutin, pie et chien des Enfers ; 7 nouveaux événements', 'Curiosités : cartes de créature, boutique du vieux crapaud, quêtes, donjons', 'Épopée : bilan de la partie, bestiaire, garde-robe, options', 'Sauvegarde exportable, volumes séparés, flèches vers le portail, grande mini-carte (Tab)']],
   ['0.9', 'La forge', ['Compagnie, équipement en 5 raretés, ensembles, forge, album']],
@@ -230,3 +230,6 @@ function renderOpts(body) {
     const ul = h('ul'); for (const l of lines) ul.append(h('li', '', l)); d.append(ul); body.append(d);
   }
 }
+
+// Réglages réutilisés par l'écran d'accueil (mêmes options que l'onglet Épopée).
+export function renderOptions(body) { renderOpts(body); }
