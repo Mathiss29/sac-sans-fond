@@ -24,12 +24,14 @@ const app = $('app'), cv = $('cv'), g = cv.getContext('2d');
 let save = loadSave();
 const heroIcons = {};   // icônes des héros (refaites quand la tenue change)
 // stats du moment : arbre + équipement de la Compagnie
+const PORTIER_BONUS = 1.25;   // succès « Portier » : butin des boss quand les 10 portails sont ouverts
 function calcStats() {
   setHeroTints(heroTints(save));
   for (const k in heroIcons) delete heroIcons[k];
   const s = computeStats(save.level, curioBonus(save, masteryBonus(save, gearBonus(save.gear, save.level))));
   s.eventCount += extraEvents(save);
   applyPets(s, save); s.petsOn = petsOf(save).list.some(p => p.stage > 0);
+  if (save.portier) s.bossGold = (s.bossGold || 1) * PORTIER_BONUS;   // succès « Portier » : les 10 portails ouverts
   s.clsUltCount = save.clsUlt || {};
   s.clsUltOn = Object.fromEntries(Object.entries(s.clsUltCount).map(([v, n]) => [v, n >= CLASS_ULT_GOAL]));
   setHeroSkins(s.cls);
@@ -229,6 +231,11 @@ function lairOpen(z = curZone()) {
   return !!((save.lairs || {})[z.id] || (z.id === 'clairiere' && save.lairOpen));
 }
 // canOpen : le portail peut s'ouvrir en cours d'expédition dès que le sac atteint le palier voulu.
+// Portails ouverts dans les 10 régions (niveau I ou II) : 10 sur 10 = succès « Portier ».
+function portalsOpened() {
+  const lairs = save.lairs || {}, bosses = save.bosses || {};
+  return ZONES.filter(z => lairs[z.id] || lairs[z.id + '2'] || bosses[z.id] > 0 || bosses[z.id + '2'] > 0 || (z.id === 'clairiere' && save.lairOpen)).length;
+}
 const lairInfo = () => ({ open: lairOpen(), first: !(winsOf(curZone().id) > 0), canOpen: !curZone().demon || !!L('demonLord') });
 // Meilleur palier de sac atteint dans la région en cours (pour indiquer où on en est vers le portail).
 const zoneRecord = () => ((save.zoneTier || {})[ZONES[LEVELS[LV()].zone].id] || 0);
@@ -353,6 +360,8 @@ function finishExpedition() {
     rows.push(['Butin de l\'antre', '+' + fmt(r.lair.got), '#ff9f7a']);
   }
   if (unlocked) rows.push([world.zone.boss.lair, 'ouvert ! Accès direct depuis l\'Atelier', '#c8a2ff']);
+  if (unlocked && !save.portier) rows.push(['Portails ouverts', `${portalsOpened()} / ${ZONES.length}`, '#c8a2ff']);
+  if (!save.portier && portalsOpened() >= ZONES.length) { save.portier = true; stats = calcStats(); rows.push(['Succès : Portier !', `butin des boss ×${String(PORTIER_BONUS).replace('.', ',')}`, '#ffd246']); }
   if (lairWait) rows.push([world.zone.boss.lair, 'demande « Seigneur des Enfers »', '#ff7a5a']);
   if (r.bossKilled && winsOf(zid) === 1 && LV() + 1 < LEVELS.length) rows.push(['Nouveau niveau', LEVELS[LV() + 1].name + (levelOpen(LV() + 1) ? ' ouvert !' : ' (portail des Enfers requis)'), '#9fe07a']);
   if (found.length) rows.push(['Besaces d\'équipement', String(found.length), '#c07aff']);
@@ -706,7 +715,7 @@ const ctx = () => ({ maxTier: save.maxTier || 0, bossWins: winsOf('clairiere'), 
 // épreuves d'ultime : acceptée (meilleur score enregistré) mais pas encore réussie
 const trialOn = n => n.type === 'ult' && !L(n.id) && save.trials && save.trials[n.id] !== undefined;
 // niveau maximum achetable pour l'instant (certains nœuds se débloquent par étapes)
-const capOf = n => n.cap ? Math.min(n.max, n.cap(L)) : n.max;
+const capOf = n => n.cap ? Math.min(n.max, n.cap(L, save)) : n.max;
 const lockedNow = n => n.soon || (n.need && !n.need(ctx()) && !L(n.id));
 // une seule voie par fourche de classe (pas encore en jeu, mais on garde la règle)
 const costOf = (n, lv) => nodeCost(n, lv, save.level);
@@ -1093,7 +1102,7 @@ function drawMinimap() {
   const b = bagPos(world); dot(b.x, b.y, 6, '#fff2c8');
   for (const u of world.heroes) dot(u.x, u.y, 4, '#7ee06b');
   const lr = world.run && world.run.lair, pp = portalPos(world);
-  if (lr && lr.open && !lr.done) { dot(pp.x, pp.y, 8, '#24161e'); dot(pp.x, pp.y, 6, '#ff9a3c'); }
+  if (lr && lr.open && !lr.done) { dot(pp.x, pp.y, 8, '#24161e'); dot(pp.x, pp.y, 6, world.zone.boss.color || '#ff9a3c'); }
   mg.strokeStyle = '#fff'; mg.lineWidth = 1.5;
   mg.strokeRect(world.cam.x * k, world.cam.y * k, world.w * k, world.h * k);
 }

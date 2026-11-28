@@ -275,7 +275,7 @@ export const BASE = {
   maxEnemies: 220,
   startPacks: 9,         // hordes présentes au départ
   archers: 2,           // archers au départ (×2 et ×3 dans l'arbre)
-  bagCapacity: 120,      // pièces pour le premier palier
+  bagCapacity: 100,      // pièces pour le premier palier
   gloveRadius: 54,       // px
   attraction: 3,         // s de Focus (ou d'Attraction pendant la Déchirure)
   focusRecovery: 8,      // s pour recharger entièrement la jauge

@@ -221,6 +221,16 @@ export function drawEnemy(g, e, t, px = 3) {
 
 // Boss : bulle protectrice, armure, jauge d'étourdissement.
 function bossExtras(g, e, t, px, w, h) {
+  if (!e.woke && !e.fake && e.nap) {   // compte à rebours du réveil : frappe fort tant qu'il dort (dégâts ×2)
+    const left = Math.max(0, e.nap - (e.age || 0)), y = Math.round(e.y + h / 2 + 34);   // sous le boss : la bannière de l'antre occupe le haut
+    g.font = `800 ${left < 3 ? 26 + 6 * (1 - (left % 1)) : 20}px 'Pixelify Sans', monospace`; g.textAlign = 'center'; g.lineJoin = 'round';
+    const txt = left < 3 ? String(Math.ceil(left)) : 'Réveil dans ' + Math.ceil(left) + ' s';
+    g.strokeStyle = '#24161e'; g.lineWidth = 5; g.strokeText(txt, e.x, y); g.fillStyle = '#ffe14a'; g.fillText(txt, e.x, y);
+    g.font = `700 12px 'Pixelify Sans', monospace`; g.lineWidth = 4;
+    g.strokeText('il dort : dégâts ×2', e.x, y + 18); g.fillStyle = '#e8eef8'; g.fillText('il dort : dégâts ×2', e.x, y + 18);
+    const bw = 90, bx = Math.round(e.x - bw / 2), by = y + 26;
+    g.fillStyle = '#24161e'; g.fillRect(bx - 2, by - 2, bw + 4, 8); g.fillStyle = '#ffe14a'; g.fillRect(bx, by, Math.round(bw * left / e.nap), 4);
+  }
   if (e.shield) {
     g.fillStyle = `rgba(160,220,255,${0.18 + 0.06 * Math.sin(t * 4)})`; g.strokeStyle = 'rgba(200,240,255,.8)'; g.lineWidth = 2;
     g.beginPath(); g.arc(e.x, e.y, Math.max(w, h) * 0.62, 0, 7); g.fill(); g.stroke();
@@ -241,7 +251,7 @@ function bossExtras(g, e, t, px, w, h) {
 // Flèches au bord de l'écran : portail du boss ouvert, créatures d'événement hors de vue.
 function edgeArrows(g, world, t, camX, camY) {
   const { w, h } = world, r = world.run, list = [];
-  if (r.lair && r.lair.open && !r.lair.done) list.push({ ...portalPos(world), color: '#ff9a3c', label: '♛' });
+  if (r.lair && r.lair.open && !r.lair.done) list.push({ ...portalPos(world), color: world.zone.boss.color || '#ff9a3c', label: '♛' });
   for (const e of world.enemies) if (e.event && !e.dead) list.push({ x: e.x, y: e.y, color: '#ffd246', label: '!' });
   for (const p of list) {
     const sx = p.x - camX, sy = p.y - camY;
@@ -899,6 +909,17 @@ function drawAreas(g, world, t) {
 }
 
 // ---------- Antre du boss ----------
+// Couleurs du portail tirées de celle du boss (lave pour le Brasier, glace pour le Yéti, spores pour le Champignon-roi…).
+const hexRgb = c => { const n = parseInt(c.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const mixHex = (c, d, k) => '#' + hexRgb(c).map((v, i) => Math.round(v + (hexRgb(d)[i] - v) * k).toString(16).padStart(2, '0')).join('');
+const palCache = {};
+export function portalPalette(color) {
+  const c = color || '#ff7a2c';
+  if (palCache[c]) return palCache[c];
+  const [r, gg, b] = hexRgb(c);
+  return (palCache[c] = { deep: mixHex(c, '#000000', 0.25), swirl: [c, mixHex(c, '#ffffff', 0.3), mixHex(c, '#ffffff', 0.55), mixHex(c, '#ffffff', 0.8)],
+    halo: `rgba(${r},${gg},${b},`, label: mixHex(c, '#ffffff', 0.35) });
+}
 // Portail de la clairière : tourbillon de feu quand il est ouvert, scellé sinon.
 function drawPortal(g, world, t, px) {
   const p = portalPos(world), spr = portalSprite(), r = world.run;
@@ -906,14 +927,15 @@ function drawPortal(g, world, t, px) {
   const k = px * 2, W = spr.w * k, H = spr.h * k;
   const x0 = Math.round(p.x - W / 2), y0 = Math.round(p.y + 30 - H);
   const ix = x0 + spr.inner.x * k, iy = y0 + spr.inner.y * k, rx = spr.inner.rx * k, ry = spr.inner.ry * k;
+  const pal = portalPalette(world.zone.boss.color);
   if (open) {
     const halo = g.createRadialGradient(ix, iy, 4, ix, iy, rx * 4);
-    halo.addColorStop(0, 'rgba(255,150,60,.45)'); halo.addColorStop(1, 'rgba(255,150,60,0)');
+    halo.addColorStop(0, pal.halo + '.45)'); halo.addColorStop(1, pal.halo + '0)');
     g.fillStyle = halo; g.beginPath(); g.arc(ix, iy, rx * 4, 0, 7); g.fill();
   }
   g.save(); g.beginPath(); g.ellipse(ix, iy, rx, ry, 0, 0, 7); g.clip();
-  g.fillStyle = open ? '#e0461e' : '#2a1a2e'; g.fillRect(ix - rx, iy - ry, rx * 2, ry * 2);
-  const cols = open ? ['#ff7a2c', '#ffb040', '#ffd25a', '#fff0b0'] : ['#3a2a40', '#4a3858'];
+  g.fillStyle = open ? pal.deep : '#2a1a2e'; g.fillRect(ix - rx, iy - ry, rx * 2, ry * 2);
+  const cols = open ? pal.swirl : ['#3a2a40', '#4a3858'];
   for (let i = 0; i < cols.length; i++) {
     const f = 1 - i / cols.length;
     g.fillStyle = cols[i];
@@ -931,7 +953,7 @@ function drawPortal(g, world, t, px) {
   g.font = `800 15px 'Pixelify Sans', monospace`; g.textAlign = 'center'; g.lineJoin = 'round';
   const label = r && r.lair.done ? 'Portail refermé' : open ? world.zone.boss.lair : 'Portail scellé';
   g.strokeStyle = '#24161e'; g.lineWidth = 4; g.strokeText(label, p.x, y0 - 8);
-  g.fillStyle = open ? '#ffb347' : '#c8b8b0'; g.fillText(label, p.x, y0 - 8);
+  g.fillStyle = open ? pal.label : '#c8b8b0'; g.fillText(label, p.x, y0 - 8);
   if (r && !open && !r.lair.done && !r.lair.dungeon) {   // portail scellé : on dit comment l'ouvrir
     const can = r.lair.canOpen && world.stats.tiers > ARENA.unlockTier;
     const sub = !r.lair.canOpen ? 'Achète « Seigneur des Enfers »' : can ? `Remplis le sac jusqu'au palier ${TIERS[ARENA.unlockTier].name.replace(' enchantée', '')}` : 'Achète « Soie enchantée » dans l\'arbre';

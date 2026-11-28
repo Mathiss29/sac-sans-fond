@@ -2,7 +2,8 @@
 // Ligne horizontale = lignées de héros ; branches verticales = thèmes (sac, récolte, combat, arcanes…).
 // Tout l'arbre est là dès le début, caché par le brouillard : un nœud se révèle quand son parent est acheté.
 // Les nœuds « soon » sont visibles mais pas encore achetables (fonctionnalité à venir).
-import { fmtNum } from './data.js';
+import { fmtNum, BASE } from './data.js';
+const BASE_CAP = BASE.bagCapacity;
 
 export const BRANCHES = {
   depart: ['Départ', '#ffe7a0'], archer: ['Archers', '#ef6f52'], mage: ['Mages de givre', '#7fd0ff'], knight: ['Chevaliers', '#c3cede'],
@@ -54,7 +55,7 @@ const RAW = [
 
  // Sac : vers le haut depuis le centre
  ['tierCuir','root',0,-1,'Cuir tanné','sac','bag1','major',1,'Deuxième palier du sac, ×1,6',1],
- ['capacity','tierCuir',0,-2,'Coutures solides','sac','needlebag','up',12,'+60 % de place par niveau (4 niveaux par palier)',1],
+ ['capacity','tierCuir',0,-2,'Coutures solides','sac','needlebag','up',12,'+60 % de place par niveau (4 niveaux par palier atteint)',1],
  ['tierSoie','capacity',0,-3,'Soie enchantée','sac','bag2','major',1,'Troisième palier, ×2,5',1],
  ['mouth','tierSoie',0,-4,'Gueule vorace','sac','openbag','up',6,'+50 % de portée d\'aspiration par niveau',1],
  ['tierCeleste','mouth',0,-5,'Étoffe céleste','sac','bag3','major',1,'Quatrième palier, ×4',1],
@@ -309,10 +310,12 @@ const SPEC = {
   bard: [700, 1, () => '1 barde par expédition', { need: c => c.maxTier >= 3, cond: 'Remplis le sac jusqu\'au palier Céleste pendant une expédition' }],
   bard2: [2500, 1, () => '2 bardes par expédition'],
   bard3: [8000, 1, () => '3 bardes par expédition'],
-  tierCuir: [300, 1, () => 'Palier cuir ×1,6'],
-  capacity: [30, 1.8, l => `${fmtNum(Math.round(120 * Math.pow(1.6, l)))} pièces au premier palier`,
-    { cap: L => 4 * ((L('tierCuir') ? 1 : 0) + (L('tierSoie') ? 1 : 0) + (L('tierCeleste') ? 1 : 0)), capMsg: 'Débloque le palier suivant du sac pour coudre plus loin.' }],
-  tierSoie: [3000, 1, () => 'Palier soie ×2,5'],
+  tierCuir: [200, 1, () => 'Palier cuir ×1,6'],
+  capacity: [30, 1.8, l => `${fmtNum(Math.round(BASE_CAP * Math.pow(1.6, l)))} pièces au premier palier`,
+    // 4 niveaux par palier acheté ET déjà atteint : coudre plus grand avant d'avoir rempli le palier le repousserait hors de portée
+    { cap: (L, save) => 4 * ['tierCuir', 'tierSoie', 'tierCeleste'].filter((k, i) => L(k) && ((save && save.maxTier) || 0) >= i + 1).length,
+      capMsg: 'Achète le palier suivant du sac et remplis-le une fois en expédition pour coudre plus loin.' }],
+  tierSoie: [1200, 1, () => 'Palier soie ×2,5'],
   mouth: [90, 1.9, l => `Aspiration ${Math.round(60 * (1 + 0.5 * l))} px`],
   tierCeleste: [12000, 1, () => 'Palier céleste ×4'],
   seams2: [400, 1.9, l => `Place dans le sac ×${fmtNum(Math.pow(1.25, l))}`],
@@ -464,7 +467,7 @@ const SPEC = {
   summonerPow: [4.8e+06, 2.2, l => 'Nuée d\'esprits : niveau ' + l],
   summonerUlt: [4e+07, 1, () => 'Ultime débloqué (touche J)'],
   summonerUlt2: [1.6e+07, 2.5, l => `Ultime +${30 * l} %`],
-  bossNap: [40000, 2.2, l => `Le boss dort ${fmtNum(1.1 + 1.5 * l)} s (dégâts ×2 pendant ce temps)`],
+  bossNap: [40000, 2.2, l => `Le boss dort ${fmtNum(3 + 1.5 * l)} s (dégâts ×2 pendant ce temps)`],
   lateRage: [90000, 1, () => 'Colère à 20 % de vie'],
   lairLoot: [60000, 2.2, l => `${8 + 3 * l} s pour rafler le butin`],
   bossGold: [80000, 2, l => `Butin des boss +${20 * l} %`],
