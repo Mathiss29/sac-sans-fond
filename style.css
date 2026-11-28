@@ -1011,3 +1011,16 @@ button[disabled] { cursor: var(--cur) !important; }
 #tTip { min-height: 2.6em; max-width: min(560px, calc(100vw - 32px)); transition: opacity .35s; line-height: 1.5; }
 #tTip.out { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .tSpark, .tTear { animation: none; } }
+
+/* Écran de chargement : le sac se remplit pendant que les images arrivent */
+#loader { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: radial-gradient(ellipse 60% 60% at 50% 45%, #2b3226, #141a11 75%); transition: opacity .45s; }
+#loader.done { opacity: 0; pointer-events: none; }
+.ldBag { position: relative; width: min(180px, 40vw); aspect-ratio: 1; animation: tFloat 2.4s ease-in-out infinite; }
+.ldBag img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ldEmpty { filter: grayscale(1) brightness(.35); }
+.ldFull { --p: 8%; clip-path: inset(calc(100% - var(--p)) 0 0 0); }
+.ldBag { filter: drop-shadow(0 0 14px rgba(255, 200, 80, .35)); }
+.ldBar { width: min(260px, 60vw); height: 10px; background: #10140d; border: 2px solid #4d5643; border-radius: 2px; }
+.ldBar i { display: block; height: 100%; width: 8%; background: linear-gradient(#ffe08a, #d8a23a); box-shadow: 0 0 8px rgba(255, 200, 80, .5); }
+.ldTxt { margin: 0; font: 400 12px 'Silkscreen', 'Pixelify Sans', monospace; letter-spacing: .06em; color: #8e947e; text-align: center; padding: 0 16px; }

@@ -10,6 +10,29 @@ const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) 
 let C = null, panel = null, raf = 0, vx = 14, vy = 6;
 
 export const titleOpen = () => !$('title').hidden;
+
+// Écran de chargement : le sac se remplit à mesure que les planches, icônes et polices arrivent.
+const LOAD_TXT = ['Le vieux mage remplit le sac…', 'On compte les pièces…', 'Les héros lacent leurs bottes…', 'Le crapaud ouvre sa boutique…', 'On réveille les boss (doucement)…'];
+export function trackLoading(jobs) {
+  const fill = $('ldFill'), full = $('ldFull'), txt = $('ldTxt'), t0 = performance.now();
+  let done = 0, shown = 0.08, finished = false, lastDone = t0;
+  const all = jobs.map(p => Promise.resolve(p).catch(() => {}).then(() => { done++; lastDone = performance.now(); }));
+  const tick = () => {
+    // entre deux étapes, la barre avance doucement vers la suivante sans jamais l'atteindre
+    const creep = 0.85 * (1 - Math.exp(-(performance.now() - lastDone) / 2500));
+    const target = finished ? 1 : Math.min(0.97, 0.08 + 0.92 * (done + creep) / jobs.length);
+    shown += (target - shown) * (finished ? 0.25 : 0.08);
+    fill.style.width = (shown * 100).toFixed(1) + '%'; full.style.setProperty('--p', (shown * 100).toFixed(1) + '%');
+    txt.textContent = LOAD_TXT[Math.min(LOAD_TXT.length - 1, Math.floor(shown * LOAD_TXT.length))];
+    if (finished && shown > 0.99) { $('loader').classList.add('done'); setTimeout(() => $('loader').remove(), 500); return; }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  // on n'attend jamais plus de 12 s : le jeu fonctionne avec ses dessins provisoires
+  Promise.race([Promise.all(all), new Promise(ok => setTimeout(ok, 12000))])
+    .then(() => new Promise(ok => setTimeout(ok, Math.max(0, 700 - (performance.now() - t0)))))
+    .then(() => { finished = true; });
+}
 // musique d'accueil : son propre morceau s'il est là, sinon celle de l'Atelier
 let hasTrack = false;
 fetch('assets/music/accueil.mp3', { method: 'HEAD' }).then(r => { hasTrack = r.ok; }, () => {});

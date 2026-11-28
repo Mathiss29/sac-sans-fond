@@ -11,7 +11,7 @@ import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
 import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
 import { initCurio, curioRefresh } from './curio-ui.js';
 import { initEpic, epicRefresh, recordRun, heroTints, applyVolumes, VERSION, JOURNAL, renderOptions } from './epic-ui.js';
-import { initTitle, titleOpen, titleTrack } from './title.js';
+import { initTitle, titleOpen, titleTrack, trackLoading } from './title.js';
 import { initBugReport, copyReport } from './bugreport.js';
 import { applyPets, petsOf, petsAfterRun, petSprite } from './pets.js';
 import { initPets, petsRefresh } from './pets-ui.js';
@@ -1210,6 +1210,8 @@ initEpic({ get save() { return save; }, write: () => writeSave(save), fmt, enemy
   drawHeroIcon: (cg, k) => { cg.imageSmoothingEnabled = false; drawHero(cg, k, 34, 64, 1, 0, 1, HERO_SHEETS[k] ? 2 : 3); },
   onChange: () => { stats = calcStats(); renderTree(); } });
 initPets({ get save() { return save; }, write: () => writeSave(save), play, onChange: () => { stats = calcStats(); } });
+trackLoading([heroSheetsReady, gearSheetReady, treeIcons, document.fonts && document.fonts.ready,
+  new Promise(ok => { const im = new Image(); im.onload = im.onerror = ok; im.src = 'assets/logo.png'; })]);
 initTitle({ get save() { return save; }, world, fmt, version: VERSION, journal: JOURNAL, renderOptions, click: () => { unlockAudio(); unlockMusic(); play('click'); } });
 gearSheetReady.then(() => renderTree());
 
