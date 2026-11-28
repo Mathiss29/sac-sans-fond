@@ -10,7 +10,8 @@ import { NODES, NODE, BRANCHES, TREE_LABELS, CLASS_PAIRS } from './tree.js';
 import { gearOf, gearBonus, reserveSize, albumKey, rollItem } from './gear.js';
 import { curioOf, curioBonus, extraEvents, addCards, progressQuests, fillQuests, questText, REWARD_TEXT, dungeonZone, CARD_IDS } from './curio.js';
 import { initCurio, curioRefresh } from './curio-ui.js';
-import { initEpic, epicRefresh, recordRun, heroTints, applyVolumes, VERSION } from './epic-ui.js';
+import { initEpic, epicRefresh, recordRun, heroTints, applyVolumes, VERSION, JOURNAL, renderOptions } from './epic-ui.js';
+import { initTitle, titleOpen } from './title.js';
 import { initBugReport, copyReport } from './bugreport.js';
 import { applyPets, petsOf, petsAfterRun, petSprite } from './pets.js';
 import { initPets, petsRefresh } from './pets-ui.js';
@@ -229,7 +230,7 @@ function lairOpen() {
 }
 const lairInfo = () => ({ open: lairOpen(), first: !(winsOf(curZone().id) > 0) });
 function showRunUi() {
-  $('atelier').hidden = true; $('result').hidden = true;
+  $('atelier').hidden = true; $('result').hidden = true; $('title').hidden = true;
   $('hud').hidden = false; $('dropBar').hidden = false; $('hint').hidden = false; $('mapUi').hidden = false;
   arenaUi();
   buildDropBar();
@@ -1092,7 +1093,7 @@ $('worldBtn').onclick = () => openWorld();
 $('wmClose').onclick = () => { $('worldMap').hidden = true; };
 $('lairBtn').onclick = goLair;
 addEventListener('keydown', e => {
-  if ($('atelier').hidden || !$('result').hidden || e.target.closest && e.target.closest('input,textarea')) return;
+  if ($('atelier').hidden || titleOpen() || !$('result').hidden || e.target.closest && e.target.closest('input,textarea')) return;
   if (e.code === 'KeyM') { e.preventDefault(); if ($('worldMap').hidden) openWorld(); else $('worldMap').hidden = true; }
   else if (e.code === 'Escape' && !$('worldMap').hidden) $('worldMap').hidden = true;
 });
@@ -1208,6 +1209,7 @@ initEpic({ get save() { return save; }, write: () => writeSave(save), fmt, enemy
   drawHeroIcon: (cg, k) => { cg.imageSmoothingEnabled = false; drawHero(cg, k, 34, 64, 1, 0, 1, HERO_SHEETS[k] ? 2 : 3); },
   onChange: () => { stats = calcStats(); renderTree(); } });
 initPets({ get save() { return save; }, write: () => writeSave(save), play, onChange: () => { stats = calcStats(); } });
+initTitle({ get save() { return save; }, world, fmt, version: VERSION, journal: JOURNAL, renderOptions, click: () => { unlockAudio(); unlockMusic(); play('click'); } });
 gearSheetReady.then(() => renderTree());
 
 // Accès pour les tests automatisés
